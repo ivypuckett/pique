@@ -1,0 +1,16 @@
+{
+  "name": "hello-ivy",
+  "version": "0.1.0",
+  "exports": "./main.ts",
+  "tasks": {
+    "dev": "deno desktop --hmr main.ts",
+    "build": "deno desktop main.ts"
+  },
+  "desktop": {
+    "app": {
+      "name": "hello, ivy",
+      "identifier": "me.proton.ivypuckett.helloivy"
+    },
+    "backend": "webview"
+  }
+}
