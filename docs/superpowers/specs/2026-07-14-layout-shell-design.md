@@ -131,3 +131,9 @@ src/
 - localStorage persistence included in this milestone.
 - 2-row split fixed at 50/50; resizable row dividers deferred.
 - DaisyUI dark theme default.
+- **Collapse/expand uses "prior width" semantics.** Expanding a column restores the
+  width it had just before it collapsed. A single collapse+expand round-trips exactly.
+  Interleaving collapses of both side columns does not return to the pristine 20/60/20
+  (each column restores its own pre-collapse width, which the earlier collapse had
+  already shifted). Accepted as intended for this milestone; pristine round-tripping
+  would require a stable-weight model (normalize visible weights to 100 at render).

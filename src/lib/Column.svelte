@@ -7,8 +7,8 @@
   let { id, el = $bindable() }: { id: ColumnId; el?: HTMLElement } = $props();
 
   const col = $derived($view[id]);
-  const isSide = id === "left" || id === "right";
-  const sideId = id as SideId;
+  const isSide = $derived(id === "left" || id === "right");
+  const sideId = $derived(id as SideId);
 </script>
 
 {#if col.collapsed}
@@ -47,7 +47,13 @@
               >«</button>
             {/if}
           {/snippet}
-          <Module title={row.title} />
+          {#if Module}
+            <Module title={row.title} />
+          {:else}
+            <div class="text-sm opacity-60">
+              Unknown module: <span class="font-mono">{row.kind}</span>
+            </div>
+          {/if}
         </ModuleFrame>
       </div>
     {/each}

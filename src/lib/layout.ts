@@ -94,6 +94,12 @@ function cap(id: SideId): string {
   return id === "left" ? "Left" : "Right";
 }
 
+// Collapse/expand use "prior width" semantics: savedWidthPct records a column's
+// width the instant before it collapsed, and expand restores exactly that. A single
+// collapse+expand round-trips perfectly. Interleaving collapses of BOTH side columns
+// does not return to the pristine 20/60/20 — each column faithfully restores its own
+// pre-collapse width, but those widths were already shifted by the earlier collapse.
+// This is intended behavior for the layout-shell milestone (see design spec).
 function collapse(v: ViewState, id: SideId): ViewState {
   const others = visibleIds(v).filter((x) => x !== id);
   const freed = v[id].widthPct;
@@ -133,4 +139,27 @@ export function toggleRows(v: ViewState, id: SideId): ViewState {
     ? [...col.rows, { id: `${id}-2`, title: `${cap(id)} B`, kind: "placeholder" }]
     : [col.rows[0]];
   return { ...v, [id]: { ...col, rows } };
+}
+
+function isModuleRef(r: unknown): boolean {
+  if (typeof r !== "object" || r === null) return false;
+  const row = r as Record<string, unknown>;
+  return typeof row.id === "string" && typeof row.title === "string" &&
+    typeof row.kind === "string";
+}
+
+function isColumnState(c: unknown): boolean {
+  if (typeof c !== "object" || c === null) return false;
+  const col = c as Record<string, unknown>;
+  return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
+    typeof col.savedWidthPct === "number" &&
+    Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef);
+}
+
+// Structural guard for persisted state: rejects valid JSON of the wrong shape so a
+// stale or corrupt localStorage value falls back to defaults instead of crashing render.
+export function isViewState(v: unknown): v is ViewState {
+  if (typeof v !== "object" || v === null) return false;
+  const obj = v as Record<string, unknown>;
+  return isColumnState(obj.left) && isColumnState(obj.center) && isColumnState(obj.right);
 }

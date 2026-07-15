@@ -7,7 +7,7 @@ import {
   fixedPx,
   MIN_WIDTH_PCT,
 } from "./layout.ts";
-import { toggleCollapse, toggleRows } from "./layout.ts";
+import { isViewState, toggleCollapse, toggleRows } from "./layout.ts";
 
 Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
   const v = createInitialView();
@@ -75,4 +75,19 @@ Deno.test("toggleRows adds then removes a second row on a side column", () => {
   const one = toggleRows(two, "right");
   assertEquals(one.right.rows.length, 1);
   assertEquals(one.right.rows[0].id, "right-1");
+});
+
+Deno.test("isViewState accepts a real view and rejects malformed shapes", () => {
+  assertEquals(isViewState(createInitialView()), true);
+  assertEquals(isViewState(null), false);
+  assertEquals(isViewState({}), false);
+  assertEquals(isViewState({ left: {}, center: {}, right: {} }), false);
+  assertEquals(isViewState(JSON.parse(JSON.stringify(createInitialView()))), true);
+  // missing a column
+  const { right: _right, ...missingRight } = createInitialView();
+  assertEquals(isViewState(missingRight), false);
+  // a column with an empty rows array (collapsed rail reads rows[0])
+  const noRows = createInitialView();
+  noRows.left.rows = [];
+  assertEquals(isViewState(noRows), false);
 });

@@ -11,7 +11,8 @@
   }
   function up(e: PointerEvent) {
     dragging = false;
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
   }
 </script>
 
@@ -24,4 +25,5 @@
   onpointerdown={down}
   onpointermove={move}
   onpointerup={up}
+  onpointercancel={up}
 ></div>

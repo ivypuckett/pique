@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 import {
   type Boundary,
   createInitialView,
+  isViewState,
   resizeBoundary as resize,
   type SideId,
   toggleCollapse as collapseFn,
@@ -15,7 +16,8 @@ function load(): ViewState {
   const raw = localStorage.getItem(KEY);
   if (raw) {
     try {
-      return JSON.parse(raw) as ViewState;
+      const parsed = JSON.parse(raw);
+      if (isViewState(parsed)) return parsed;
     } catch {
       // corrupt storage — fall back to defaults
     }
@@ -25,7 +27,13 @@ function load(): ViewState {
 
 export const view = writable<ViewState>(load());
 
-view.subscribe((v) => localStorage.setItem(KEY, JSON.stringify(v)));
+// Persist on a trailing debounce so a splitter drag (which mutates the store on every
+// pointermove) doesn't do synchronous JSON.stringify + setItem on each frame.
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+view.subscribe((v) => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => localStorage.setItem(KEY, JSON.stringify(v)), 150);
+});
 
 export function resizeBoundary(b: Boundary, newFirstPct: number): void {
   view.update((v) => resize(v, b, newFirstPct));
