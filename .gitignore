@@ -1,3 +1,7 @@
 node_modules/
 dist/
+.vite/
 .deno_desktop_entry-*.ts
+pique.so
+# deno desktop packaged app output
+/pique/

@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "nodeModulesDir": "auto",
   "tasks": {
-    "dev": "unset GIO_MODULE_DIR && deno desktop --hmr .",
-    "build": "unset GIO_MODULE_DIR && deno run -A npm:vite build && deno desktop .",
+    "dev": "deno run -A npm:vite",
+    "desktop": "unset GIO_MODULE_DIR && deno run -A npm:vite build && deno desktop .",
+    "build": "deno run -A npm:vite build",
     "test": "deno test src/"
   },
   "imports": {
