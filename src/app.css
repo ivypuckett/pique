@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: dark --default, light;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
