@@ -7,7 +7,8 @@ import {
   fixedPx,
   MIN_WIDTH_PCT,
 } from "./layout.ts";
-import { isViewState, toggleCollapse, toggleRows } from "./layout.ts";
+import { isViewState, resizeRowSplit, toggleCollapse, toggleRows } from "./layout.ts";
+import { MIN_ROW_PCT } from "./layout.ts";
 
 Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
   const v = createInitialView();
@@ -75,6 +76,22 @@ Deno.test("toggleRows adds then removes a second row on a side column", () => {
   const one = toggleRows(two, "right");
   assertEquals(one.right.rows.length, 1);
   assertEquals(one.right.rows[0].id, "right-1");
+});
+
+Deno.test("resizeRowSplit sets the first-row height and clamps to MIN_ROW_PCT", () => {
+  const v = resizeRowSplit(createInitialView(), "left", 70);
+  assertEquals(v.left.rowSplitPct, 70);
+  assertEquals(resizeRowSplit(createInitialView(), "left", 2).left.rowSplitPct, MIN_ROW_PCT);
+  assertEquals(
+    resizeRowSplit(createInitialView(), "left", 98).left.rowSplitPct,
+    100 - MIN_ROW_PCT,
+  );
+});
+
+Deno.test("isViewState rejects a column missing rowSplitPct", () => {
+  const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
+  delete bad.left.rowSplitPct;
+  assertEquals(isViewState(bad), false);
 });
 
 Deno.test("isViewState accepts a real view and rejects malformed shapes", () => {

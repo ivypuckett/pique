@@ -1,5 +1,8 @@
 <script lang="ts">
-  let { onDrag }: { onDrag: (clientX: number) => void } = $props();
+  // axis "x": vertical divider between columns, dragged horizontally (reports clientX).
+  // axis "y": horizontal divider between rows, dragged vertically (reports clientY).
+  let { axis = "x", onDrag }: { axis?: "x" | "y"; onDrag: (client: number) => void } =
+    $props();
   let dragging = $state(false);
 
   function down(e: PointerEvent) {
@@ -7,7 +10,7 @@
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function move(e: PointerEvent) {
-    if (dragging) onDrag(e.clientX);
+    if (dragging) onDrag(axis === "x" ? e.clientX : e.clientY);
   }
   function up(e: PointerEvent) {
     dragging = false;
@@ -17,10 +20,12 @@
 </script>
 
 <div
-  class="cursor-col-resize bg-base-300 transition-colors hover:bg-primary"
+  class="bg-base-300 transition-colors hover:bg-primary {axis === 'x'
+    ? 'cursor-col-resize'
+    : 'cursor-row-resize'}"
   class:bg-primary={dragging}
   role="separator"
-  aria-orientation="vertical"
+  aria-orientation={axis === "x" ? "vertical" : "horizontal"}
   tabindex="-1"
   onpointerdown={down}
   onpointermove={move}

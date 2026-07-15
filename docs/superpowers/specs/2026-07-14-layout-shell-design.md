@@ -129,7 +129,8 @@ src/
 ## Decisions on record
 
 - localStorage persistence included in this milestone.
-- 2-row split fixed at 50/50; resizable row dividers deferred.
+- 2-row side columns split 50/50 by default and the divider is draggable to resize
+  the stacked panes (persisted as `rowSplitPct`).
 - DaisyUI dark theme default.
 - **Collapse/expand uses "prior width" semantics.** Expanding a column restores the
   width it had just before it collapsed. A single collapse+expand round-trips exactly.

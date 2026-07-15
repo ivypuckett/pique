@@ -12,6 +12,7 @@ export interface ColumnState {
   collapsed: boolean; // center is never collapsed
   savedWidthPct: number; // width restored on expand
   rows: ModuleRef[]; // 1 for center; 1 or 2 for sides
+  rowSplitPct: number; // height % of the first row when a side column shows 2 rows
 }
 
 export interface ViewState {
@@ -21,6 +22,7 @@ export interface ViewState {
 }
 
 export const MIN_WIDTH_PCT = 10;
+export const MIN_ROW_PCT = 10;
 
 export function createInitialView(): ViewState {
   return {
@@ -28,6 +30,7 @@ export function createInitialView(): ViewState {
       widthPct: 20,
       collapsed: false,
       savedWidthPct: 20,
+      rowSplitPct: 50,
       rows: [
         { id: "left-1", title: "Left A", kind: "placeholder" },
         { id: "left-2", title: "Left B", kind: "placeholder" },
@@ -37,12 +40,14 @@ export function createInitialView(): ViewState {
       widthPct: 60,
       collapsed: false,
       savedWidthPct: 60,
+      rowSplitPct: 50,
       rows: [{ id: "center-1", title: "Center", kind: "placeholder" }],
     },
     right: {
       widthPct: 20,
       collapsed: false,
       savedWidthPct: 20,
+      rowSplitPct: 50,
       rows: [{ id: "right-1", title: "Right", kind: "placeholder" }],
     },
   };
@@ -78,6 +83,13 @@ export function fixedPx(v: ViewState): number {
   const splitters = (v.left.collapsed ? 0 : 1) + (v.right.collapsed ? 0 : 1);
   const rails = (v.left.collapsed ? 1 : 0) + (v.right.collapsed ? 1 : 0);
   return splitters * SPLITTER_PX + rails * RAIL_PX;
+}
+
+// Height % of the first row when a side column shows two rows, clamped so neither
+// row drops below MIN_ROW_PCT.
+export function resizeRowSplit(v: ViewState, id: SideId, newFirstPct: number): ViewState {
+  const pct = clamp(newFirstPct, MIN_ROW_PCT, 100 - MIN_ROW_PCT);
+  return { ...v, [id]: { ...v[id], rowSplitPct: pct } };
 }
 
 export function gridTemplateColumns(v: ViewState): string {
@@ -152,7 +164,7 @@ function isColumnState(c: unknown): boolean {
   if (typeof c !== "object" || c === null) return false;
   const col = c as Record<string, unknown>;
   return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
-    typeof col.savedWidthPct === "number" &&
+    typeof col.savedWidthPct === "number" && typeof col.rowSplitPct === "number" &&
     Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef);
 }
 

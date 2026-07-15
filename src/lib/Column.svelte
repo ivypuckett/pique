@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { view, toggleCollapse, toggleRows } from "./store.ts";
-  import type { ColumnId, SideId } from "./layout.ts";
+  import { resizeRow, toggleCollapse, toggleRows, view } from "./store.ts";
+  import { type ColumnId, type SideId, SPLITTER_PX } from "./layout.ts";
   import ModuleFrame from "./ModuleFrame.svelte";
+  import Splitter from "./Splitter.svelte";
   import { registry } from "./modules/registry.ts";
 
   let { id, el = $bindable() }: { id: ColumnId; el?: HTMLElement } = $props();
@@ -9,6 +10,14 @@
   const col = $derived($view[id]);
   const isSide = $derived(id === "left" || id === "right");
   const sideId = $derived(id as SideId);
+
+  function onRowDrag(clientY: number) {
+    if (!el) return;
+    const flexPx = el.clientHeight - SPLITTER_PX;
+    if (flexPx <= 0) return;
+    const firstPx = clientY - el.getBoundingClientRect().top;
+    resizeRow(sideId, (firstPx / flexPx) * 100);
+  }
 </script>
 
 {#if col.collapsed}
@@ -26,10 +35,15 @@
 {:else}
   <div
     class="grid h-full min-w-0"
-    style:grid-template-rows={col.rows.length === 2 ? "1fr 1fr" : "1fr"}
+    style:grid-template-rows={col.rows.length === 2
+      ? `${col.rowSplitPct}fr ${SPLITTER_PX}px ${100 - col.rowSplitPct}fr`
+      : "1fr"}
     bind:this={el}
   >
     {#each col.rows as row, i (row.id)}
+      {#if i === 1}
+        <Splitter axis="y" onDrag={onRowDrag} />
+      {/if}
       {@const Module = registry[row.kind]}
       <div class="min-h-0">
         <ModuleFrame title={row.title}>

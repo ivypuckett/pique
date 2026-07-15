@@ -4,6 +4,7 @@ import {
   createInitialView,
   isViewState,
   resizeBoundary as resize,
+  resizeRowSplit as resizeRowFn,
   type SideId,
   toggleCollapse as collapseFn,
   toggleRows as rowsFn,
@@ -45,4 +46,8 @@ export function toggleCollapse(id: SideId): void {
 
 export function toggleRows(id: SideId): void {
   view.update((v) => rowsFn(v, id));
+}
+
+export function resizeRow(id: SideId, newFirstPct: number): void {
+  view.update((v) => resizeRowFn(v, id, newFirstPct));
 }
