@@ -1,15 +1,14 @@
 {
-  "name": "hello-ivy",
+  "name": "pique",
   "version": "0.1.0",
   "exports": "./main.ts",
   "tasks": {
-    "dev": "deno desktop --hmr main.ts",
-    "build": "deno desktop main.ts"
+    "dev": "unset GIO_MODULE_DIR && deno desktop --hmr main.ts",
+    "build": "unset GIO_MODULE_DIR && deno desktop main.ts"
   },
   "desktop": {
     "app": {
-      "name": "hello, ivy",
-      "identifier": "me.proton.ivypuckett.helloivy"
+      "name": "pique"
     },
     "backend": "webview"
   }
