@@ -89,3 +89,48 @@ export function gridTemplateColumns(v: ViewState): string {
   parts.push(v.right.collapsed ? `${RAIL_PX}px` : `${v.right.widthPct}fr`);
   return parts.join(" ");
 }
+
+function cap(id: SideId): string {
+  return id === "left" ? "Left" : "Right";
+}
+
+function collapse(v: ViewState, id: SideId): ViewState {
+  const others = visibleIds(v).filter((x) => x !== id);
+  const freed = v[id].widthPct;
+  const otherSum = others.reduce((s, x) => s + v[x].widthPct, 0);
+  const next: ViewState = {
+    ...v,
+    [id]: { ...v[id], collapsed: true, savedWidthPct: freed, widthPct: 0 },
+  };
+  for (const x of others) {
+    next[x] = { ...v[x], widthPct: v[x].widthPct + freed * (v[x].widthPct / otherSum) };
+  }
+  return next;
+}
+
+function expand(v: ViewState, id: SideId): ViewState {
+  const target = v[id].savedWidthPct;
+  const others = visibleIds(v); // id is still collapsed, so excluded
+  const otherSum = others.reduce((s, x) => s + v[x].widthPct, 0);
+  const factor = (otherSum - target) / otherSum;
+  const next: ViewState = {
+    ...v,
+    [id]: { ...v[id], collapsed: false, widthPct: target },
+  };
+  for (const x of others) {
+    next[x] = { ...v[x], widthPct: v[x].widthPct * factor };
+  }
+  return next;
+}
+
+export function toggleCollapse(v: ViewState, id: SideId): ViewState {
+  return v[id].collapsed ? expand(v, id) : collapse(v, id);
+}
+
+export function toggleRows(v: ViewState, id: SideId): ViewState {
+  const col = v[id];
+  const rows: ModuleRef[] = col.rows.length === 1
+    ? [...col.rows, { id: `${id}-2`, title: `${cap(id)} B`, kind: "placeholder" }]
+    : [col.rows[0]];
+  return { ...v, [id]: { ...col, rows } };
+}

@@ -7,6 +7,7 @@ import {
   fixedPx,
   MIN_WIDTH_PCT,
 } from "./layout.ts";
+import { toggleCollapse, toggleRows } from "./layout.ts";
 
 Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
   const v = createInitialView();
@@ -47,4 +48,31 @@ Deno.test("gridTemplateColumns lists fr tracks and splitters when all visible", 
 
 Deno.test("fixedPx counts two splitters when all visible", () => {
   assertEquals(fixedPx(createInitialView()), 12);
+});
+
+Deno.test("collapsing left redistributes its width, remembers it", () => {
+  const v = toggleCollapse(createInitialView(), "left");
+  assertEquals(v.left.collapsed, true);
+  assertEquals(v.left.widthPct, 0);
+  assertEquals(v.left.savedWidthPct, 20);
+  assertEquals(v.center.widthPct, 75); // 60 + 20*(60/80)
+  assertEquals(v.right.widthPct, 25); // 20 + 20*(20/80)
+  assertEquals(visibleIds(v), ["center", "right"]);
+});
+
+Deno.test("expanding restores the original layout", () => {
+  const collapsed = toggleCollapse(createInitialView(), "left");
+  const v = toggleCollapse(collapsed, "left");
+  assertEquals(v.left.collapsed, false);
+  assertEquals(v.left.widthPct, 20);
+  assertEquals(v.center.widthPct, 60);
+  assertEquals(v.right.widthPct, 20);
+});
+
+Deno.test("toggleRows adds then removes a second row on a side column", () => {
+  const two = toggleRows(createInitialView(), "right");
+  assertEquals(two.right.rows.length, 2);
+  const one = toggleRows(two, "right");
+  assertEquals(one.right.rows.length, 1);
+  assertEquals(one.right.rows[0].id, "right-1");
 });
