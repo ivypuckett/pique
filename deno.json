@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "nodeModulesDir": "auto",
   "tasks": {
-    "dev": "unset GIO_MODULE_DIR && deno run -A npm:vite build && deno desktop .",
+    "dev": "deno run -A npm:vite build && env -u LD_LIBRARY_PATH -u LD_PRELOAD -u GTK_PATH -u GTK_EXE_PREFIX -u GTK_IM_MODULE_FILE -u GDK_PIXBUF_MODULE_FILE -u GDK_PIXBUF_MODULEDIR -u GIO_MODULE_DIR -u GSETTINGS_SCHEMA_DIR -u GCONV_PATH -u LOCPATH -u GTK_RC_FILES -u GTK2_RC_FILES deno desktop .",
     "web": "deno run -A npm:vite",
     "build": "deno run -A npm:vite build",
     "test": "deno test src/"
