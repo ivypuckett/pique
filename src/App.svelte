@@ -1,6 +1,7 @@
 <script lang="ts">
+  import Workspace from "./lib/Workspace.svelte";
 </script>
 
-<main class="flex h-screen w-screen items-center justify-center bg-base-300">
-  <button class="btn btn-primary">Pique is alive</button>
+<main class="flex h-screen w-screen flex-col overflow-hidden bg-base-300">
+  <Workspace />
 </main>
