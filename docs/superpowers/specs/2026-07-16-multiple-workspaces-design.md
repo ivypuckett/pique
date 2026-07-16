@@ -132,7 +132,7 @@ the store. The asymmetry is deliberate — it keeps every existing call site unt
 
 ### `src/lib/WorkspacePane.svelte` (new)
 
-- A fixed **180px** rail, full height, on the far left of the app.
+- A fixed **180px** rail (Tailwind `w-45`), full height, on the far left of the app.
 - A `WORKSPACES` header, then one button per workspace showing its title, with
   `btn-active` on the selected one (matching `TopBar`'s view switcher styling).
 - Clicking a row calls `focusWorkspace(w.id)`.
