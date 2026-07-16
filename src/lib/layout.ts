@@ -17,6 +17,7 @@ export interface ColumnState {
 }
 
 export interface ViewState {
+  id: string; // stable across the view's lifetime; keys the tiled workspace
   left: ColumnState;
   center: ColumnState;
   right: ColumnState;
@@ -25,8 +26,9 @@ export interface ViewState {
 export const MIN_WIDTH_PCT = 10;
 export const MIN_ROW_PCT = 10;
 
-export function createInitialView(): ViewState {
+export function createInitialView(id = "view-1"): ViewState {
   return {
+    id,
     left: {
       widthPct: 20,
       collapsed: false,
@@ -219,5 +221,6 @@ function isColumnState(c: unknown): boolean {
 export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
-  return isColumnState(obj.left) && isColumnState(obj.center) && isColumnState(obj.right);
+  return typeof obj.id === "string" &&
+    isColumnState(obj.left) && isColumnState(obj.center) && isColumnState(obj.right);
 }

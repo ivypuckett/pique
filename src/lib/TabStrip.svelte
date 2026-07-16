@@ -3,7 +3,7 @@
   import { type ColumnState, moduleLabel } from "./layout.ts";
   import { registry } from "./modules/registry.ts";
 
-  let { col }: { col: ColumnState } = $props();
+  let { viewId, col }: { viewId: string; col: ColumnState } = $props();
   const kinds = Object.keys(registry);
 </script>
 
@@ -14,12 +14,12 @@
       class:bg-base-100={tab.id === col.activeTabId}
       class:font-medium={tab.id === col.activeTabId}
     >
-      <button class="truncate" onclick={() => setActiveTab(tab.id)}>{tab.title}</button>
+      <button class="truncate" onclick={() => setActiveTab(viewId, tab.id)}>{tab.title}</button>
       {#if col.rows.length > 1}
         <button
           class="btn btn-ghost btn-xs px-1"
           aria-label="Close {tab.title} tab"
-          onclick={() => closeTab(tab.id)}
+          onclick={() => closeTab(viewId, tab.id)}
         >×</button>
       {/if}
     </div>
@@ -28,7 +28,7 @@
     <button tabindex="0" class="btn btn-ghost btn-xs" aria-label="Add tab">+</button>
     <ul class="dropdown-content menu z-10 mt-1 w-40 rounded-box bg-base-200 p-1 shadow">
       {#each kinds as kind (kind)}
-        <li><button onclick={() => addTab(kind)}>{moduleLabel(kind)}</button></li>
+        <li><button onclick={() => addTab(viewId, kind)}>{moduleLabel(kind)}</button></li>
       {/each}
     </ul>
   </div>

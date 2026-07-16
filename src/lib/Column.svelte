@@ -1,14 +1,18 @@
 <script lang="ts">
-  import { resizeRow, toggleCollapse, toggleRows, view } from "./store.ts";
-  import { type ColumnId, type SideId, SPLITTER_PX } from "./layout.ts";
+  import { resizeRow, toggleCollapse, toggleRows } from "./store.ts";
+  import { type ColumnId, type ColumnState, type SideId, SPLITTER_PX } from "./layout.ts";
   import ModuleFrame from "./ModuleFrame.svelte";
   import Splitter from "./Splitter.svelte";
   import TabStrip from "./TabStrip.svelte";
   import { registry } from "./modules/registry.ts";
 
-  let { id, el = $bindable() }: { id: ColumnId; el?: HTMLElement } = $props();
+  let { viewId, col, id, el = $bindable() }: {
+    viewId: string;
+    col: ColumnState;
+    id: ColumnId;
+    el?: HTMLElement;
+  } = $props();
 
-  const col = $derived($view[id]);
   const isSide = $derived(id === "left" || id === "right");
   const sideId = $derived(id as SideId);
 
@@ -17,7 +21,7 @@
     const flexPx = el.clientHeight - SPLITTER_PX;
     if (flexPx <= 0) return;
     const firstPx = clientY - el.getBoundingClientRect().top;
-    resizeRow(sideId, (firstPx / flexPx) * 100);
+    resizeRow(viewId, sideId, (firstPx / flexPx) * 100);
   }
 </script>
 
@@ -29,13 +33,13 @@
     <button
       class="btn btn-ghost btn-xs"
       aria-label="Expand {id} column"
-      onclick={() => toggleCollapse(sideId)}
+      onclick={() => toggleCollapse(viewId, sideId)}
     >»</button>
     <span class="mt-1 [writing-mode:vertical-rl] text-xs opacity-60">{col.rows[0].title}</span>
   </div>
 {:else if id === "center"}
   <div class="flex h-full min-w-0 flex-col" bind:this={el}>
-    <TabStrip {col} />
+    <TabStrip {viewId} {col} />
     <div class="relative min-h-0 flex-1">
       {#each col.rows as tab (tab.id)}
         {@const Module = registry[tab.kind]}
@@ -73,12 +77,12 @@
               <button
                 class="btn btn-ghost btn-xs"
                 aria-label={col.rows.length === 2 ? "Remove second row" : "Add second row"}
-                onclick={() => toggleRows(sideId)}
+                onclick={() => toggleRows(viewId, sideId)}
               >{col.rows.length === 2 ? "−" : "+"}</button>
               <button
                 class="btn btn-ghost btn-xs"
                 aria-label="Collapse {id} column"
-                onclick={() => toggleCollapse(sideId)}
+                onclick={() => toggleCollapse(viewId, sideId)}
               >«</button>
             {/if}
           {/snippet}
