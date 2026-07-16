@@ -2,14 +2,22 @@
   import { onMount } from "svelte";
   import TopBar from "./lib/TopBar.svelte";
   import Workspace from "./lib/Workspace.svelte";
+  import StatusBar from "./lib/StatusBar.svelte";
   import { activeId, addView, closeView, focusAdjacent, toggleCollapse } from "./lib/store.ts";
 
   const isMac = navigator.userAgent.includes("Mac");
 
-  // ctrl+h is a tmux-style prefix: press it, then a second key acts on the workspace.
-  // While pending we show a hint and swallow the second key from the modules below.
+  // ctrl+h is a tmux-style prefix: press it to enter workspace mode, then the
+  // n/w/h/l keys act on the workspace. The mode is sticky — it stays armed so you
+  // can navigate repeatedly — and exits on esc, any unrecognized key, or 2s idle.
   let chordPending = $state(false);
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function armChord() {
+    chordPending = true;
+    clearTimeout(chordTimer);
+    chordTimer = setTimeout(() => (chordPending = false), 2000);
+  }
 
   function clearChord() {
     clearTimeout(chordTimer);
@@ -34,23 +42,23 @@
           case "KeyL": focusAdjacent(1); break;
           default: handled = false;
         }
-        clearChord();
         if (handled) {
           e.preventDefault();
           e.stopPropagation();
+          armChord(); // stay in workspace mode and restart the idle timer
+        } else {
+          clearChord(); // esc or any other key exits the mode
         }
         return;
       }
 
       if (!mod) return;
 
-      // ctrl+h: start the chord. Swallowed from the terminal like a tmux prefix.
+      // ctrl+h: enter workspace mode. Swallowed from the terminal like a tmux prefix.
       if (e.code === "KeyH") {
         e.preventDefault();
         e.stopPropagation();
-        chordPending = true;
-        clearTimeout(chordTimer);
-        chordTimer = setTimeout(() => (chordPending = false), 2000);
+        armChord();
         return;
       }
 
@@ -67,6 +75,7 @@
 </script>
 
 <main class="flex h-screen w-screen flex-col overflow-hidden bg-base-100">
-  <TopBar {chordPending} />
+  <TopBar />
   <Workspace />
+  <StatusBar {chordPending} />
 </main>

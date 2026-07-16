@@ -1,7 +1,5 @@
 <script lang="ts">
   import { activeView, focusView, resetView, toggleCollapse, workspace } from "./store.ts";
-
-  let { chordPending = false }: { chordPending?: boolean } = $props();
 </script>
 
 <header class="flex h-9 shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-3">
@@ -21,9 +19,6 @@
       </div>
     {/if}
   </div>
-  {#if chordPending}
-    <span class="font-mono text-xs opacity-60">ctrl+h — n·w·h·l</span>
-  {/if}
   <div class="flex items-center gap-1">
     <button
       class="btn btn-ghost btn-sm"
