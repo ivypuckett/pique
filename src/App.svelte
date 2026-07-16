@@ -1,9 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import TopBar from "./lib/TopBar.svelte";
-  import Workspace from "./lib/Workspace.svelte";
+  import WorkspacePane from "./lib/WorkspacePane.svelte";
+  import Session from "./lib/Session.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
-  import { activeId, addView, closeView, focusAdjacent, toggleCollapse } from "./lib/store.ts";
+  import {
+    activeId,
+    addView,
+    addWorkspace,
+    closeView,
+    closeWorkspace,
+    focusAdjacent,
+    focusAdjacentWorkspace,
+    toggleCollapse,
+  } from "./lib/store.ts";
 
   const isMac = navigator.userAgent.includes("Mac");
 
@@ -74,8 +84,11 @@
   });
 </script>
 
-<main class="flex h-screen w-screen flex-col overflow-hidden bg-base-100">
-  <TopBar />
-  <Workspace />
-  <StatusBar {chordPending} />
-</main>
+<div class="flex h-screen w-screen overflow-hidden bg-base-100">
+  <WorkspacePane />
+  <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <TopBar />
+    <Session />
+    <StatusBar {chordMode} />
+  </main>
+</div>
