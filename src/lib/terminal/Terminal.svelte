@@ -21,36 +21,51 @@
       return () => term.dispose();
     }
 
-    let id: string | undefined;
     let alive = true;
+    let id: string | undefined;
 
     const ro = new ResizeObserver(() => {
+      if (!alive || !id) return;
       fit.fit();
-      if (id) b.termResize({ id, cols: term.cols, rows: term.rows });
+      b.termResize({ id, cols: term.cols, rows: term.rows }).catch(() => {});
     });
 
     (async () => {
-      const started = await b.termStart({ cols: term.cols, rows: term.rows });
-      id = started.id;
-      term.onData((data) => b!.termWrite({ id: id!, data }));
-      ro.observe(host);
-      while (alive) {
-        const { data, done } = await b.termRead({ id });
-        if (done) {
-          term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
-          break;
+      try {
+        const started = await b.termStart({ cols: term.cols, rows: term.rows });
+        id = started.id;
+        // Unmounted while the session was starting: kill it and stop — the cleanup
+        // below already ran with id undefined, so it could not have killed it.
+        if (!alive) {
+          b.termKill({ id }).catch(() => {});
+          return;
         }
-        if (data.length) term.write(data);
+        // onData is wired only after id exists, so id is always defined here.
+        term.onData((data) => {
+          if (alive && id) b.termWrite({ id, data }).catch(() => {});
+        });
+        ro.observe(host);
+        while (alive) {
+          const { data, done } = await b.termRead({ id });
+          if (!alive) break; // unmounted while parked in the long-poll — do not touch a disposed term
+          if (done) {
+            term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
+            break;
+          }
+          if (data.length) term.write(data);
+        }
+      } catch {
+        // A binding rejected (e.g. the session was killed during teardown). Stop quietly.
       }
     })();
 
     return () => {
       alive = false;
       ro.disconnect();
-      if (id) b.termKill({ id });
+      if (id) b.termKill({ id }).catch(() => {});
       term.dispose();
     };
   });
 </script>
 
-<div bind:this={host} class="h-full w-full" title={title}></div>
+<div bind:this={host} class="h-full w-full" aria-label={title}></div>
