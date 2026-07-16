@@ -23,27 +23,36 @@ async function drain(id: string, ms: number): Promise<string> {
 
 Deno.test("startSession returns a string id", () => {
   const id = startSession({ cols: 80, rows: 24 });
-  assertEquals(typeof id, "string");
-  killSession(id);
+  try {
+    assertEquals(typeof id, "string");
+  } finally {
+    killSession(id);
+  }
 });
 
 Deno.test("write + read round-trips shell output", async () => {
   const id = startSession({ cols: 80, rows: 24 });
-  await drain(id, 300); // consume the initial prompt
-  writeSession(id, "echo pty-rt-$((3*4))\n");
-  const out = await drain(id, 600);
-  assertMatch(out, /pty-rt-12/);
-  killSession(id);
+  try {
+    await drain(id, 300); // consume the initial prompt
+    writeSession(id, "echo pty-rt-$((3*4))\n");
+    const out = await drain(id, 600);
+    assertMatch(out, /pty-rt-12/);
+  } finally {
+    killSession(id);
+  }
 });
 
 Deno.test("resize is applied — shell reports the new size", async () => {
   const id = startSession({ cols: 80, rows: 24 });
-  await drain(id, 300);
-  resizeSession(id, 120, 30);
-  writeSession(id, "stty size\n");
-  const out = await drain(id, 600);
-  assertMatch(out, /30 120/);
-  killSession(id);
+  try {
+    await drain(id, 300);
+    resizeSession(id, 120, 30);
+    writeSession(id, "stty size\n");
+    const out = await drain(id, 600);
+    assertMatch(out, /30 120/);
+  } finally {
+    killSession(id);
+  }
 });
 
 Deno.test("killSession removes the session and is idempotent", () => {

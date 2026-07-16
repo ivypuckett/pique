@@ -20,7 +20,7 @@ export function startSession(opts: { cols: number; rows: number }): string {
   return id;
 }
 
-function require(id: string): Session {
+function mustGet(id: string): Session {
   const s = sessions.get(id);
   if (!s) throw new Error(`unknown terminal session: ${id}`);
   return s;
@@ -28,12 +28,12 @@ function require(id: string): Session {
 
 /** Forward keystrokes/paste to the shell. */
 export function writeSession(id: string, data: string): void {
-  require(id).pty.write(data);
+  mustGet(id).pty.write(data);
 }
 
 /** Non-blocking single read. On process exit, closes and forgets the session. */
 export function readSession(id: string): { data: Uint8Array; done: boolean } {
-  const s = require(id);
+  const s = mustGet(id);
   const { data, done } = s.pty.readBytes();
   if (done) {
     s.pty.close();
@@ -44,7 +44,7 @@ export function readSession(id: string): { data: Uint8Array; done: boolean } {
 
 /** Resize the PTY (sends SIGWINCH to the foreground process group). */
 export function resizeSession(id: string, cols: number, rows: number): void {
-  require(id).pty.resize({ rows, cols });
+  mustGet(id).pty.resize({ rows, cols });
 }
 
 /** Close and forget a session. Idempotent — unknown/closed ids are a no-op. */
