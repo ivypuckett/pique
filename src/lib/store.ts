@@ -11,7 +11,7 @@ import {
   type ViewState,
 } from "./layout.ts";
 
-const KEY = "pique.layout.v1";
+const KEY = "pique.layout.v2";
 
 function load(): ViewState {
   const raw = localStorage.getItem(KEY);

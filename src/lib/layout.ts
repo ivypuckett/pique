@@ -41,7 +41,7 @@ export function createInitialView(): ViewState {
       collapsed: false,
       savedWidthPct: 60,
       rowSplitPct: 50,
-      rows: [{ id: "center-1", title: "Center", kind: "placeholder" }],
+      rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
     },
     right: {
       widthPct: 20,
