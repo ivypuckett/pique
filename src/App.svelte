@@ -17,21 +17,22 @@
 
   const isMac = navigator.userAgent.includes("Mac");
 
-  // ctrl+h is a tmux-style prefix: press it to enter workspace mode, then the
-  // n/w/h/l keys act on the workspace. The mode is sticky — it stays armed so you
-  // can navigate repeatedly — and exits on esc, any unrecognized key, or 2s idle.
-  let chordPending = $state(false);
+  // ctrl+h / ctrl+j are tmux-style prefixes: press one to enter a mode, then its keys act
+  // on views (h/l) or workspaces (j/k). A mode is sticky — it stays armed so you can
+  // navigate repeatedly — and exits on esc, any unrecognized key, or 2s idle.
+  type ChordMode = "view" | "workspace";
+  let chordMode = $state<ChordMode | null>(null);
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function armChord() {
-    chordPending = true;
+  function armChord(mode: ChordMode) {
+    chordMode = mode;
     clearTimeout(chordTimer);
-    chordTimer = setTimeout(() => (chordPending = false), 2000);
+    chordTimer = setTimeout(() => (chordMode = null), 2000);
   }
 
   function clearChord() {
     clearTimeout(chordTimer);
-    chordPending = false;
+    chordMode = null;
   }
 
   onMount(() => {
@@ -41,21 +42,41 @@
     function onKeydown(e: KeyboardEvent) {
       const mod = isMac ? e.metaKey : e.ctrlKey;
 
+      // A prefix pressed while a mode is armed switches modes rather than counting as an
+      // unrecognized key, so ctrl+j then ctrl+h lands in view mode.
+      if (mod && (e.code === "KeyH" || e.code === "KeyJ")) {
+        e.preventDefault();
+        e.stopPropagation();
+        armChord(e.code === "KeyH" ? "view" : "workspace");
+        return;
+      }
+
       // Second stroke of the chord. Capture-phase + stop keeps it away from the terminal.
-      if (chordPending) {
+      if (chordMode) {
         if (MODS.has(e.key)) return;
+        const mode = chordMode;
         let handled = true;
-        switch (e.code) {
-          case "KeyN": addView(); break;
-          case "KeyW": closeView(); break;
-          case "KeyH": focusAdjacent(-1); break;
-          case "KeyL": focusAdjacent(1); break;
-          default: handled = false;
+        if (mode === "view") {
+          switch (e.code) {
+            case "KeyN": addView(); break;
+            case "KeyW": closeView(); break;
+            case "KeyH": focusAdjacent(-1); break;
+            case "KeyL": focusAdjacent(1); break;
+            default: handled = false;
+          }
+        } else {
+          switch (e.code) {
+            case "KeyN": addWorkspace(); break;
+            case "KeyW": closeWorkspace(); break;
+            case "KeyK": focusAdjacentWorkspace(-1); break;
+            case "KeyJ": focusAdjacentWorkspace(1); break;
+            default: handled = false;
+          }
         }
         if (handled) {
           e.preventDefault();
           e.stopPropagation();
-          armChord(); // stay in workspace mode and restart the idle timer
+          armChord(mode); // stay in the mode and restart the idle timer
         } else {
           clearChord(); // esc or any other key exits the mode
         }
@@ -63,14 +84,6 @@
       }
 
       if (!mod) return;
-
-      // ctrl+h: enter workspace mode. Swallowed from the terminal like a tmux prefix.
-      if (e.code === "KeyH") {
-        e.preventDefault();
-        e.stopPropagation();
-        armChord();
-        return;
-      }
 
       // ctrl+b: toggle a side column of the presented view (shift = right).
       if (e.code === "KeyB") {
