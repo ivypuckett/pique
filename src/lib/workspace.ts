@@ -4,13 +4,15 @@ import { createInitialView, isViewState, type ViewState } from "./layout.ts";
 // one view is "active" (the presented view); keyboard navigation moves the active id
 // between neighbors, and view-level actions target it.
 export interface WorkspaceState {
+  id: string; // stable across the workspace's lifetime; keys the session list
+  title: string; // "Workspace N", assigned at creation; never renumbered
   views: ViewState[]; // >= 1, tiled left-to-right
   activeId: string; // names one of the views
 }
 
-export function createInitialWorkspace(): WorkspaceState {
+export function createInitialWorkspace(id = "ws-1", title = "Workspace 1"): WorkspaceState {
   const view = createInitialView("view-1");
-  return { views: [view], activeId: view.id };
+  return { id, title, views: [view], activeId: view.id };
 }
 
 // Smallest free "view-N" id, mirroring layout.ts's nextCenterId so ids stay
@@ -25,7 +27,7 @@ function nextViewId(views: ViewState[]): string {
 // Append a fresh view and make it active.
 export function addView(w: WorkspaceState): WorkspaceState {
   const view = createInitialView(nextViewId(w.views));
-  return { views: [...w.views, view], activeId: view.id };
+  return { ...w, views: [...w.views, view], activeId: view.id };
 }
 
 // Remove the active view, keeping at least one. Activates the previous neighbor if one
@@ -36,7 +38,7 @@ export function closeView(w: WorkspaceState): WorkspaceState {
   if (idx === -1) return w;
   const views = w.views.filter((v) => v.id !== w.activeId);
   const activeId = (views[idx - 1] ?? views[idx]).id;
-  return { views, activeId };
+  return { ...w, views, activeId };
 }
 
 // Move the active id to the neighbor in `dir` (-1 = left, +1 = right). Clamped at the
@@ -66,6 +68,7 @@ export function updateView(
 export function isWorkspaceState(w: unknown): w is WorkspaceState {
   if (typeof w !== "object" || w === null) return false;
   const obj = w as Record<string, unknown>;
+  if (typeof obj.id !== "string" || typeof obj.title !== "string") return false;
   if (!Array.isArray(obj.views) || obj.views.length === 0) return false;
   if (!obj.views.every(isViewState)) return false;
   return typeof obj.activeId === "string" &&
