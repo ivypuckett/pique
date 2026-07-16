@@ -12,6 +12,8 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const term = await import("./lib/terminal/pty.ts");
 
+win.addEventListener("close", () => term.killAllSessions());
+
 win.bind("termStart", async (arg) => {
   const { cols, rows } = arg as { cols: number; rows: number };
   return { id: term.startSession({ cols, rows }) };

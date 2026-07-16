@@ -1,5 +1,6 @@
 import { assertEquals, assertMatch, assertThrows } from "@std/assert";
 import {
+  killAllSessions,
   killSession,
   readSession,
   resizeSession,
@@ -60,6 +61,15 @@ Deno.test("killSession removes the session and is idempotent", () => {
   killSession(id);
   assertThrows(() => readSession(id), Error, "unknown terminal session");
   killSession(id); // second kill is a no-op, must not throw
+});
+
+Deno.test("killAllSessions closes every session", () => {
+  const a = startSession({ cols: 80, rows: 24 });
+  const b = startSession({ cols: 80, rows: 24 });
+  killAllSessions();
+  assertThrows(() => readSession(a), Error, "unknown terminal session");
+  assertThrows(() => readSession(b), Error, "unknown terminal session");
+  killAllSessions(); // idempotent — no throw when empty
 });
 
 Deno.test("unknown id throws a typed error for write/read/resize", () => {

@@ -54,3 +54,9 @@ export function killSession(id: string): void {
   s.pty.close();
   sessions.delete(id);
 }
+
+/** Close and forget every session. Called on window close so no shells orphan. */
+export function killAllSessions(): void {
+  for (const s of sessions.values()) s.pty.close();
+  sessions.clear();
+}
