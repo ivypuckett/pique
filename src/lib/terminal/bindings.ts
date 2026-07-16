@@ -4,7 +4,7 @@
 export interface TerminalBindings {
   termStart(arg: { cols: number; rows: number }): Promise<{ id: string }>;
   termWrite(arg: { id: string; data: string }): Promise<unknown>;
-  termRead(arg: { id: string }): Promise<{ data: Uint8Array; done: boolean }>;
+  termRead(arg: { id: string }): Promise<{ data: number[]; done: boolean }>;
   termResize(arg: { id: string; cols: number; rows: number }): Promise<unknown>;
   termKill(arg: { id: string }): Promise<unknown>;
 }

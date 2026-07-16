@@ -52,7 +52,7 @@
             term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
             break;
           }
-          if (data.length) term.write(data);
+          if (data.length) term.write(new Uint8Array(data));
         }
       } catch {
         // A binding rejected (e.g. the session was killed during teardown). Stop quietly.
