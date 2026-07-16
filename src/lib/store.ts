@@ -51,3 +51,7 @@ export function toggleRows(id: SideId): void {
 export function resizeRow(id: SideId, newFirstPct: number): void {
   view.update((v) => resizeRowFn(v, id, newFirstPct));
 }
+
+export function resetLayout(): void {
+  view.set(createInitialView());
+}
