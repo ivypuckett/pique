@@ -1,7 +1,7 @@
 # Pique Terminal Module — Design
 
 **Date:** 2026-07-15
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 
 ## Purpose
 
@@ -112,12 +112,14 @@ Session-keyed from day one; one session used this milestone.
 |---|---|---|---|
 | `termStart` | `{ cols, rows }` | `{ id }` | Spawns `$SHELL` (fallback `bash`) in a PTY at the given size. |
 | `termWrite` | `{ id, data }` | `void` | Keystrokes/paste → PTY stdin (string). |
-| `termRead` | `{ id }` | `{ data: Uint8Array, done }` | **Long-poll**: resolves when bytes are available or the process exits (see transport). |
+| `termRead` | `{ id }` | `{ data: number[], done }` | **Long-poll**: resolves when bytes are available or the process exits (see transport). |
 | `termResize` | `{ id, cols, rows }` | `void` | Forwarded from xterm `FitAddon`. |
 | `termKill` | `{ id }` | `void` | Closes the PTY; idempotent. Called on unmount. |
 
-`Uint8Array` crosses the binding boundary intact (spike-verified), so output stays raw
-bytes and xterm does the UTF-8/ANSI decoding via `term.write(bytes)`.
+Bytes cross the binding boundary as a **plain number array** — a `Uint8Array` return
+throws `"invalid type: byte array"` (the docs' claim that Uint8Array is supported is
+wrong in practice). The backend sends `Array.from(bytes)`; the frontend rebuilds
+`new Uint8Array(data)` and hands it to xterm, which does the UTF-8/ANSI decoding.
 
 ## Output transport: long-poll binding
 
@@ -214,9 +216,13 @@ src/
   because `executeJs` cannot await Promises and long-poll gives natural backpressure.
 - **Raw bytes end-to-end:** `Uint8Array` over the binding; xterm decodes. Avoids
   UTF-8-split and NUL issues that the string API has.
-- **Backend wiring is order-sensitive** (window-first, bind-before-serve, no manual
-  navigate, dynamic-import the PTY). Non-obvious and silent on failure; encoded above
-  and in project memory so it isn't re-derived.
+- **Backend wiring is order-sensitive and fails silently** (found during end-to-end
+  verification, not by tests): register **all** `win.bind` handlers **before the first
+  top-level `await`** — deno desktop auto-navigates the window as soon as the loop
+  yields, so a bind after `await import(...)` never attaches (`"No callback bound"`) and
+  the frontend degrades quietly. Pattern: create window → bind synchronously (handlers
+  close over a `let term` filled in later) → `await import(...)` deps → `Deno.serve`. No
+  manual navigate. Encoded in project memory so it isn't re-derived.
 - **HMR deferred, not a risk:** the current dev loop is build-then-run (no `--hmr`),
   which is exactly what the spike proved. The backend serves the static `dist/` build.
   Reconciling bindings with `deno desktop --hmr` is out of scope and can be revisited
