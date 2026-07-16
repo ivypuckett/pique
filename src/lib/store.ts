@@ -1,17 +1,20 @@
 import { writable } from "svelte/store";
 import {
+  addTab as addTabFn,
   type Boundary,
+  closeTab as closeTabFn,
   createInitialView,
   isViewState,
   resizeBoundary as resize,
   resizeRowSplit as resizeRowFn,
+  setActiveTab as setActiveTabFn,
   type SideId,
   toggleCollapse as collapseFn,
   toggleRows as rowsFn,
   type ViewState,
 } from "./layout.ts";
 
-const KEY = "pique.layout.v2";
+const KEY = "pique.layout.v3";
 
 function load(): ViewState {
   const raw = localStorage.getItem(KEY);
@@ -50,6 +53,18 @@ export function toggleRows(id: SideId): void {
 
 export function resizeRow(id: SideId, newFirstPct: number): void {
   view.update((v) => resizeRowFn(v, id, newFirstPct));
+}
+
+export function addTab(kind: string): void {
+  view.update((v) => addTabFn(v, kind));
+}
+
+export function setActiveTab(tabId: string): void {
+  view.update((v) => setActiveTabFn(v, tabId));
+}
+
+export function closeTab(tabId: string): void {
+  view.update((v) => closeTabFn(v, tabId));
 }
 
 export function resetLayout(): void {

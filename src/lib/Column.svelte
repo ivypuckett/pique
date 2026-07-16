@@ -3,6 +3,7 @@
   import { type ColumnId, type SideId, SPLITTER_PX } from "./layout.ts";
   import ModuleFrame from "./ModuleFrame.svelte";
   import Splitter from "./Splitter.svelte";
+  import TabStrip from "./TabStrip.svelte";
   import { registry } from "./modules/registry.ts";
 
   let { id, el = $bindable() }: { id: ColumnId; el?: HTMLElement } = $props();
@@ -31,6 +32,26 @@
       onclick={() => toggleCollapse(sideId)}
     >»</button>
     <span class="mt-1 [writing-mode:vertical-rl] text-xs opacity-60">{col.rows[0].title}</span>
+  </div>
+{:else if id === "center"}
+  <div class="flex h-full min-w-0 flex-col" bind:this={el}>
+    <TabStrip {col} />
+    <div class="relative min-h-0 flex-1">
+      {#each col.rows as tab (tab.id)}
+        {@const Module = registry[tab.kind]}
+        <div class="absolute inset-0" class:hidden={tab.id !== col.activeTabId}>
+          <ModuleFrame title={tab.title}>
+            {#if Module}
+              <Module title={tab.title} />
+            {:else}
+              <div class="text-sm opacity-60">
+                Unknown module: <span class="font-mono">{tab.kind}</span>
+              </div>
+            {/if}
+          </ModuleFrame>
+        </div>
+      {/each}
+    </div>
   </div>
 {:else}
   <div

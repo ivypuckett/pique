@@ -11,8 +11,9 @@ export interface ColumnState {
   widthPct: number; // share of the visible row; visible columns sum to 100
   collapsed: boolean; // center is never collapsed
   savedWidthPct: number; // width restored on expand
-  rows: ModuleRef[]; // 1 for center; 1 or 2 for sides
+  rows: ModuleRef[]; // center: the tab list (N); sides: 1 or 2 rows
   rowSplitPct: number; // height % of the first row when a side column shows 2 rows
+  activeTabId: string; // visible center tab; sides carry it for shape uniformity
 }
 
 export interface ViewState {
@@ -31,6 +32,7 @@ export function createInitialView(): ViewState {
       collapsed: false,
       savedWidthPct: 20,
       rowSplitPct: 50,
+      activeTabId: "left-1",
       rows: [
         { id: "left-1", title: "Left A", kind: "placeholder" },
         { id: "left-2", title: "Left B", kind: "placeholder" },
@@ -41,6 +43,7 @@ export function createInitialView(): ViewState {
       collapsed: false,
       savedWidthPct: 60,
       rowSplitPct: 50,
+      activeTabId: "center-1",
       rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
     },
     right: {
@@ -48,6 +51,7 @@ export function createInitialView(): ViewState {
       collapsed: false,
       savedWidthPct: 20,
       rowSplitPct: 50,
+      activeTabId: "right-1",
       rows: [{ id: "right-1", title: "Right", kind: "placeholder" }],
     },
   };
@@ -153,6 +157,46 @@ export function toggleRows(v: ViewState, id: SideId): ViewState {
   return { ...v, [id]: { ...col, rows } };
 }
 
+// Display label for a module kind, used for new-tab titles and the picker menu.
+export function moduleLabel(kind: string): string {
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function nextCenterId(rows: ModuleRef[]): string {
+  const used = new Set(rows.map((r) => r.id));
+  let n = 1;
+  while (used.has(`center-${n}`)) n++;
+  return `center-${n}`;
+}
+
+export function addTab(v: ViewState, kind: string): ViewState {
+  const id = nextCenterId(v.center.rows);
+  const tab: ModuleRef = { id, title: moduleLabel(kind), kind };
+  return {
+    ...v,
+    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+  };
+}
+
+export function setActiveTab(v: ViewState, tabId: string): ViewState {
+  if (!v.center.rows.some((r) => r.id === tabId)) return v;
+  return { ...v, center: { ...v.center, activeTabId: tabId } };
+}
+
+export function closeTab(v: ViewState, tabId: string): ViewState {
+  const rows = v.center.rows;
+  if (rows.length <= 1) return v; // center always keeps at least one tab
+  const idx = rows.findIndex((r) => r.id === tabId);
+  if (idx === -1) return v;
+  const nextRows = rows.filter((r) => r.id !== tabId);
+  let activeTabId = v.center.activeTabId;
+  if (activeTabId === tabId) {
+    // Prefer the previous tab; fall back to the next (now at idx after removal).
+    activeTabId = (nextRows[idx - 1] ?? nextRows[idx]).id;
+  }
+  return { ...v, center: { ...v.center, rows: nextRows, activeTabId } };
+}
+
 function isModuleRef(r: unknown): boolean {
   if (typeof r !== "object" || r === null) return false;
   const row = r as Record<string, unknown>;
@@ -165,7 +209,9 @@ function isColumnState(c: unknown): boolean {
   const col = c as Record<string, unknown>;
   return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
     typeof col.savedWidthPct === "number" && typeof col.rowSplitPct === "number" &&
-    Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef);
+    typeof col.activeTabId === "string" &&
+    Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef) &&
+    (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId);
 }
 
 // Structural guard for persisted state: rejects valid JSON of the wrong shape so a

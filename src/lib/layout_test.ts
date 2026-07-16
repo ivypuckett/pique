@@ -7,7 +7,15 @@ import {
   fixedPx,
   MIN_WIDTH_PCT,
 } from "./layout.ts";
-import { isViewState, resizeRowSplit, toggleCollapse, toggleRows } from "./layout.ts";
+import {
+  addTab,
+  closeTab,
+  isViewState,
+  resizeRowSplit,
+  setActiveTab,
+  toggleCollapse,
+  toggleRows,
+} from "./layout.ts";
 import { MIN_ROW_PCT } from "./layout.ts";
 
 Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
@@ -92,6 +100,82 @@ Deno.test("isViewState rejects a column missing rowSplitPct", () => {
   const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
   delete bad.left.rowSplitPct;
   assertEquals(isViewState(bad), false);
+});
+
+Deno.test("createInitialView sets activeTabId to the first row of each column", () => {
+  const v = createInitialView();
+  assertEquals(v.left.activeTabId, "left-1");
+  assertEquals(v.center.activeTabId, "center-1");
+  assertEquals(v.right.activeTabId, "right-1");
+});
+
+Deno.test("isViewState rejects a column whose activeTabId names no row", () => {
+  const bad = createInitialView();
+  bad.center.activeTabId = "center-999";
+  assertEquals(isViewState(bad), false);
+});
+
+Deno.test("isViewState rejects a column missing activeTabId", () => {
+  const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
+  delete bad.center.activeTabId;
+  assertEquals(isViewState(bad), false);
+});
+
+Deno.test("addTab appends a tab to center and activates it", () => {
+  const v = addTab(createInitialView(), "placeholder");
+  assertEquals(v.center.rows.length, 2);
+  assertEquals(v.center.rows[1], { id: "center-2", title: "Placeholder", kind: "placeholder" });
+  assertEquals(v.center.activeTabId, "center-2");
+});
+
+Deno.test("addTab picks the smallest free center-N id", () => {
+  let v = addTab(createInitialView(), "terminal"); // center-2
+  v = addTab(v, "terminal"); // center-3
+  assertEquals(v.center.rows.map((r) => r.id), ["center-1", "center-2", "center-3"]);
+});
+
+Deno.test("setActiveTab switches the active center tab", () => {
+  const two = addTab(createInitialView(), "placeholder"); // center-2 active
+  const v = setActiveTab(two, "center-1");
+  assertEquals(v.center.activeTabId, "center-1");
+});
+
+Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
+  const v = createInitialView();
+  assertEquals(setActiveTab(v, "center-999").center.activeTabId, "center-1");
+});
+
+Deno.test("closeTab removes a tab", () => {
+  const two = addTab(createInitialView(), "placeholder"); // center-1, center-2
+  const v = closeTab(two, "center-2");
+  assertEquals(v.center.rows.map((r) => r.id), ["center-1"]);
+});
+
+Deno.test("closeTab is a no-op when only one tab remains", () => {
+  const v = createInitialView();
+  assertEquals(closeTab(v, "center-1").center.rows.length, 1);
+  assertEquals(closeTab(v, "center-1").center.activeTabId, "center-1");
+});
+
+Deno.test("closeTab activates the previous tab when the active one is closed", () => {
+  let v = addTab(createInitialView(), "placeholder"); // center-2
+  v = addTab(v, "placeholder"); // center-3, active
+  v = closeTab(v, "center-3");
+  assertEquals(v.center.activeTabId, "center-2"); // previous neighbor
+});
+
+Deno.test("closeTab activates the next tab when the first (active) tab is closed", () => {
+  let v = addTab(createInitialView(), "placeholder"); // center-2
+  v = setActiveTab(v, "center-1"); // center-1 active
+  v = closeTab(v, "center-1");
+  assertEquals(v.center.rows.map((r) => r.id), ["center-2"]);
+  assertEquals(v.center.activeTabId, "center-2"); // no previous, so next
+});
+
+Deno.test("closeTab leaves the active tab unchanged when closing a different tab", () => {
+  let v = addTab(createInitialView(), "placeholder"); // center-2, active
+  v = closeTab(v, "center-1");
+  assertEquals(v.center.activeTabId, "center-2");
 });
 
 Deno.test("isViewState accepts a real view and rejects malformed shapes", () => {
