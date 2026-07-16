@@ -28,7 +28,7 @@ export function createInitialSession(): SessionState {
 export function addWorkspace(s: SessionState): SessionState {
   const n = nextWorkspaceNumber(s.workspaces);
   const w = createInitialWorkspace(`ws-${n}`, `Workspace ${n}`);
-  return { workspaces: [...s.workspaces, w], activeId: w.id };
+  return { ...s, workspaces: [...s.workspaces, w], activeId: w.id };
 }
 
 // Remove the active workspace, keeping at least one. Activates the previous neighbor if

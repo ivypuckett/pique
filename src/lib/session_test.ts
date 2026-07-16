@@ -52,6 +52,15 @@ Deno.test("closeWorkspace activates the next neighbor when the first is closed",
   assertEquals(s.activeId, "ws-2");
 });
 
+Deno.test("closeWorkspace activates the previous neighbor when a middle workspace is closed", () => {
+  let s = addWorkspace(createInitialSession()); // ws-2
+  s = addWorkspace(s); // ws-3
+  s = focusWorkspace(s, "ws-2"); // close a strict middle workspace
+  s = closeWorkspace(s);
+  assertEquals(s.workspaces.map((w) => w.id), ["ws-1", "ws-3"]);
+  assertEquals(s.activeId, "ws-1");
+});
+
 Deno.test("closeWorkspace is a no-op with a single workspace", () => {
   const s = closeWorkspace(createInitialSession());
   assertEquals(s.workspaces.length, 1);
