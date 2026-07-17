@@ -74,6 +74,28 @@ Deno.test("updateView edits one view by id, leaving others untouched", () => {
   assertEquals(next.views[1].left.collapsed, true);
 });
 
+Deno.test("createInitialWorkspace defaults to ws-1 / Workspace 1", () => {
+  const w = createInitialWorkspace();
+  assertEquals(w.id, "ws-1");
+  assertEquals(w.title, "Workspace 1");
+});
+
+Deno.test("createInitialWorkspace takes an explicit id and title", () => {
+  const w = createInitialWorkspace("ws-7", "Workspace 7");
+  assertEquals(w.id, "ws-7");
+  assertEquals(w.title, "Workspace 7");
+  assertEquals(w.views.length, 1);
+  assertEquals(w.activeId, "view-1");
+});
+
+Deno.test("isWorkspaceState rejects a workspace missing id or title", () => {
+  const w = createInitialWorkspace();
+  const { id: _id, ...noId } = w;
+  const { title: _title, ...noTitle } = w;
+  assertEquals(isWorkspaceState(noId), false);
+  assertEquals(isWorkspaceState(noTitle), false);
+});
+
 Deno.test("isWorkspaceState accepts a real workspace and rejects malformed shapes", () => {
   assertEquals(isWorkspaceState(createInitialWorkspace()), true);
   assertEquals(isWorkspaceState(addView(createInitialWorkspace())), true);
