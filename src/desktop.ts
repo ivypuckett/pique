@@ -16,6 +16,7 @@
 const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 });
 
 let term: typeof import("./lib/terminal/pty.ts");
+let chat: typeof import("./lib/chat/agent.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows } = arg as { cols: number; rows: number };
@@ -55,10 +56,29 @@ win.bind("termKill", async (arg) => {
   return true;
 });
 
+win.bind("chatStart", async () => {
+  await chat.startAgent();
+  return { ok: true };
+});
+
+win.bind("chatPrompt", async (arg) => {
+  const { text } = arg as { text: string };
+  chat.promptAgent(text);
+  return true;
+});
+
+win.bind("chatRead", async () => await chat.readAgent());
+
+win.bind("chatAbort", async () => {
+  await chat.abortAgent();
+  return true;
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.
 // deno desktop auto-navigates the adopted window to the served address.
 term = await import("./lib/terminal/pty.ts");
+chat = await import("./lib/chat/agent.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
