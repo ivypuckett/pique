@@ -20,7 +20,8 @@
     "@sigma/pty-ffi": "jsr:@sigma/pty-ffi@^0.42",
     "@xterm/xterm": "npm:@xterm/xterm@^6",
     "@xterm/addon-fit": "npm:@xterm/addon-fit@^0.11",
-    "@std/http": "jsr:@std/http@^1"
+    "@std/http": "jsr:@std/http@^1",
+    "@earendil-works/pi-coding-agent": "npm:@earendil-works/pi-coding-agent@^0.80"
   },
   "compilerOptions": {
     "types": ["svelte"]
