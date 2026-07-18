@@ -1,33 +1,33 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: "amoled-ivy"; /*dark --default, light;*/
+  themes: "catppuccin-frappe"; /*dark --default, light;*/
 }
 
 @plugin "daisyui/theme" {
-  name: "amoled-ivy";
+  name: "catppuccin-frappe";
   default: true;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(0% 0 0);
-  --color-base-200: oklch(0% 0 0);
-  --color-base-300: oklch(0% 0 0);
-  --color-base-content: #eee;
-  --color-primary: oklch(91% 0.096 180.426);
-  --color-primary-content: oklch(12% 0.042 264.695);
-  --color-secondary: oklch(89% 0.061 343.231);
-  --color-secondary-content: oklch(12% 0.042 264.695);
-  --color-accent: oklch(90% 0.058 230.902);
-  --color-accent-content: oklch(12% 0.042 264.695);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(27% 0.041 260.031);
-  --color-info-content: oklch(98% 0.003 247.858);
-  --color-success: oklch(92% 0.084 155.995);
-  --color-success-content: oklch(37% 0.077 168.94);
-  --color-warning: oklch(92% 0.12 95.746);
-  --color-warning-content: oklch(41% 0.112 45.904);
-  --color-error: oklch(39% 0.141 25.723);
-  --color-error-content: oklch(98% 0.003 247.858);
+  --color-base-100: #303446; /* base */
+  --color-base-200: #292c3c; /* mantle */
+  --color-base-300: #232634; /* crust */
+  --color-base-content: #c6d0f5; /* text */
+  --color-primary: #8caaee; /* blue */
+  --color-primary-content: #232634; /* crust */
+  --color-secondary: #ca9ee6; /* mauve */
+  --color-secondary-content: #232634; /* crust */
+  --color-accent: #81c8be; /* teal */
+  --color-accent-content: #232634; /* crust */
+  --color-neutral: #414559; /* surface0 */
+  --color-neutral-content: #c6d0f5; /* text */
+  --color-info: #85c1dc; /* sapphire */
+  --color-info-content: #232634; /* crust */
+  --color-success: #a6d189; /* green */
+  --color-success-content: #232634; /* crust */
+  --color-warning: #e5c890; /* yellow */
+  --color-warning-content: #232634; /* crust */
+  --color-error: #e78284; /* red */
+  --color-error-content: #232634; /* crust */
   --radius-selector: 2rem;
   --radius-field: 1rem;
   --radius-box: 0.5rem;
