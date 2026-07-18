@@ -2,20 +2,45 @@
 // `toFrontendEvent` is the pure, JSON-safe projection of pi's SDK events that
 // crosses the win.bind boundary — keep its output plain JSON (see bindings.ts).
 
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ModelInfo = { provider: string; id: string; name: string; current: boolean };
+
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "thinking"; delta: string }
+  | { kind: "tool_start"; id: string; name: string; args: string }
+  | { kind: "tool_end"; id: string; name: string; result: string; isError: boolean }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
 // deno-lint-ignore no-explicit-any
+function preview(value: any): string {
+  const s = typeof value === "string" ? value : JSON.stringify(value ?? null);
+  return s.length > 2000 ? s.slice(0, 2000) + "…" : s;
+}
+
+// deno-lint-ignore no-explicit-any
 export function toFrontendEvent(event: any): ChatEvent | null {
-  if (event?.type === "message_update") {
-    const ev = event.assistantMessageEvent;
-    if (ev?.type === "text_delta") return { kind: "text", delta: ev.delta };
-    if (ev?.type === "thinking_delta") return { kind: "thinking", delta: ev.delta };
+  switch (event?.type) {
+    case "message_update": {
+      const ev = event.assistantMessageEvent;
+      if (ev?.type === "text_delta") return { kind: "text", delta: ev.delta };
+      if (ev?.type === "thinking_delta") return { kind: "thinking", delta: ev.delta };
+      return null;
+    }
+    case "tool_execution_start":
+      return { kind: "tool_start", id: event.toolCallId, name: event.toolName, args: preview(event.args) };
+    case "tool_execution_end":
+      return {
+        kind: "tool_end",
+        id: event.toolCallId,
+        name: event.toolName,
+        result: preview(event.result),
+        isError: Boolean(event.isError),
+      };
+    default:
+      return null;
   }
-  return null;
 }
 
 import {
@@ -31,10 +56,13 @@ type Session = any;
 let session: Session | undefined;
 let unsubscribe: (() => void) | undefined;
 const queue: ChatEvent[] = [];
+// deno-lint-ignore no-explicit-any
+let runtime: any | undefined;
 
 export async function startAgent(): Promise<void> {
   if (session) return;
-  const modelRuntime = await ModelRuntime.create();
+  runtime = await ModelRuntime.create();
+  const modelRuntime = runtime;
   // M1 runs against a local LM Studio server (google/gemma-4-e4b), configured in
   // ~/.pi/agent/models.json. Pinned explicitly so pique's chat doesn't depend on
   // the user's global pi default model. (Model selection UI is a later milestone.)
@@ -43,8 +71,6 @@ export async function startAgent(): Promise<void> {
     model,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
-    thinkingLevel: "off", // pure text chat; avoids reasoning_effort quirks on local servers
-    tools: [], // M1: pure text chat. Tools (bash/read/edit) are enabled in M4.
   });
   session = created.session;
   unsubscribe = session.subscribe((event: unknown) => {
@@ -83,4 +109,27 @@ export async function readAgent(): Promise<ChatEvent[]> {
 
 export async function abortAgent(): Promise<void> {
   await session?.abort();
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  if (!runtime || !session) return [];
+  const current = session.model;
+  // deno-lint-ignore no-explicit-any
+  const available: any[] = await runtime.getAvailable();
+  return available.map((m) => ({
+    provider: m.provider,
+    id: m.id,
+    name: m.name ?? m.id,
+    current: m.provider === current?.provider && m.id === current?.id,
+  }));
+}
+
+export async function setModel(provider: string, id: string): Promise<void> {
+  if (!runtime || !session) return;
+  const model = runtime.getModel(provider, id);
+  if (model) await session.setModel(model);
+}
+
+export function setThinkingLevel(level: ThinkingLevel): void {
+  session?.setThinkingLevel(level);
 }

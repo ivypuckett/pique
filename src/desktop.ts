@@ -74,6 +74,21 @@ win.bind("chatAbort", async () => {
   return true;
 });
 
+win.bind("chatListModels", async () => await chat.listModels());
+
+win.bind("chatSetModel", async (arg) => {
+  const { provider, id } = arg as { provider: string; id: string };
+  await chat.setModel(provider, id);
+  return true;
+});
+
+win.bind("chatSetThinking", async (arg) => {
+  const { level } = arg as { level: string };
+  // deno-lint-ignore no-explicit-any
+  chat.setThinkingLevel(level as any);
+  return true;
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.

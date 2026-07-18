@@ -24,3 +24,35 @@ Deno.test("toFrontendEvent ignores unrelated events", () => {
     null,
   );
 });
+
+Deno.test("toFrontendEvent maps a tool start", () => {
+  const out = toFrontendEvent({
+    type: "tool_execution_start",
+    toolCallId: "c1",
+    toolName: "bash",
+    args: { command: "ls" },
+  });
+  assertEquals(out, { kind: "tool_start", id: "c1", name: "bash", args: '{"command":"ls"}' });
+});
+
+Deno.test("toFrontendEvent maps a tool end", () => {
+  const out = toFrontendEvent({
+    type: "tool_execution_end",
+    toolCallId: "c1",
+    toolName: "bash",
+    result: "file.txt",
+    isError: false,
+  });
+  assertEquals(out, { kind: "tool_end", id: "c1", name: "bash", result: "file.txt", isError: false });
+});
+
+Deno.test("toFrontendEvent stringifies non-string tool results", () => {
+  const out = toFrontendEvent({
+    type: "tool_execution_end",
+    toolCallId: "c2",
+    toolName: "read",
+    result: { lines: 3 },
+    isError: false,
+  });
+  assertEquals(out, { kind: "tool_end", id: "c2", name: "read", result: '{"lines":3}', isError: false });
+});
