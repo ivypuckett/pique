@@ -35,9 +35,15 @@ const queue: ChatEvent[] = [];
 export async function startAgent(): Promise<void> {
   if (session) return;
   const modelRuntime = await ModelRuntime.create();
+  // M1 runs against a local LM Studio server (google/gemma-4-e4b), configured in
+  // ~/.pi/agent/models.json. Pinned explicitly so pique's chat doesn't depend on
+  // the user's global pi default model. (Model selection UI is a later milestone.)
+  const model = modelRuntime.getModel("lmstudio", "google/gemma-4-e4b");
   const created = await createAgentSession({
+    model,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
+    thinkingLevel: "off", // pure text chat; avoids reasoning_effort quirks on local servers
     tools: [], // M1: pure text chat. Tools (bash/read/edit) are enabled in M4.
   });
   session = created.session;
