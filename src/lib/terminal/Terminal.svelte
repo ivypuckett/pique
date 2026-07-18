@@ -4,16 +4,31 @@
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
   import { terminalBindings } from "./bindings.ts";
+  import { xtermThemeFromDaisyui } from "./theme.ts";
 
   let { title }: { title: string } = $props();
   let host: HTMLDivElement;
 
   onMount(() => {
-    const term = new Terminal({ fontFamily: "monospace", fontSize: 13, cursorBlink: true });
+    const term = new Terminal({
+      fontFamily: "monospace",
+      fontSize: 13,
+      cursorBlink: true,
+      theme: xtermThemeFromDaisyui(host),
+    });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
+
+    // Re-derive the palette when the active daisyui theme changes at runtime.
+    const themeObserver = new MutationObserver(() => {
+      term.options.theme = xtermThemeFromDaisyui(host);
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "class"],
+    });
 
     const b = terminalBindings();
     if (!b) {
@@ -61,6 +76,7 @@
 
     return () => {
       alive = false;
+      themeObserver.disconnect();
       ro.disconnect();
       if (id) b.termKill({ id }).catch(() => {});
       term.dispose();

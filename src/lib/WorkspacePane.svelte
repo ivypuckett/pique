@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { focusWorkspace, session } from "./store.ts";
+  import { addWorkspace, focusWorkspace, session } from "./store.ts";
 </script>
 
 <!-- Fixed-width, full-height rail listing the session's workspaces. Always visible, even
@@ -18,4 +18,9 @@
       onclick={() => focusWorkspace(w.id)}
     >{w.title}</button>
   {/each}
+  <button
+    class="btn btn-ghost btn-sm mt-auto justify-start font-normal opacity-70"
+    aria-label="Add workspace"
+    onclick={() => addWorkspace()}
+  >+ New workspace</button>
 </aside>

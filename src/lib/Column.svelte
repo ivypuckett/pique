@@ -44,7 +44,7 @@
       {#each col.rows as tab (tab.id)}
         {@const Module = registry[tab.kind]}
         <div class="absolute inset-0" class:hidden={tab.id !== col.activeTabId}>
-          <ModuleFrame title={tab.title}>
+          <ModuleFrame title={tab.title} header={false}>
             {#if Module}
               <Module title={tab.title} />
             {:else}
