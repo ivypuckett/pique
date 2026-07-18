@@ -83,20 +83,6 @@
 </script>
 
 <div class="flex h-full w-full flex-col" aria-label={title}>
-  <div class="flex items-center gap-2 border-b border-base-300 p-2">
-    <select class="select select-bordered select-sm" onchange={pickModel} disabled={!ready}>
-      {#each models as m}
-        <option value={`${m.provider}/${m.id}`} selected={m.current}>{m.name}</option>
-      {/each}
-    </select>
-    <select class="select select-bordered select-sm" value={level} onchange={pickLevel} disabled={!ready}>
-      {#each levels as l}<option value={l}>think: {l}</option>{/each}
-    </select>
-    {#if streaming}
-      <button class="btn btn-sm btn-error ml-auto" onclick={stop}>Stop</button>
-    {/if}
-  </div>
-
   <div class="flex-1 space-y-2 overflow-y-auto p-3">
     {#each items as item}
       {#if item.role === "user" || item.role === "assistant"}
@@ -120,4 +106,18 @@
     <input class="input input-bordered flex-1" placeholder="Message…" bind:value={input} disabled={!ready || streaming} />
     <button class="btn btn-primary" type="submit" disabled={!ready || streaming}>Send</button>
   </form>
+
+  <div class="flex items-center gap-2 border-t border-base-300 p-2">
+    <select class="select select-bordered select-sm" onchange={pickModel} disabled={!ready}>
+      {#each models as m}
+        <option value={`${m.provider}/${m.id}`} selected={m.current}>{m.name}</option>
+      {/each}
+    </select>
+    <select class="select select-bordered select-sm" value={level} onchange={pickLevel} disabled={!ready}>
+      {#each levels as l}<option value={l}>think: {l}</option>{/each}
+    </select>
+    {#if streaming}
+      <button class="btn btn-sm btn-error ml-auto" onclick={stop}>Stop</button>
+    {/if}
+  </div>
 </div>
