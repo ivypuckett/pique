@@ -56,10 +56,13 @@ type Session = any;
 let session: Session | undefined;
 let unsubscribe: (() => void) | undefined;
 const queue: ChatEvent[] = [];
+// deno-lint-ignore no-explicit-any
+let runtime: any | undefined;
 
 export async function startAgent(): Promise<void> {
   if (session) return;
-  const modelRuntime = await ModelRuntime.create();
+  runtime = await ModelRuntime.create();
+  const modelRuntime = runtime;
   // M1 runs against a local LM Studio server (google/gemma-4-e4b), configured in
   // ~/.pi/agent/models.json. Pinned explicitly so pique's chat doesn't depend on
   // the user's global pi default model. (Model selection UI is a later milestone.)
@@ -68,8 +71,6 @@ export async function startAgent(): Promise<void> {
     model,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
-    thinkingLevel: "off", // pure text chat; avoids reasoning_effort quirks on local servers
-    tools: [], // M1: pure text chat. Tools (bash/read/edit) are enabled in M4.
   });
   session = created.session;
   unsubscribe = session.subscribe((event: unknown) => {
@@ -108,4 +109,27 @@ export async function readAgent(): Promise<ChatEvent[]> {
 
 export async function abortAgent(): Promise<void> {
   await session?.abort();
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  if (!runtime || !session) return [];
+  const current = session.model;
+  // deno-lint-ignore no-explicit-any
+  const available: any[] = await runtime.getAvailable();
+  return available.map((m) => ({
+    provider: m.provider,
+    id: m.id,
+    name: m.name ?? m.id,
+    current: m.provider === current?.provider && m.id === current?.id,
+  }));
+}
+
+export async function setModel(provider: string, id: string): Promise<void> {
+  if (!runtime || !session) return;
+  const model = runtime.getModel(provider, id);
+  if (model) await session.setModel(model);
+}
+
+export function setThinkingLevel(level: ThinkingLevel): void {
+  session?.setThinkingLevel(level);
 }
