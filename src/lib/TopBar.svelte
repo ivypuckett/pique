@@ -1,5 +1,6 @@
 <script lang="ts">
   import { activeView, activeWorkspace, focusView, resetView, toggleCollapse } from "./store.ts";
+  import { settingsOpen } from "./settings/store.ts";
 </script>
 
 <header class="flex h-9 shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-3">
@@ -38,5 +39,10 @@
       class="btn btn-ghost btn-sm"
       onclick={() => resetView($activeWorkspace.activeId)}
     >Reset</button>
+    <button
+      class="btn btn-ghost btn-sm"
+      aria-label="Open settings"
+      onclick={() => settingsOpen.set(true)}
+    >⚙</button>
   </div>
 </header>

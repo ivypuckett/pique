@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: "catppuccin-frappe"; /*dark --default, light;*/
+  themes: "catppuccin-frappe", dark, light, dracula, nord;
 }
 
 @plugin "daisyui/theme" {

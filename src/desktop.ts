@@ -17,6 +17,7 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
+let settings: typeof import("./lib/settings/file.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows } = arg as { cols: number; rows: number };
@@ -89,11 +90,25 @@ win.bind("chatSetThinking", async (arg) => {
   return true;
 });
 
+// Named JSON config under ~/.pique/ — settings (prefs) and layout (the tree).
+win.bind("configRead", async (arg) => {
+  const { name } = arg as { name: string };
+  // Stored value is JSON we wrote; the frontend re-types it (settings/bindings.ts).
+  return await settings.readJson(name);
+});
+
+win.bind("configWrite", async (arg) => {
+  const { name, data } = arg as { name: string; data: unknown };
+  await settings.writeJson(name, data);
+  return true;
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.
 // deno desktop auto-navigates the adopted window to the served address.
 term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
+settings = await import("./lib/settings/file.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

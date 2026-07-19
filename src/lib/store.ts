@@ -30,25 +30,21 @@ import {
   type SessionState,
   updateWorkspace,
 } from "./session.ts";
+import { readConfig, writeConfig } from "./settings/bindings.ts";
 
-// v5: the top-level shape gained a session wrapping N workspaces. Stored v4 layouts fail
-// isSessionState and fall back to defaults — no migration (see design spec).
-const KEY = "pique.layout.v5";
+// The layout tree persists to ~/.pique/layout.json (moved off localStorage — old
+// clients just lose their stored layout, no migration; the app isn't distributed).
+export const session = writable<SessionState>(createInitialSession());
 
-function load(): SessionState {
-  const raw = localStorage.getItem(KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (isSessionState(parsed)) return parsed;
-    } catch {
-      // corrupt storage — fall back to defaults
-    }
-  }
-  return createInitialSession();
+// Async hydrate from disk: the store renders defaults first, then this swaps in the
+// persisted tree once the config read resolves. Call once at startup (main.ts).
+let hydrated = false;
+
+export async function hydrateSession(): Promise<void> {
+  const raw = await readConfig("layout");
+  if (isSessionState(raw)) session.set(raw);
+  hydrated = true;
 }
-
-export const session = writable<SessionState>(load());
 
 // The shown workspace: the rail's selection, and what view-level actions target.
 export const activeWorkspace = derived(
@@ -63,11 +59,13 @@ export const activeView = derived(
 );
 
 // Persist on a trailing debounce so a splitter drag (which mutates the store on every
-// pointermove) doesn't do synchronous JSON.stringify + setItem on each frame.
+// pointermove) doesn't write to disk on each frame. Suppressed until hydration so the
+// initial default set() can't clobber the persisted file before it's read.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 session.subscribe((s) => {
+  if (!hydrated) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => localStorage.setItem(KEY, JSON.stringify(s)), 150);
+  saveTimer = setTimeout(() => writeConfig("layout", s), 150);
 });
 
 // Workspace-scoped edit: applies a workspace-level reducer to the shown workspace.
