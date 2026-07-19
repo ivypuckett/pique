@@ -16,6 +16,7 @@
     ],
     workspace: [
       { key: "n", label: "new" },
+      { key: "o", label: "open" },
       { key: "w", label: "close" },
       { key: "k", label: "▲" },
       { key: "j", label: "▼" },

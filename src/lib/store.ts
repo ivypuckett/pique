@@ -143,9 +143,10 @@ export function activeId(): string {
   return get(activeWorkspace).activeId;
 }
 
-// Session-level actions — used by the ctrl+j chord and the workspace rail.
-export function addWorkspace(): void {
-  session.update(addWorkspaceFn);
+// Session-level actions — used by the ctrl+j chord and the workspace rail. An optional
+// cwd seeds the new workspace's working-directory override (ctrl+j o, from the picker).
+export function addWorkspace(cwd?: string): void {
+  session.update((s) => addWorkspaceFn(s, cwd));
 }
 
 export function closeWorkspace(): void {

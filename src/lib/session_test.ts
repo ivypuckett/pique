@@ -25,6 +25,14 @@ Deno.test("addWorkspace appends a titled workspace and activates it", () => {
   assertEquals(s.activeId, "ws-2");
 });
 
+Deno.test("addWorkspace seeds the new workspace's cwd when given one", () => {
+  const s = addWorkspace(createInitialSession(), "/proj/x");
+  assertEquals(s.workspaces[1].cwd, "/proj/x");
+  // No cwd, or a blank one, leaves the override unset.
+  assertEquals(addWorkspace(createInitialSession()).workspaces[1].cwd, undefined);
+  assertEquals(addWorkspace(createInitialSession(), "  ").workspaces[1].cwd, undefined);
+});
+
 Deno.test("addWorkspace picks the smallest free ws-N id", () => {
   let s = addWorkspace(createInitialSession()); // ws-2
   s = addWorkspace(s); // ws-3

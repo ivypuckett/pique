@@ -25,10 +25,12 @@ export function createInitialSession(): SessionState {
 // Append a fresh workspace and make it active. The title is fixed at creation from the
 // id's number and never renumbers — it is a name, not a position. Closing ws-2 of three
 // and adding one yields a rail reading 1, 3, 2. This is intended (see design spec).
-export function addWorkspace(s: SessionState): SessionState {
+// An optional cwd seeds the new workspace's working-directory override (ctrl+j o).
+export function addWorkspace(s: SessionState, cwd?: string): SessionState {
   const n = nextWorkspaceNumber(s.workspaces);
   const w = createInitialWorkspace(`ws-${n}`, `Workspace ${n}`);
-  return { ...s, workspaces: [...s.workspaces, w], activeId: w.id };
+  const seeded = cwd && cwd.trim() !== "" ? { ...w, cwd } : w;
+  return { ...s, workspaces: [...s.workspaces, seeded], activeId: w.id };
 }
 
 // Remove the active workspace, keeping at least one. Activates the previous neighbor if

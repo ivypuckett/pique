@@ -16,6 +16,15 @@
     focusAdjacentWorkspace,
     toggleCollapse,
   } from "./lib/store.ts";
+  import { pickDirectory } from "./lib/settings/bindings.ts";
+
+  // ctrl+j o: pick a folder, then open a new workspace seeded with it. Picking is
+  // async (native dialog); on cancel — or in a browser tab, where there's no picker —
+  // pickDirectory resolves null and no workspace is created.
+  async function openWorkspaceFromPicker(): Promise<void> {
+    const dir = await pickDirectory();
+    if (dir) addWorkspace(dir);
+  }
 
   const isMac = navigator.userAgent.includes("Mac");
 
@@ -69,6 +78,7 @@
         } else {
           switch (e.code) {
             case "KeyN": addWorkspace(); break;
+            case "KeyO": openWorkspaceFromPicker(); break;
             case "KeyW": closeWorkspace(); break;
             case "KeyK": focusAdjacentWorkspace(-1); break;
             case "KeyJ": focusAdjacentWorkspace(1); break;

@@ -1,5 +1,21 @@
 <script lang="ts">
   import { addWorkspace, focusWorkspace, session } from "./store.ts";
+  import { settings } from "./settings/store.ts";
+
+  // Rail label is the workspace number plus a compact form of its working directory:
+  // the last path segment, or "~" when it uses the (home) default. The stored title
+  // ("Workspace N") is kept for the aria-label and hover tooltip.
+  function num(id: string): string {
+    return id.replace(/^ws-/, "");
+  }
+  function fullDir(cwd: string | undefined): string {
+    const dir = (cwd ?? $settings.workspace.defaultDir ?? "").trim();
+    return dir === "" ? "~" : dir;
+  }
+  function shortDir(cwd: string | undefined): string {
+    const dir = fullDir(cwd);
+    return dir === "~" ? dir : dir.replace(/\/+$/, "").split("/").pop() || dir;
+  }
 </script>
 
 <!-- Fixed-width, full-height rail listing the session's workspaces. Always visible, even
@@ -14,9 +30,10 @@
       class="btn btn-ghost btn-sm justify-start font-normal"
       class:btn-active={w.id === $session.activeId}
       aria-label="Switch to {w.title}"
+      title="{w.title} — {fullDir(w.cwd)}"
       aria-pressed={w.id === $session.activeId}
       onclick={() => focusWorkspace(w.id)}
-    >{w.title}</button>
+    ><span class="min-w-0 truncate">{num(w.id)} {shortDir(w.cwd)}</span></button>
   {/each}
   <button
     class="btn btn-ghost btn-sm mt-auto justify-start font-normal opacity-70"
