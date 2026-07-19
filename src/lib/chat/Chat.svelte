@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { chatBindings, type ChatEvent, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
+  import { get } from "svelte/store";
+  import { settings } from "../settings/store.ts";
 
   let { title }: { title: string } = $props();
 
@@ -16,7 +18,7 @@
   let streaming = $state(false);
   let models = $state<ModelInfo[]>([]);
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
-  let level = $state<ThinkingLevel>("off");
+  let level = $state<ThinkingLevel>(get(settings).chat.defaultThinkingLevel ?? "off");
 
   const b = chatBindings();
 
@@ -73,12 +75,17 @@
   async function pickModel(e: Event) {
     const value = (e.target as HTMLSelectElement).value;
     const m = models.find((x) => `${x.provider}/${x.id}` === value);
-    if (b && m) { await b.chatSetModel({ provider: m.provider, id: m.id }); models = await b.chatListModels(); }
+    if (b && m) {
+      await b.chatSetModel({ provider: m.provider, id: m.id });
+      settings.update((s) => ({ ...s, chat: { ...s.chat, defaultProvider: m.provider, defaultModel: m.id } }));
+      models = await b.chatListModels();
+    }
   }
 
   function pickLevel(e: Event) {
     level = (e.target as HTMLSelectElement).value as ThinkingLevel;
     b?.chatSetThinking({ level });
+    settings.update((s) => ({ ...s, chat: { ...s.chat, defaultThinkingLevel: level } }));
   }
 </script>
 

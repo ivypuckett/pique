@@ -49,9 +49,30 @@ import {
   SessionManager,
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
+import { readJson } from "../settings/file.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
+
+// The startup model when nothing is persisted, or when the persisted model is
+// unavailable in the runtime. Was the hardcoded M1 pin; now only the fallback.
+const FALLBACK_PROVIDER = "lmstudio";
+const FALLBACK_MODEL = "google/gemma-4-e4b";
+
+// Pure projection of persisted settings → the agent's startup model + thinking.
+// `settings` is whatever readJson("settings") returned: possibly null, missing
+// `chat`, or holding non-string values, so every field is guarded.
+export function resolveChatDefaults(
+  settings: unknown,
+): { provider: string; modelId: string; thinking: ThinkingLevel } {
+  const chat = (settings as { chat?: Record<string, unknown> } | null)?.chat ?? {};
+  const str = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
+  return {
+    provider: str(chat.defaultProvider, FALLBACK_PROVIDER),
+    modelId: str(chat.defaultModel, FALLBACK_MODEL),
+    thinking: str(chat.defaultThinkingLevel, "off") as ThinkingLevel,
+  };
+}
 
 let session: Session | undefined;
 let unsubscribe: (() => void) | undefined;
@@ -63,10 +84,11 @@ export async function startAgent(): Promise<void> {
   if (session) return;
   runtime = await ModelRuntime.create();
   const modelRuntime = runtime;
-  // M1 runs against a local LM Studio server (google/gemma-4-e4b), configured in
-  // ~/.pi/agent/models.json. Pinned explicitly so pique's chat doesn't depend on
-  // the user's global pi default model. (Model selection UI is a later milestone.)
-  const model = modelRuntime.getModel("lmstudio", "google/gemma-4-e4b");
+  // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
+  // fall back to the consts when unset or when the persisted model isn't available.
+  const { provider, modelId, thinking } = resolveChatDefaults(await readJson("settings"));
+  const model = modelRuntime.getModel(provider, modelId) ??
+    modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   const created = await createAgentSession({
     model,
     sessionManager: SessionManager.inMemory(),
@@ -77,6 +99,7 @@ export async function startAgent(): Promise<void> {
     const mapped = toFrontendEvent(event);
     if (mapped) queue.push(mapped);
   });
+  session.setThinkingLevel(thinking);
 }
 
 export function promptAgent(text: string): void {
