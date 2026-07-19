@@ -61,7 +61,7 @@
         <div class="mt-2 flex gap-2">
           <input
             class="input input-bordered input-sm flex-1"
-            placeholder="~ (home directory)"
+            placeholder="~"
             aria-label="Default working directory"
             bind:value={$settings.workspace.defaultDir}
           />
