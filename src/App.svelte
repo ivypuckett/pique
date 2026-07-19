@@ -4,6 +4,8 @@
   import WorkspacePane from "./lib/WorkspacePane.svelte";
   import Session from "./lib/Session.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
+  import SettingsModal from "./lib/settings/SettingsModal.svelte";
+  import { settingsOpen } from "./lib/settings/store.ts";
   import {
     activeId,
     addView,
@@ -91,6 +93,14 @@
         e.stopPropagation();
         toggleCollapse(activeId(), e.shiftKey ? "right" : "left");
       }
+
+      // ctrl+,: open the settings modal. A plain shortcut, not a chord — it
+      // sits past the chord branch so it never arms or consumes a mode.
+      if (e.code === "Comma") {
+        e.preventDefault();
+        e.stopPropagation();
+        settingsOpen.set(true);
+      }
     }
     globalThis.addEventListener("keydown", onKeydown, true);
     return () => globalThis.removeEventListener("keydown", onKeydown, true);
@@ -104,4 +114,5 @@
     <Session />
     <StatusBar {chordMode} />
   </main>
+  <SettingsModal />
 </div>
