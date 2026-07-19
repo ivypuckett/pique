@@ -49,6 +49,7 @@ import {
   SessionManager,
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
+import { readJson } from "../settings/file.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -83,10 +84,11 @@ export async function startAgent(): Promise<void> {
   if (session) return;
   runtime = await ModelRuntime.create();
   const modelRuntime = runtime;
-  // M1 runs against a local LM Studio server (google/gemma-4-e4b), configured in
-  // ~/.pi/agent/models.json. Pinned explicitly so pique's chat doesn't depend on
-  // the user's global pi default model. (Model selection UI is a later milestone.)
-  const model = modelRuntime.getModel("lmstudio", "google/gemma-4-e4b");
+  // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
+  // fall back to the consts when unset or when the persisted model isn't available.
+  const { provider, modelId, thinking } = resolveChatDefaults(await readJson("settings"));
+  const model = modelRuntime.getModel(provider, modelId) ??
+    modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   const created = await createAgentSession({
     model,
     sessionManager: SessionManager.inMemory(),
@@ -97,6 +99,7 @@ export async function startAgent(): Promise<void> {
     const mapped = toFrontendEvent(event);
     if (mapped) queue.push(mapped);
   });
+  session.setThinkingLevel(thinking);
 }
 
 export function promptAgent(text: string): void {
