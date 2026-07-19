@@ -1,5 +1,11 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
+  import { pickDirectory } from "./bindings.ts";
+
+  async function browse(): Promise<void> {
+    const dir = await pickDirectory($settings.workspace.defaultDir);
+    if (dir) $settings.workspace.defaultDir = dir;
+  }
 
   // settingsOpen is the single source of truth for visibility — a class-based
   // daisyui modal, not a native <dialog>. The native dialog's close/cancel
@@ -43,6 +49,24 @@
             <option value={t}>{t}</option>
           {/each}
         </select>
+      </div>
+
+      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Workspace</div>
+      <div>
+        <div class="text-sm">Default working directory</div>
+        <div class="mt-0.5 text-xs opacity-70">
+          Where new terminals and chat agents start. Empty means your home directory.
+          Applies to sessions opened after the change.
+        </div>
+        <div class="mt-2 flex gap-2">
+          <input
+            class="input input-bordered input-sm flex-1"
+            placeholder="~ (home directory)"
+            aria-label="Default working directory"
+            bind:value={$settings.workspace.defaultDir}
+          />
+          <button type="button" class="btn btn-sm" onclick={browse}>Browse…</button>
+        </div>
       </div>
     </div>
   </div>
