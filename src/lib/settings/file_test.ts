@@ -65,3 +65,15 @@ Deno.test("resolveWorkspaceDir falls back to $HOME for unset/blank/non-string", 
   // deno-lint-ignore no-explicit-any
   assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: 42 as any } }), home);
 });
+
+Deno.test("resolveWorkspaceDir expands a leading ~", () => {
+  const home = Deno.env.get("HOME");
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~" } }), home);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~/proj/x" } }), `${home}/proj/x`);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "  ~/proj  " } }), `${home}/proj`);
+});
+
+Deno.test("resolveWorkspaceDir leaves a non-leading or ~user tilde untouched", () => {
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~alice" } }), "~alice");
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/a/~b" } }), "/a/~b");
+});
