@@ -34,6 +34,7 @@ export async function hydrateSettings(): Promise<void> {
       version: DEFAULT_SETTINGS.version,
       appearance: { ...DEFAULT_SETTINGS.appearance, ...r.appearance },
       chat: { ...DEFAULT_SETTINGS.chat, ...r.chat },
+      workspace: { ...DEFAULT_SETTINGS.workspace, ...r.workspace },
     });
   }
   hydrated = true;

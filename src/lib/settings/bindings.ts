@@ -14,12 +14,14 @@ export interface Settings {
     defaultModel?: string;
     defaultThinkingLevel?: ThinkingLevel;
   };
+  workspace: { defaultDir?: string };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
   appearance: { theme: "catppuccin-frappe" },
   chat: { defaultThinkingLevel: "off" },
+  workspace: {},
 };
 
 interface ConfigBindings {
