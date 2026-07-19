@@ -43,3 +43,15 @@ export async function readConfig(name: string): Promise<unknown | null> {
 export async function writeConfig(name: string, data: unknown): Promise<void> {
   await config()?.configWrite({ name, data });
 }
+
+interface DialogBindings {
+  pickDirectory(arg: { startDir?: string }): Promise<{ path: string } | null>;
+}
+
+// Opens the native folder picker via the desktop backend. Null in web-dev (no
+// bindings) and on cancel — callers keep the current value in both cases.
+export async function pickDirectory(startDir?: string): Promise<string | null> {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  const res = await (b as DialogBindings | undefined)?.pickDirectory({ startDir });
+  return res?.path ?? null;
+}
