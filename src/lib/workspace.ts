@@ -8,6 +8,10 @@ export interface WorkspaceState {
   title: string; // "Workspace N", assigned at creation; never renumbered
   views: ViewState[]; // >= 1, tiled left-to-right
   activeId: string; // names one of the views
+  // Per-workspace working-directory override for newly spawned modules. Unset (or
+  // blank) means "use the global default working directory". Captured at spawn time,
+  // so changing it only affects modules opened afterward, not running ones.
+  cwd?: string;
 }
 
 export function createInitialWorkspace(id = "ws-1", title = "Workspace 1"): WorkspaceState {
@@ -55,6 +59,11 @@ export function focusView(w: WorkspaceState, id: string): WorkspaceState {
   return { ...w, activeId: id };
 }
 
+// Set (or clear, with "") the per-workspace working-directory override.
+export function setWorkspaceDir(w: WorkspaceState, dir: string): WorkspaceState {
+  return { ...w, cwd: dir.trim() === "" ? undefined : dir };
+}
+
 // Replace one view by id via a view-level reducer, leaving the others untouched.
 export function updateView(
   w: WorkspaceState,
@@ -71,6 +80,7 @@ export function isWorkspaceState(w: unknown): w is WorkspaceState {
   if (typeof obj.id !== "string" || typeof obj.title !== "string") return false;
   if (!Array.isArray(obj.views) || obj.views.length === 0) return false;
   if (!obj.views.every(isViewState)) return false;
+  if (obj.cwd !== undefined && typeof obj.cwd !== "string") return false;
   return typeof obj.activeId === "string" &&
     (obj.views as ViewState[]).some((v) => v.id === obj.activeId);
 }

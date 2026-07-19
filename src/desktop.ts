@@ -21,8 +21,8 @@ let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 
 win.bind("termStart", async (arg) => {
-  const { cols, rows } = arg as { cols: number; rows: number };
-  const cwd = settings.resolveWorkspaceDir(await settings.readJson("settings"));
+  const { cols, rows, cwd: override } = arg as { cols: number; rows: number; cwd?: string };
+  const cwd = settings.resolveModuleDir(override, await settings.readJson("settings"));
   return { id: term.startSession({ cols, rows, cwd }) };
 });
 
@@ -59,36 +59,49 @@ win.bind("termKill", async (arg) => {
   return true;
 });
 
-win.bind("chatStart", async () => {
-  await chat.startAgent();
-  return { ok: true };
+win.bind("chatStart", async (arg) => {
+  const { cwd } = arg as { cwd?: string };
+  return { id: await chat.startAgent({ cwd }) };
 });
 
 win.bind("chatPrompt", async (arg) => {
-  const { text } = arg as { text: string };
-  chat.promptAgent(text);
+  const { id, text } = arg as { id: string; text: string };
+  chat.promptAgent(id, text);
   return true;
 });
 
-win.bind("chatRead", async () => await chat.readAgent());
+win.bind("chatRead", async (arg) => {
+  const { id } = arg as { id: string };
+  return await chat.readAgent(id);
+});
 
-win.bind("chatAbort", async () => {
-  await chat.abortAgent();
+win.bind("chatAbort", async (arg) => {
+  const { id } = arg as { id: string };
+  await chat.abortAgent(id);
   return true;
 });
 
-win.bind("chatListModels", async () => await chat.listModels());
+win.bind("chatStop", async (arg) => {
+  const { id } = arg as { id: string };
+  chat.stopAgent(id);
+  return true;
+});
+
+win.bind("chatListModels", async (arg) => {
+  const { id } = arg as { id: string };
+  return await chat.listModels(id);
+});
 
 win.bind("chatSetModel", async (arg) => {
-  const { provider, id } = arg as { provider: string; id: string };
-  await chat.setModel(provider, id);
+  const { id, provider, model } = arg as { id: string; provider: string; model: string };
+  await chat.setModel(id, provider, model);
   return true;
 });
 
 win.bind("chatSetThinking", async (arg) => {
-  const { level } = arg as { level: string };
+  const { id, level } = arg as { id: string; level: string };
   // deno-lint-ignore no-explicit-any
-  chat.setThinkingLevel(level as any);
+  chat.setThinkingLevel(id, level as any);
   return true;
 });
 

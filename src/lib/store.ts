@@ -17,6 +17,7 @@ import {
   closeView as closeViewFn,
   focusAdjacent as focusAdjacentFn,
   focusView as focusViewFn,
+  setWorkspaceDir as setWorkspaceDirFn,
   updateView,
   type WorkspaceState,
 } from "./workspace.ts";
@@ -128,6 +129,12 @@ export function focusAdjacent(dir: -1 | 1): void {
 
 export function focusView(viewId: string): void {
   editWorkspace((w) => focusViewFn(w, viewId));
+}
+
+// Set the shown workspace's working-directory override (top bar). New modules in
+// this workspace spawn there; running ones are untouched.
+export function setWorkspaceDir(dir: string): void {
+  editWorkspace((w) => setWorkspaceDirFn(w, dir));
 }
 
 // Returns the active VIEW id of the shown workspace — App.svelte and TopBar.svelte pass

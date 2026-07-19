@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { readJson, resolveWorkspaceDir, writeJson } from "./file.ts";
+import { readJson, resolveModuleDir, resolveWorkspaceDir, writeJson } from "./file.ts";
 
 // Each test runs against a throwaway HOME so it exercises real disk I/O without
 // touching the developer's own ~/.pique.
@@ -76,4 +76,19 @@ Deno.test("resolveWorkspaceDir expands a leading ~", () => {
 Deno.test("resolveWorkspaceDir leaves a non-leading or ~user tilde untouched", () => {
   assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~alice" } }), "~alice");
   assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/a/~b" } }), "/a/~b");
+});
+
+Deno.test("resolveModuleDir uses the override when set, expanding a leading ~", () => {
+  const home = Deno.env.get("HOME");
+  // The override wins over the global default, regardless of settings.
+  assertEquals(resolveModuleDir("/proj/y", { workspace: { defaultDir: "/proj/x" } }), "/proj/y");
+  assertEquals(resolveModuleDir("~/work", { workspace: { defaultDir: "/proj/x" } }), `${home}/work`);
+});
+
+Deno.test("resolveModuleDir falls back to the default for a blank/absent override", () => {
+  assertEquals(resolveModuleDir(undefined, { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
+  assertEquals(resolveModuleDir("", { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
+  assertEquals(resolveModuleDir("   ", { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
+  // No override and no default → $HOME, same as resolveWorkspaceDir.
+  assertEquals(resolveModuleDir(undefined, null), Deno.env.get("HOME"));
 });

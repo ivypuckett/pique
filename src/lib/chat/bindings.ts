@@ -4,14 +4,17 @@
 import type { ChatEvent, ModelInfo, ThinkingLevel } from "./agent.ts";
 export type { ChatEvent, ModelInfo, ThinkingLevel };
 
+// Each Chat module gets its own backend agent, addressed by the id chatStart
+// returns; every other call carries that id.
 export interface ChatBindings {
-  chatStart(): Promise<{ ok: true }>;
-  chatPrompt(arg: { text: string }): Promise<unknown>;
-  chatRead(): Promise<ChatEvent[]>;
-  chatAbort(): Promise<unknown>;
-  chatListModels(): Promise<ModelInfo[]>;
-  chatSetModel(arg: { provider: string; id: string }): Promise<unknown>;
-  chatSetThinking(arg: { level: ThinkingLevel }): Promise<unknown>;
+  chatStart(arg: { cwd?: string }): Promise<{ id: string }>;
+  chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
+  chatRead(arg: { id: string }): Promise<ChatEvent[]>;
+  chatAbort(arg: { id: string }): Promise<unknown>;
+  chatStop(arg: { id: string }): Promise<unknown>;
+  chatListModels(arg: { id: string }): Promise<ModelInfo[]>;
+  chatSetModel(arg: { id: string; provider: string; model: string }): Promise<unknown>;
+  chatSetThinking(arg: { id: string; level: ThinkingLevel }): Promise<unknown>;
 }
 
 export function chatBindings(): ChatBindings | null {

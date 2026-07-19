@@ -4,7 +4,7 @@
   import { get } from "svelte/store";
   import { settings } from "../settings/store.ts";
 
-  let { title }: { title: string } = $props();
+  let { title, cwd }: { title: string; cwd?: string } = $props();
 
   type Item =
     | { role: "user"; text: string }
@@ -21,6 +21,8 @@
   let level = $state<ThinkingLevel>(get(settings).chat.defaultThinkingLevel ?? "off");
 
   const b = chatBindings();
+  // This module's backend agent id, assigned once chatStart resolves.
+  let id: string | undefined;
 
   function apply(ev: ChatEvent) {
     if (ev.kind === "text") {
@@ -49,42 +51,48 @@
     }
     let alive = true;
     (async () => {
-      await b.chatStart();
+      const started = await b.chatStart({ cwd });
+      id = started.id;
+      // Unmounted while starting: stop the agent and bail (cleanup ran with id unset).
+      if (!alive) { b.chatStop({ id }).catch(() => {}); return; }
       ready = true;
-      models = await b.chatListModels();
+      models = await b.chatListModels({ id });
       while (alive) {
-        const events = await b.chatRead();
+        const events = await b.chatRead({ id });
         if (!alive) break;
         for (const ev of events) apply(ev);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      if (id) b.chatStop({ id }).catch(() => {});
+    };
   });
 
   function send() {
     const text = input.trim();
-    if (!b || !ready || streaming || !text) return;
+    if (!b || !ready || !id || streaming || !text) return;
     items.push({ role: "user", text });
     input = "";
     streaming = true;
-    b.chatPrompt({ text }).catch(() => { streaming = false; });
+    b.chatPrompt({ id, text }).catch(() => { streaming = false; });
   }
 
-  function stop() { b?.chatAbort().catch(() => {}); }
+  function stop() { if (id) b?.chatAbort({ id }).catch(() => {}); }
 
   async function pickModel(e: Event) {
     const value = (e.target as HTMLSelectElement).value;
     const m = models.find((x) => `${x.provider}/${x.id}` === value);
-    if (b && m) {
-      await b.chatSetModel({ provider: m.provider, id: m.id });
+    if (b && m && id) {
+      await b.chatSetModel({ id, provider: m.provider, model: m.id });
       settings.update((s) => ({ ...s, chat: { ...s.chat, defaultProvider: m.provider, defaultModel: m.id } }));
-      models = await b.chatListModels();
+      models = await b.chatListModels({ id });
     }
   }
 
   function pickLevel(e: Event) {
     level = (e.target as HTMLSelectElement).value as ThinkingLevel;
-    b?.chatSetThinking({ level });
+    if (id) b?.chatSetThinking({ id, level });
     settings.update((s) => ({ ...s, chat: { ...s.chat, defaultThinkingLevel: level } }));
   }
 </script>

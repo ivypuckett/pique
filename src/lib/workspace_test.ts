@@ -6,6 +6,7 @@ import {
   focusAdjacent,
   focusView,
   isWorkspaceState,
+  setWorkspaceDir,
   updateView,
 } from "./workspace.ts";
 import { toggleCollapse } from "./layout.ts";
@@ -86,6 +87,22 @@ Deno.test("createInitialWorkspace takes an explicit id and title", () => {
   assertEquals(w.title, "Workspace 7");
   assertEquals(w.views.length, 1);
   assertEquals(w.activeId, "view-1");
+});
+
+Deno.test("setWorkspaceDir sets the override and clears it on blank input", () => {
+  const w = createInitialWorkspace();
+  assertEquals(w.cwd, undefined);
+  assertEquals(setWorkspaceDir(w, "/proj/x").cwd, "/proj/x");
+  // Blank/whitespace clears back to "use the default".
+  assertEquals(setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "").cwd, undefined);
+  assertEquals(setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "   ").cwd, undefined);
+});
+
+Deno.test("isWorkspaceState accepts an optional string cwd and rejects a non-string", () => {
+  const w = createInitialWorkspace();
+  assertEquals(isWorkspaceState({ ...w, cwd: "/proj/x" }), true);
+  assertEquals(isWorkspaceState({ ...w, cwd: undefined }), true);
+  assertEquals(isWorkspaceState({ ...w, cwd: 42 }), false);
 });
 
 Deno.test("isWorkspaceState rejects a workspace missing id or title", () => {

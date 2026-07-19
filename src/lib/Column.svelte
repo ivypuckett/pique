@@ -6,10 +6,11 @@
   import TabStrip from "./TabStrip.svelte";
   import { registry } from "./modules/registry.ts";
 
-  let { viewId, col, id, el = $bindable() }: {
+  let { viewId, col, id, cwd, el = $bindable() }: {
     viewId: string;
     col: ColumnState;
     id: ColumnId;
+    cwd?: string;
     el?: HTMLElement;
   } = $props();
 
@@ -46,7 +47,7 @@
         <div class="absolute inset-0" class:hidden={tab.id !== col.activeTabId}>
           <ModuleFrame title={tab.title} header={false}>
             {#if Module}
-              <Module title={tab.title} />
+              <Module title={tab.title} {cwd} />
             {:else}
               <div class="text-sm opacity-60">
                 Unknown module: <span class="font-mono">{tab.kind}</span>
@@ -87,7 +88,7 @@
             {/if}
           {/snippet}
           {#if Module}
-            <Module title={row.title} />
+            <Module title={row.title} {cwd} />
           {:else}
             <div class="text-sm opacity-60">
               Unknown module: <span class="font-mono">{row.kind}</span>

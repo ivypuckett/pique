@@ -6,7 +6,7 @@
   import { terminalBindings } from "./bindings.ts";
   import { xtermThemeFromDaisyui } from "./theme.ts";
 
-  let { title }: { title: string } = $props();
+  let { title, cwd }: { title: string; cwd?: string } = $props();
   let host: HTMLDivElement;
 
   onMount(() => {
@@ -47,7 +47,7 @@
 
     (async () => {
       try {
-        const started = await b.termStart({ cols: term.cols, rows: term.rows });
+        const started = await b.termStart({ cols: term.cols, rows: term.rows, cwd });
         id = started.id;
         // Unmounted while the session was starting: kill it and stop — the cleanup
         // below already ran with id undefined, so it could not have killed it.

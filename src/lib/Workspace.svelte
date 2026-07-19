@@ -10,7 +10,7 @@
 <div class="relative h-full">
   {#each workspace.views as v (v.id)}
     <div class="absolute inset-0" class:hidden={v.id !== workspace.activeId}>
-      <View view={v} />
+      <View view={v} cwd={workspace.cwd} />
     </div>
   {/each}
 </div>

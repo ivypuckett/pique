@@ -8,7 +8,7 @@
 // not Uint8Array, because binding values must be plain JSON).
 
 export interface TerminalBindings {
-  termStart(arg: { cols: number; rows: number }): Promise<{ id: string }>;
+  termStart(arg: { cols: number; rows: number; cwd?: string }): Promise<{ id: string }>;
   termWrite(arg: { id: string; data: string }): Promise<unknown>;
   termRead(arg: { id: string }): Promise<{ data: number[]; done: boolean }>;
   termResize(arg: { id: string; cols: number; rows: number }): Promise<unknown>;

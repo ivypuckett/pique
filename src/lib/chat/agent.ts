@@ -49,7 +49,7 @@ import {
   SessionManager,
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
-import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
+import { readJson, resolveModuleDir } from "../settings/file.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -74,21 +74,34 @@ export function resolveChatDefaults(
   };
 }
 
-let session: Session | undefined;
-let unsubscribe: (() => void) | undefined;
-const queue: ChatEvent[] = [];
+// One live chat agent per open Chat module. Was a single global singleton; now
+// keyed by a spawn id (mirroring the terminal's per-session model) so each module
+// runs its own conversation in its own working directory. The ModelRuntime is the
+// one shared, lazily-created resource.
+interface Agent {
+  session: Session;
+  unsubscribe: () => void;
+  queue: ChatEvent[];
+}
+const agents = new Map<string, Agent>();
+let nextId = 1;
 // deno-lint-ignore no-explicit-any
 let runtime: any | undefined;
 
-export async function startAgent(): Promise<void> {
-  if (session) return;
-  runtime = await ModelRuntime.create();
-  const modelRuntime = runtime;
+async function ensureRuntime() {
+  if (!runtime) runtime = await ModelRuntime.create();
+  return runtime;
+}
+
+// Start a fresh agent and return its id. `cwd` is the per-workspace override
+// threaded from the frontend; blank/absent falls back to the global default.
+export async function startAgent(opts: { cwd?: string } = {}): Promise<string> {
+  const modelRuntime = await ensureRuntime();
   // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
   // fall back to the consts when unset or when the persisted model isn't available.
   const rawSettings = await readJson("settings");
   const { provider, modelId, thinking } = resolveChatDefaults(rawSettings);
-  const cwd = resolveWorkspaceDir(rawSettings);
+  const cwd = resolveModuleDir(opts.cwd, rawSettings);
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   const created = await createAgentSession({
@@ -97,16 +110,22 @@ export async function startAgent(): Promise<void> {
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
   });
-  session = created.session;
-  unsubscribe = session.subscribe((event: unknown) => {
+  const session = created.session;
+  const queue: ChatEvent[] = [];
+  const unsubscribe = session.subscribe((event: unknown) => {
     const mapped = toFrontendEvent(event);
     if (mapped) queue.push(mapped);
   });
   session.setThinkingLevel(thinking);
+  const id = `chat-${nextId++}`;
+  agents.set(id, { session, unsubscribe, queue });
+  return id;
 }
 
-export function promptAgent(text: string): void {
-  if (!session) throw new Error("chat agent not started");
+export function promptAgent(id: string, text: string): void {
+  const agent = agents.get(id);
+  if (!agent) throw new Error("chat agent not started");
+  const { session, queue } = agent;
   // Do not await: let streaming flow through readAgent. Completion/failure is
   // reported by pushing a terminal event onto the queue.
   session
@@ -124,22 +143,34 @@ export function promptAgent(text: string): void {
 }
 
 // Long-poll drain: return queued events, or [] after ~20s so the frontend re-polls.
-export async function readAgent(): Promise<ChatEvent[]> {
+// An unknown id (agent already stopped) drains as [].
+export async function readAgent(id: string): Promise<ChatEvent[]> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
+    const queue = agents.get(id)?.queue;
+    if (!queue) return [];
     if (queue.length) return queue.splice(0, queue.length);
     await new Promise((r) => setTimeout(r, 15));
   }
   return [];
 }
 
-export async function abortAgent(): Promise<void> {
-  await session?.abort();
+export async function abortAgent(id: string): Promise<void> {
+  await agents.get(id)?.session.abort();
 }
 
-export async function listModels(): Promise<ModelInfo[]> {
-  if (!runtime || !session) return [];
-  const current = session.model;
+// Tear down one agent on module unmount, freeing its subscription.
+export function stopAgent(id: string): void {
+  const agent = agents.get(id);
+  if (!agent) return;
+  agent.unsubscribe();
+  agents.delete(id);
+}
+
+export async function listModels(id: string): Promise<ModelInfo[]> {
+  const agent = agents.get(id);
+  if (!runtime || !agent) return [];
+  const current = agent.session.model;
   // deno-lint-ignore no-explicit-any
   const available: any[] = await runtime.getAvailable();
   return available.map((m) => ({
@@ -150,12 +181,13 @@ export async function listModels(): Promise<ModelInfo[]> {
   }));
 }
 
-export async function setModel(provider: string, id: string): Promise<void> {
-  if (!runtime || !session) return;
-  const model = runtime.getModel(provider, id);
-  if (model) await session.setModel(model);
+export async function setModel(id: string, provider: string, modelId: string): Promise<void> {
+  const agent = agents.get(id);
+  if (!runtime || !agent) return;
+  const model = runtime.getModel(provider, modelId);
+  if (model) await agent.session.setModel(model);
 }
 
-export function setThinkingLevel(level: ThinkingLevel): void {
-  session?.setThinkingLevel(level);
+export function setThinkingLevel(id: string, level: ThinkingLevel): void {
+  agents.get(id)?.session.setThinkingLevel(level);
 }

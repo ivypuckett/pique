@@ -32,6 +32,16 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
 }
 
+// Expand a leading `~` (`~` or `~/...`) against $HOME; `~user` and non-leading `~`
+// are left as-is. Blank input returns "".
+function expandTilde(dir: string, home: string): string {
+  const trimmed = dir.trim();
+  if (trimmed === "") return "";
+  if (trimmed === "~") return home;
+  if (trimmed.startsWith("~/")) return home + trimmed.slice(1);
+  return trimmed;
+}
+
 // Effective working directory for spawned shells and chat agents: the persisted
 // workspace.defaultDir when it is a non-empty string, else $HOME. A leading `~`
 // is expanded (`~` or `~/...`); `~user` and non-leading `~` are left as-is.
@@ -45,12 +55,20 @@ export function resolveWorkspaceDir(settings: Json): string {
     if (ws && typeof ws === "object" && !Array.isArray(ws)) {
       const dir = (ws as { [k: string]: Json }).defaultDir;
       if (typeof dir === "string" && dir.trim() !== "") {
-        const trimmed = dir.trim();
-        if (trimmed === "~") return home;
-        if (trimmed.startsWith("~/")) return home + trimmed.slice(1);
-        return trimmed;
+        return expandTilde(dir, home);
       }
     }
   }
   return home;
+}
+
+// Working directory for one spawned module: its per-workspace override when set
+// (leading `~` expanded), else the global default from resolveWorkspaceDir. The
+// override is a raw string threaded down from the workspace state; a blank or
+// absent one means "use the default", so existing behavior is unchanged.
+export function resolveModuleDir(override: string | undefined, settings: Json): string {
+  if (typeof override === "string" && override.trim() !== "") {
+    return expandTilde(override, Deno.env.get("HOME") ?? "/");
+  }
+  return resolveWorkspaceDir(settings);
 }

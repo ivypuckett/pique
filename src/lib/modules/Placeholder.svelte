@@ -1,5 +1,6 @@
 <script lang="ts">
-  let { title }: { title: string } = $props();
+  // cwd is part of the shared module prop shape; the placeholder ignores it.
+  let { title }: { title: string; cwd?: string } = $props();
 </script>
 
 <div class="text-sm opacity-70">
