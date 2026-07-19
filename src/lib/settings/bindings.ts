@@ -19,7 +19,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
   appearance: { theme: "catppuccin-frappe" },
-  chat: {},
+  chat: { defaultThinkingLevel: "off" },
 };
 
 interface ConfigBindings {
