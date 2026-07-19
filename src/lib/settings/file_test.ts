@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { readJson, writeJson } from "./file.ts";
+import { readJson, resolveWorkspaceDir, writeJson } from "./file.ts";
 
 // Each test runs against a throwaway HOME so it exercises real disk I/O without
 // touching the developer's own ~/.pique.
@@ -49,4 +49,31 @@ Deno.test("writeJson rejects names with path separators", async () => {
   await withTempHome(async () => {
     await assertRejects(() => writeJson("../evil", {}));
   });
+});
+
+Deno.test("resolveWorkspaceDir returns defaultDir when it is a non-empty string", () => {
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/proj/x" } }), "/proj/x");
+});
+
+Deno.test("resolveWorkspaceDir falls back to $HOME for unset/blank/non-string", () => {
+  const home = Deno.env.get("HOME");
+  assertEquals(resolveWorkspaceDir(null), home);
+  assertEquals(resolveWorkspaceDir({}), home);
+  assertEquals(resolveWorkspaceDir({ workspace: {} }), home);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "" } }), home);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "   " } }), home);
+  // deno-lint-ignore no-explicit-any
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: 42 as any } }), home);
+});
+
+Deno.test("resolveWorkspaceDir expands a leading ~", () => {
+  const home = Deno.env.get("HOME");
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~" } }), home);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~/proj/x" } }), `${home}/proj/x`);
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "  ~/proj  " } }), `${home}/proj`);
+});
+
+Deno.test("resolveWorkspaceDir leaves a non-leading or ~user tilde untouched", () => {
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~alice" } }), "~alice");
+  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/a/~b" } }), "/a/~b");
 });

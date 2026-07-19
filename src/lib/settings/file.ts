@@ -31,3 +31,26 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
   await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
 }
+
+// Effective working directory for spawned shells and chat agents: the persisted
+// workspace.defaultDir when it is a non-empty string, else $HOME. A leading `~`
+// is expanded (`~` or `~/...`); `~user` and non-leading `~` are left as-is.
+// `settings` is whatever readJson("settings") returned — possibly null, missing
+// the section, or holding a non-string — so every field is guarded (mirrors
+// resolveChatDefaults).
+export function resolveWorkspaceDir(settings: Json): string {
+  const home = Deno.env.get("HOME") ?? "/";
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    const ws = (settings as { [k: string]: Json }).workspace;
+    if (ws && typeof ws === "object" && !Array.isArray(ws)) {
+      const dir = (ws as { [k: string]: Json }).defaultDir;
+      if (typeof dir === "string" && dir.trim() !== "") {
+        const trimmed = dir.trim();
+        if (trimmed === "~") return home;
+        if (trimmed.startsWith("~/")) return home + trimmed.slice(1);
+        return trimmed;
+      }
+    }
+  }
+  return home;
+}

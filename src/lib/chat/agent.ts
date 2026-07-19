@@ -49,7 +49,7 @@ import {
   SessionManager,
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
-import { readJson } from "../settings/file.ts";
+import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -86,11 +86,14 @@ export async function startAgent(): Promise<void> {
   const modelRuntime = runtime;
   // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
   // fall back to the consts when unset or when the persisted model isn't available.
-  const { provider, modelId, thinking } = resolveChatDefaults(await readJson("settings"));
+  const rawSettings = await readJson("settings");
+  const { provider, modelId, thinking } = resolveChatDefaults(rawSettings);
+  const cwd = resolveWorkspaceDir(rawSettings);
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   const created = await createAgentSession({
     model,
+    cwd,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
   });

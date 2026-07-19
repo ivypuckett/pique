@@ -1,4 +1,4 @@
-import { assertEquals, assertMatch, assertThrows } from "@std/assert";
+import { assertEquals, assertMatch, assertStringIncludes, assertThrows } from "@std/assert";
 import {
   killAllSessions,
   killSession,
@@ -76,4 +76,17 @@ Deno.test("unknown id throws a typed error for write/read/resize", () => {
   assertThrows(() => writeSession("nope", "x"), Error, "unknown terminal session");
   assertThrows(() => readSession("nope"), Error, "unknown terminal session");
   assertThrows(() => resizeSession("nope", 80, 24), Error, "unknown terminal session");
+});
+
+Deno.test("startSession spawns the shell in the given cwd", async () => {
+  const id = startSession({ cols: 80, rows: 24, cwd: "/tmp" });
+  writeSession(id, "pwd\n");
+  let out = "";
+  for (let i = 0; i < 300 && !out.includes("/tmp"); i++) {
+    const { data } = readSession(id);
+    if (data.length) out += new TextDecoder().decode(data);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  killSession(id);
+  assertStringIncludes(out, "/tmp");
 });

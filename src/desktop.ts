@@ -18,10 +18,12 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
 let settings: typeof import("./lib/settings/file.ts");
+let dialog: typeof import("./lib/settings/dialog.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows } = arg as { cols: number; rows: number };
-  return { id: term.startSession({ cols, rows }) };
+  const cwd = settings.resolveWorkspaceDir(await settings.readJson("settings"));
+  return { id: term.startSession({ cols, rows, cwd }) };
 });
 
 win.bind("termWrite", async (arg) => {
@@ -103,6 +105,15 @@ win.bind("configWrite", async (arg) => {
   return true;
 });
 
+win.bind("pickDirectory", async (arg) => {
+  const { startDir } = arg as { startDir?: string };
+  const start = startDir && startDir.trim() !== ""
+    ? startDir
+    : settings.resolveWorkspaceDir(await settings.readJson("settings"));
+  const path = await dialog.pickDirectory(start);
+  return path ? { path } : null;
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.
@@ -110,5 +121,6 @@ win.addEventListener("close", () => term?.killAllSessions());
 term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
 settings = await import("./lib/settings/file.ts");
+dialog = await import("./lib/settings/dialog.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
