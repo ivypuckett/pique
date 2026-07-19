@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { toFrontendEvent } from "./agent.ts";
+import { resolveChatDefaults, toFrontendEvent } from "./agent.ts";
 
 Deno.test("toFrontendEvent maps a text delta", () => {
   const out = toFrontendEvent({
@@ -55,4 +55,48 @@ Deno.test("toFrontendEvent stringifies non-string tool results", () => {
     isError: false,
   });
   assertEquals(out, { kind: "tool_end", id: "c2", name: "read", result: '{"lines":3}', isError: false });
+});
+
+Deno.test("resolveChatDefaults falls back on null", () => {
+  assertEquals(resolveChatDefaults(null), {
+    provider: "lmstudio",
+    modelId: "google/gemma-4-e4b",
+    thinking: "off",
+  });
+});
+
+Deno.test("resolveChatDefaults falls back on empty / missing chat", () => {
+  assertEquals(resolveChatDefaults({}), {
+    provider: "lmstudio",
+    modelId: "google/gemma-4-e4b",
+    thinking: "off",
+  });
+  assertEquals(resolveChatDefaults({ chat: {} }), {
+    provider: "lmstudio",
+    modelId: "google/gemma-4-e4b",
+    thinking: "off",
+  });
+});
+
+Deno.test("resolveChatDefaults reads a full chat config", () => {
+  assertEquals(
+    resolveChatDefaults({
+      chat: { defaultProvider: "openai", defaultModel: "gpt-x", defaultThinkingLevel: "high" },
+    }),
+    { provider: "openai", modelId: "gpt-x", thinking: "high" },
+  );
+});
+
+Deno.test("resolveChatDefaults fills only the missing fields", () => {
+  assertEquals(
+    resolveChatDefaults({ chat: { defaultThinkingLevel: "low" } }),
+    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "low" },
+  );
+});
+
+Deno.test("resolveChatDefaults ignores non-string values", () => {
+  assertEquals(
+    resolveChatDefaults({ chat: { defaultProvider: 42, defaultModel: null, defaultThinkingLevel: {} } }),
+    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "off" },
+  );
 });

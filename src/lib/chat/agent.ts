@@ -53,6 +53,26 @@ import {
 // deno-lint-ignore no-explicit-any
 type Session = any;
 
+// The startup model when nothing is persisted, or when the persisted model is
+// unavailable in the runtime. Was the hardcoded M1 pin; now only the fallback.
+const FALLBACK_PROVIDER = "lmstudio";
+const FALLBACK_MODEL = "google/gemma-4-e4b";
+
+// Pure projection of persisted settings → the agent's startup model + thinking.
+// `settings` is whatever readJson("settings") returned: possibly null, missing
+// `chat`, or holding non-string values, so every field is guarded.
+export function resolveChatDefaults(
+  settings: unknown,
+): { provider: string; modelId: string; thinking: ThinkingLevel } {
+  const chat = (settings as { chat?: Record<string, unknown> } | null)?.chat ?? {};
+  const str = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
+  return {
+    provider: str(chat.defaultProvider, FALLBACK_PROVIDER),
+    modelId: str(chat.defaultModel, FALLBACK_MODEL),
+    thinking: str(chat.defaultThinkingLevel, "off") as ThinkingLevel,
+  };
+}
+
 let session: Session | undefined;
 let unsubscribe: (() => void) | undefined;
 const queue: ChatEvent[] = [];
