@@ -44,9 +44,18 @@
       <kbd class="kbd kbd-xs">{mod}J</kbd>
       <span class="opacity-70">workspace</span>
     </span>
+    <span class="h-4 w-px bg-base-content/20"></span>
     <span class="flex items-center gap-1">
       <kbd class="kbd kbd-xs">{mod}B</kbd>
-      <span class="opacity-70">columns</span>
+      <span class="opacity-70">left col</span>
+    </span>
+    <span class="flex items-center gap-1">
+      <kbd class="kbd kbd-xs">{mod}⇧B</kbd>
+      <span class="opacity-70">right col</span>
+    </span>
+    <span class="flex items-center gap-1">
+      <kbd class="kbd kbd-xs">{mod},</kbd>
+      <span class="opacity-70">settings</span>
     </span>
   {/if}
 </footer>
