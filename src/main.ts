@@ -4,8 +4,8 @@ import "./app.css";
 import { hydrateSession } from "./lib/store.ts";
 import { hydrateSettings, settings } from "./lib/settings/store.ts";
 
-// Reflect the chosen daisyui theme onto <html data-theme>. Only catppuccin-frappe is
-// compiled in app.css today; expanding the theme list is the settings-UI step.
+// Reflect the chosen daisyui theme onto <html data-theme>. The compiled theme set
+// lives in app.css (kept in lockstep with THEMES in settings/store.ts).
 settings.subscribe((s) => {
   document.documentElement.dataset.theme = s.appearance.theme;
 });
