@@ -21,7 +21,8 @@ let settings: typeof import("./lib/settings/file.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows } = arg as { cols: number; rows: number };
-  return { id: term.startSession({ cols, rows }) };
+  const cwd = settings.resolveWorkspaceDir(await settings.readJson("settings"));
+  return { id: term.startSession({ cols, rows, cwd }) };
 });
 
 win.bind("termWrite", async (arg) => {

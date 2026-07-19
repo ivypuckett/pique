@@ -7,12 +7,13 @@ interface Session {
 const sessions = new Map<string, Session>();
 let counter = 0;
 
-/** Spawn the user's shell in a PTY at the given size; returns a session id. */
-export function startSession(opts: { cols: number; rows: number }): string {
+/** Spawn the user's shell in a PTY at the given size and cwd; returns a session id. */
+export function startSession(opts: { cols: number; rows: number; cwd?: string }): string {
   const shell = Deno.env.get("SHELL") ?? "bash";
   const pty = new Pty(shell, {
     args: ["-i"],
     env: { TERM: "xterm-256color" },
+    cwd: opts.cwd,
     size: { rows: opts.rows, cols: opts.cols },
   });
   const id = `t${++counter}`;
