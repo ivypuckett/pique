@@ -1,6 +1,21 @@
 import { writable } from "svelte/store";
 import { DEFAULT_SETTINGS, readConfig, type Settings, writeConfig } from "./bindings.ts";
 
+// The daisyui themes compiled in app.css, in picker order. This list and the
+// `themes:` list in src/app.css must stay in lockstep — one is the UI, the
+// other is what's actually compiled.
+export const THEMES: readonly string[] = [
+  "catppuccin-frappe",
+  "dark",
+  "light",
+  "dracula",
+  "nord",
+];
+
+// Transient modal open/closed state — deliberately not persisted (unlike the
+// `settings` store below), so a reload never reopens the modal.
+export const settingsOpen = writable(false);
+
 // Reactive user prefs. Starts at defaults so the UI can render before the async
 // hydrate from ~/.pique/settings.json resolves (call hydrateSettings() at startup).
 export const settings = writable<Settings>(DEFAULT_SETTINGS);
