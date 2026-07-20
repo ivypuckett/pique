@@ -23,7 +23,7 @@
 </script>
 
 <div
-  class="grid h-full w-full"
+  class="grid h-full w-full grid-rows-1"
   style:grid-template-columns={gridTemplateColumns(view)}
   bind:this={gridEl}
 >

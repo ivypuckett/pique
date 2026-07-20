@@ -25,7 +25,7 @@
   };
 </script>
 
-<footer class="flex h-7 shrink-0 items-center gap-4 border-t border-base-300 bg-base-200 px-3 text-xs">
+<footer class="@container flex h-7 shrink-0 items-center gap-4 overflow-hidden border-t border-base-300 bg-base-200 px-3 text-xs">
   {#if chordMode}
     <span class="rounded bg-primary px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-primary-content">
       {chordMode}
@@ -45,16 +45,16 @@
       <kbd class="kbd kbd-xs">{mod}J</kbd>
       <span class="opacity-70">workspace</span>
     </span>
-    <span class="h-4 w-px bg-base-content/20"></span>
-    <span class="flex items-center gap-1">
+    <span class="hidden h-4 w-px bg-base-content/20 @[300px]:block"></span>
+    <span class="hidden items-center gap-1 @[300px]:flex">
       <kbd class="kbd kbd-xs">{mod}B</kbd>
       <span class="opacity-70">left col</span>
     </span>
-    <span class="flex items-center gap-1">
+    <span class="hidden items-center gap-1 @[400px]:flex">
       <kbd class="kbd kbd-xs">{mod}⇧B</kbd>
       <span class="opacity-70">right col</span>
     </span>
-    <span class="flex items-center gap-1">
+    <span class="hidden items-center gap-1 @[490px]:flex">
       <kbd class="kbd kbd-xs">{mod},</kbd>
       <span class="opacity-70">settings</span>
     </span>
