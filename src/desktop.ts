@@ -22,9 +22,14 @@ let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
 
 win.bind("termStart", async (arg) => {
-  const { cols, rows, cwd: override } = arg as { cols: number; rows: number; cwd?: string };
+  const { cols, rows, cwd: override, argv } = arg as {
+    cols: number;
+    rows: number;
+    cwd?: string;
+    argv?: string[];
+  };
   const cwd = settings.resolveModuleDir(override, await settings.readJson("settings"));
-  return { id: term.startSession({ cols, rows, cwd }) };
+  return { id: term.startSession({ cols, rows, cwd, argv }) };
 });
 
 win.bind("termWrite", async (arg) => {
