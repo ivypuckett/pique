@@ -25,24 +25,24 @@
   <span class="px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">
     Workspaces
   </span>
-  {#each $session.workspaces as w (w.id)}
-    {@const active = w.id === $session.activeId}
-    <button
-      class="btn btn-ghost btn-sm justify-start gap-2"
-      class:btn-active={active}
-      class:text-primary={active}
-      class:font-medium={active}
-      class:font-normal={!active}
-      class:opacity-60={!active}
-      aria-label="Switch to {w.title}"
-      title="{w.title} — {fullDir(w.cwd)}"
-      aria-pressed={active}
-      onclick={() => focusWorkspace(w.id)}
-    >
-      <span class="h-4 w-0.5 shrink-0 rounded-full {active ? 'bg-primary' : 'bg-transparent'}"></span>
-      <span class="min-w-0 truncate">{num(w.id)} {shortDir(w.cwd)}</span>
-    </button>
-  {/each}
+  <ul class="menu menu-sm w-full gap-0.5 p-0">
+    {#each $session.workspaces as w (w.id)}
+      {@const active = w.id === $session.activeId}
+      <li>
+        <button
+          class:menu-active={active}
+          class:font-medium={active}
+          class:opacity-60={!active}
+          aria-label="Switch to {w.title}"
+          title="{w.title} — {fullDir(w.cwd)}"
+          aria-current={active ? "page" : undefined}
+          onclick={() => focusWorkspace(w.id)}
+        >
+          <span class="min-w-0 truncate">{num(w.id)} {shortDir(w.cwd)}</span>
+        </button>
+      </li>
+    {/each}
+  </ul>
   <button
     class="btn btn-ghost btn-sm mt-auto justify-start font-normal opacity-70"
     aria-label="Add workspace"

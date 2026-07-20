@@ -208,13 +208,23 @@
   function onWindowKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") close();
   }
+
+  // Side-pane navigation: one entry per settings header. The right pane shows
+  // only the selected section, so the modal stops spilling over vertically.
+  const SECTIONS = [
+    { id: "appearance", label: "Appearance" },
+    { id: "workspace", label: "Workspace" },
+    { id: "providers", label: "Providers" },
+    { id: "extensions", label: "Extensions" },
+  ] as const;
+  let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 </script>
 
 <svelte:window onkeydown={$settingsOpen ? onWindowKeydown : undefined} />
 
 <div class="modal" class:modal-open={$settingsOpen} role="dialog" aria-modal="true" aria-label="Settings">
-  <div class="modal-box max-w-lg overflow-hidden p-0">
-    <div class="flex items-center justify-between border-b border-base-300 bg-base-200 px-4 py-3">
+  <div class="modal-box flex h-[80vh] max-w-3xl flex-col overflow-hidden p-0">
+    <div class="flex shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-4 py-3">
       <span class="text-base font-medium">Settings</span>
       <button
         class="btn btn-square btn-ghost btn-sm"
@@ -222,7 +232,23 @@
         onclick={close}
       >✕</button>
     </div>
-    <div class="p-5">
+    <div class="flex min-h-0 flex-1">
+      <nav class="w-44 shrink-0 overflow-y-auto border-r border-base-300 bg-base-200 p-2" aria-label="Settings sections">
+        <ul class="menu menu-sm w-full gap-0.5">
+          {#each SECTIONS as s (s.id)}
+            <li>
+              <button
+                type="button"
+                class:menu-active={section === s.id}
+                aria-current={section === s.id ? "page" : undefined}
+                onclick={() => (section = s.id)}
+              >{s.label}</button>
+            </li>
+          {/each}
+        </ul>
+      </nav>
+      <div class="min-w-0 flex-1 overflow-y-auto p-5">
+      {#if section === "appearance"}
       <div class="mb-3 text-xs uppercase tracking-wide text-primary">Appearance</div>
       <div class="flex items-center justify-between gap-4">
         <div>
@@ -240,7 +266,10 @@
         </select>
       </div>
 
-      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Workspace</div>
+      {/if}
+
+      {#if section === "workspace"}
+      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Workspace</div>
       <div>
         <div class="text-sm">Default working directory</div>
         <div class="mt-0.5 text-xs opacity-70">
@@ -258,7 +287,10 @@
         </div>
       </div>
 
-      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Providers</div>
+      {/if}
+
+      {#if section === "providers"}
+      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Providers</div>
       {#if !prov}
         <div class="text-xs opacity-70">Available in the desktop app only.</div>
       {:else}
@@ -378,7 +410,10 @@
         {#if provError}<div class="mt-2 break-all text-xs text-error">{provError}</div>{/if}
       {/if}
 
-      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Extensions</div>
+      {/if}
+
+      {#if section === "extensions"}
+      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Extensions</div>
       {#if !ext}
         <div class="text-xs opacity-70">Available in the desktop app only.</div>
       {:else}
@@ -477,6 +512,8 @@
         {#if extNotice}<div class="mt-2 text-xs text-success">{extNotice}</div>{/if}
         {#if extError}<div class="mt-2 break-all text-xs text-error">{extError}</div>{/if}
       {/if}
+      {/if}
+      </div>
     </div>
   </div>
   <button type="button" class="modal-backdrop" aria-label="Close settings" onclick={close}></button>
