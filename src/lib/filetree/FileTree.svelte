@@ -157,10 +157,13 @@
   {:else}
     {#each rows as row, i (row.node.path)}
       {@const parts = splitName(row.node.name)}
+      <!-- keyboard nav lives on the tree container (onKey); rows are cursor targets only -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         class="flex cursor-pointer items-center px-1"
         class:bg-base-300={i === cursor}
         role="treeitem"
+        tabindex="-1"
         aria-selected={i === cursor}
         title={row.node.name}
         style:padding-left="{row.depth * 12 + 4}px"
