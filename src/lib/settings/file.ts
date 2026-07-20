@@ -32,6 +32,18 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
 }
 
+// pique's own pi config dir. Extensions, installed pi packages, and their
+// settings.json live here — SEPARATE from the user's `pi` CLI at ~/.pi/agent, so
+// installing an extension in pique never touches their pi setup. Credentials and
+// models.json still come from ~/.pi/agent via ModelRuntime (see chat/agent.ts), so
+// only extensions are separated. Passed as `agentDir` to createAgentSession and to
+// the package manager (see chat/extensions.ts).
+export function piAgentDir(): string {
+  const home = Deno.env.get("HOME");
+  if (!home) throw new Error("HOME is not set");
+  return `${home}/.pique/agent`;
+}
+
 // Expand a leading `~` (`~` or `~/...`) against $HOME; `~user` and non-leading `~`
 // are left as-is. Blank input returns "".
 function expandTilde(dir: string, home: string): string {

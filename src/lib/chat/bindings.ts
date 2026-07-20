@@ -2,7 +2,8 @@
 // win.bind handlers in src/desktop.ts — keep arg/return shapes in sync by hand
 // (separate module graphs, nothing cross-checks them at compile time).
 import type { ChatEvent, ModelInfo, ThinkingLevel } from "./agent.ts";
-export type { ChatEvent, ModelInfo, ThinkingLevel };
+import type { ExtInfo } from "./extensions.ts";
+export type { ChatEvent, ExtInfo, ModelInfo, ThinkingLevel };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id.
@@ -20,4 +21,17 @@ export interface ChatBindings {
 export function chatBindings(): ChatBindings | null {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
   return b ? (b as ChatBindings) : null;
+}
+
+// Pi-extension (pi package) management, backed by the ext* handlers in desktop.ts.
+// Not keyed by a chat id: extensions are a global, per-install set (~/.pique/agent).
+export interface ExtBindings {
+  extList(): Promise<ExtInfo[]>;
+  extInstall(arg: { source: string }): Promise<unknown>;
+  extRemove(arg: { source: string }): Promise<unknown>;
+}
+
+export function extBindings(): ExtBindings | null {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  return b ? (b as ExtBindings) : null;
 }

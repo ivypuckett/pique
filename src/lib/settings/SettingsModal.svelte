@@ -1,10 +1,74 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
   import { pickDirectory } from "./bindings.ts";
+  import { extBindings, type ExtInfo } from "../chat/bindings.ts";
 
   async function browse(): Promise<void> {
     const dir = await pickDirectory($settings.workspace.defaultDir);
     if (dir) $settings.workspace.defaultDir = dir;
+  }
+
+  // Pi-extension management. Null in web-dev (no bindings) → the section shows a
+  // desktop-only note. Extensions install into ~/.pique/agent, separate from `pi`.
+  const ext = extBindings();
+  let installed = $state<ExtInfo[]>([]);
+  let source = $state("");
+  let busy = $state(false);
+  let extError = $state("");
+  let extNotice = $state("");
+  // Guards the install (extensions run arbitrary code): the source is only sent
+  // after the user confirms this inline warning panel.
+  let confirming = $state(false);
+
+  async function refreshExts(): Promise<void> {
+    if (!ext) return;
+    try {
+      installed = await ext.extList();
+    } catch (e) {
+      extError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // Re-list whenever the modal opens; clear any stale notice/error from last time.
+  $effect(() => {
+    if ($settingsOpen && ext) {
+      extError = "";
+      extNotice = "";
+      confirming = false;
+      refreshExts();
+    }
+  });
+
+  async function confirmInstall(): Promise<void> {
+    confirming = false;
+    if (!ext) return;
+    busy = true;
+    extError = "";
+    extNotice = "";
+    try {
+      await ext.extInstall({ source: source.trim() });
+      source = "";
+      await refreshExts();
+      extNotice = "Installed. Reopen your Chat modules to load it.";
+    } catch (e) {
+      extError = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
+  }
+
+  async function removeExt(s: string): Promise<void> {
+    if (!ext) return;
+    busy = true;
+    extError = "";
+    extNotice = "";
+    try {
+      await ext.extRemove({ source: s });
+      await refreshExts();
+      extNotice = "Removed. Reopen your Chat modules to apply.";
+    } catch (e) {
+      extError = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
   }
 
   // settingsOpen is the single source of truth for visibility — a class-based
@@ -68,6 +132,67 @@
           <button type="button" class="btn btn-sm" onclick={browse}>Browse…</button>
         </div>
       </div>
+
+      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Extensions</div>
+      {#if !ext}
+        <div class="text-xs opacity-70">Available in the desktop app only.</div>
+      {:else}
+        <div class="mt-0.5 text-xs opacity-70">
+          Pi extensions add tools and commands to Chat. Installed into pique only —
+          separate from your <code>pi</code> CLI. Reopen Chat modules to load changes.
+        </div>
+
+        {#if installed.length > 0}
+          <ul class="mt-3 max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
+            {#each installed as e (e.source)}
+              <li class="flex items-center justify-between gap-2 px-3 py-2">
+                <span class="truncate font-mono text-xs" title={e.path ?? e.source}>{e.source}</span>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  disabled={busy}
+                  onclick={() => removeExt(e.source)}
+                >Remove</button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="mt-3 text-xs opacity-60">None installed.</div>
+        {/if}
+
+        {#if confirming}
+          <div class="mt-3 rounded border border-warning/50 bg-warning/10 p-3">
+            <div class="text-sm font-medium text-warning">Install this extension?</div>
+            <div class="mt-1 break-all font-mono text-xs">{source.trim()}</div>
+            <div class="mt-1.5 text-xs opacity-80">
+              Extensions run with full system access. Only install sources you trust.
+            </div>
+            <div class="mt-2 flex gap-2">
+              <button type="button" class="btn btn-warning btn-sm" onclick={confirmInstall}>Install</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick={() => (confirming = false)}>Cancel</button>
+            </div>
+          </div>
+        {:else}
+          <div class="mt-3 flex gap-2">
+            <input
+              class="input input-bordered input-sm flex-1 font-mono"
+              placeholder="npm:@scope/pkg  ·  git:github.com/user/repo"
+              aria-label="Extension source"
+              bind:value={source}
+              disabled={busy}
+            />
+            <button
+              type="button"
+              class="btn btn-sm"
+              disabled={busy || source.trim() === ""}
+              onclick={() => (confirming = true)}
+            >Install</button>
+          </div>
+        {/if}
+
+        {#if extNotice}<div class="mt-2 text-xs text-success">{extNotice}</div>{/if}
+        {#if extError}<div class="mt-2 break-all text-xs text-error">{extError}</div>{/if}
+      {/if}
     </div>
   </div>
   <button type="button" class="modal-backdrop" aria-label="Close settings" onclick={close}></button>

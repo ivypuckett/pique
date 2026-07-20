@@ -17,6 +17,7 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
+let extensions: typeof import("./lib/chat/extensions.ts");
 let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
@@ -111,6 +112,22 @@ win.bind("chatSetThinking", async (arg) => {
   return true;
 });
 
+// Pi-extension management — global per-install set under ~/.pique/agent. installExtension
+// fetches from npm/git and writes settings.json; the frontend gates it behind a confirm.
+win.bind("extList", async () => await extensions.listExtensions());
+
+win.bind("extInstall", async (arg) => {
+  const { source } = arg as { source: string };
+  await extensions.installExtension(source);
+  return true;
+});
+
+win.bind("extRemove", async (arg) => {
+  const { source } = arg as { source: string };
+  await extensions.removeExtension(source);
+  return true;
+});
+
 // Named JSON config under ~/.pique/ — settings (prefs) and layout (the tree).
 win.bind("configRead", async (arg) => {
   const { name } = arg as { name: string };
@@ -146,6 +163,7 @@ win.addEventListener("close", () => term?.killAllSessions());
 // deno desktop auto-navigates the adopted window to the served address.
 term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
+extensions = await import("./lib/chat/extensions.ts");
 settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");

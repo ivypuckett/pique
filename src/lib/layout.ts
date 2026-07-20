@@ -47,7 +47,7 @@ export function createInitialView(id = "view-1"): ViewState {
       savedWidthPct: 60,
       rowSplitPct: 50,
       activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
+      rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
     },
     right: {
       widthPct: 20,

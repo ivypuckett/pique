@@ -49,7 +49,7 @@ import {
   SessionManager,
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
-import { readJson, resolveModuleDir } from "../settings/file.ts";
+import { piAgentDir, readJson, resolveModuleDir } from "../settings/file.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -107,6 +107,10 @@ export async function startAgent(opts: { cwd?: string } = {}): Promise<string> {
   const created = await createAgentSession({
     model,
     cwd,
+    // Load extensions from pique's own dir (~/.pique/agent), separate from the
+    // user's `pi` CLI. Safe: auth + models.json still come from ~/.pi/agent via the
+    // shared modelRuntime below, and the in-memory sessionManager ignores agentDir.
+    agentDir: piAgentDir(),
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
   });
