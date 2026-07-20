@@ -5,6 +5,7 @@ export interface ModuleRef {
   id: string;
   title: string;
   kind: string; // key into the module registry; "placeholder" for now
+  props?: { argv?: string[]; autoCloseOnExit?: boolean }; // per-tab payload, spread into the module
 }
 
 export interface ColumnState {
@@ -36,7 +37,7 @@ export function createInitialView(id = "view-1"): ViewState {
       rowSplitPct: 50,
       activeTabId: "left-1",
       rows: [
-        { id: "left-1", title: "Left A", kind: "placeholder" },
+        { id: "left-1", title: "Files", kind: "filetree" },
         { id: "left-2", title: "Left B", kind: "placeholder" },
       ],
     },
@@ -174,6 +175,26 @@ function nextCenterId(rows: ModuleRef[]): string {
 export function addTab(v: ViewState, kind: string): ViewState {
   const id = nextCenterId(v.center.rows);
   const tab: ModuleRef = { id, title: moduleLabel(kind), kind };
+  return {
+    ...v,
+    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+  };
+}
+
+function basename(path: string): string {
+  const parts = path.split("/").filter((p) => p.length > 0);
+  return parts.length ? parts[parts.length - 1] : path;
+}
+
+// Add a center terminal tab that runs $EDITOR on `path` and closes itself on exit.
+export function addEditorTab(v: ViewState, path: string): ViewState {
+  const id = nextCenterId(v.center.rows);
+  const tab: ModuleRef = {
+    id,
+    title: basename(path),
+    kind: "terminal",
+    props: { argv: ["$EDITOR", path], autoCloseOnExit: true },
+  };
   return {
     ...v,
     center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },

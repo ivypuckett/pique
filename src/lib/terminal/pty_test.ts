@@ -90,3 +90,24 @@ Deno.test("startSession spawns the shell in the given cwd", async () => {
   killSession(id);
   assertStringIncludes(out, "/tmp");
 });
+
+Deno.test("startSession with argv runs that command, not the shell", async () => {
+  const id = startSession({ cols: 80, rows: 24, argv: ["sh", "-c", "echo argv-ok"] });
+  const out = await drain(id, 800);
+  killSession(id);
+  assertMatch(out, /argv-ok/);
+});
+
+Deno.test("startSession resolves the $EDITOR sentinel from the environment", async () => {
+  const prev = Deno.env.get("EDITOR");
+  Deno.env.set("EDITOR", "sh");
+  try {
+    const id = startSession({ cols: 80, rows: 24, argv: ["$EDITOR", "-c", "echo editor-ok"] });
+    const out = await drain(id, 800);
+    killSession(id);
+    assertMatch(out, /editor-ok/);
+  } finally {
+    if (prev === undefined) Deno.env.delete("EDITOR");
+    else Deno.env.set("EDITOR", prev);
+  }
+});

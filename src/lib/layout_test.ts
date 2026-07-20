@@ -9,6 +9,7 @@ import {
 } from "./layout.ts";
 import {
   addTab,
+  addEditorTab,
   closeTab,
   isViewState,
   resizeRowSplit,
@@ -191,4 +192,21 @@ Deno.test("isViewState accepts a real view and rejects malformed shapes", () => 
   const noRows = createInitialView();
   noRows.left.rows = [];
   assertEquals(isViewState(noRows), false);
+});
+
+Deno.test("addEditorTab adds an active center terminal tab titled with the basename", () => {
+  const v = createInitialView();
+  const before = v.center.rows.length;
+  const next = addEditorTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
+  assertEquals(next.center.rows.length, before + 1);
+  const tab = next.center.rows[next.center.rows.length - 1];
+  assertEquals(tab.kind, "terminal");
+  assertEquals(tab.title, "layout.ts");
+  assertEquals(next.center.activeTabId, tab.id);
+  assertEquals(tab.props, { argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"], autoCloseOnExit: true });
+});
+
+Deno.test("addEditorTab falls back to the full path when there is no basename", () => {
+  const tab = addEditorTab(createInitialView(), "/").center.rows.at(-1)!;
+  assertEquals(tab.title, "/");
 });
