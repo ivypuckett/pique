@@ -66,37 +66,30 @@
     }
   }
 
-  async function refresh() {
-    // Re-read every currently-expanded directory, preserving expansion.
-    async function rebuild(nodes: Node[]): Promise<Node[]> {
-      const out: Node[] = [];
-      for (const n of nodes) {
-        if (n.isDir && n.expanded) {
-          let fresh: Node[] = [];
-          try {
-            fresh = await load(n.path);
-          } catch {
-            fresh = [];
-          }
-          // carry expansion forward for children that are still present
-          const prev = new Map((n.children ?? []).map((c) => [c.path, c]));
-          const merged = await Promise.all(
-            fresh.map(async (c) => {
-              const old = prev.get(c.path);
-              if (old && old.isDir && old.expanded) {
-                return { ...c, expanded: true, children: (await rebuild([old]))[0].children };
-              }
-              return c;
-            }),
-          );
-          out.push({ ...n, children: merged });
-        } else {
-          out.push(n);
-        }
-      }
-      return out;
+  // Re-list `path` and merge, carrying expansion forward for still-present dirs.
+  async function relist(path: string | undefined, existing: Node[]): Promise<Node[]> {
+    let fresh: Node[] = [];
+    try {
+      fresh = await load(path);
+    } catch {
+      fresh = [];
     }
-    roots = await rebuild(roots);
+    const prev = new Map(existing.map((c) => [c.path, c]));
+    return await Promise.all(
+      fresh.map(async (c) => {
+        const old = prev.get(c.path);
+        if (old && old.isDir && old.expanded) {
+          return { ...c, expanded: true, children: await relist(c.path, old.children ?? []) };
+        }
+        return c;
+      }),
+    );
+  }
+
+  async function refresh() {
+    // Re-read the root listing and every currently-expanded directory below it,
+    // preserving expansion. The root itself is always on screen, so it refreshes too.
+    roots = await relist(cwd, roots);
     clampCursor();
   }
 

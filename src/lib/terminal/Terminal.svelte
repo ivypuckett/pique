@@ -72,11 +72,11 @@
           const { data, done } = await b.termRead({ id });
           if (!alive) break; // unmounted while parked in the long-poll — do not touch a disposed term
           if (done) {
-            if (autoCloseOnExit && viewId && tabId) {
-              closeTab(viewId, tabId);
-            } else {
-              term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
-            }
+            // Write the marker first, then try to self-close. If closeTab refuses
+            // (editor is the center's last tab, guarded in layout.ts), the tab stays
+            // and shows "[session ended]" instead of a frozen, unlabeled screen.
+            term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
+            if (autoCloseOnExit && viewId && tabId) closeTab(viewId, tabId);
             break;
           }
           if (data.length) term.write(new Uint8Array(data));
