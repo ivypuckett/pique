@@ -2,12 +2,14 @@
 // Symlinks are reported (isSymlink) but NOT followed: isDir reflects the link itself,
 // so a symlink is never expandable and cannot create a traversal loop.
 
-export interface Entry {
+// A `type` alias (not `interface`) so Entry[] structurally satisfies win.bind's
+// object-shaped return type in desktop.ts — matching the codebase's ModelInfo pattern.
+export type Entry = {
   name: string;
   path: string;
   isDir: boolean;
   isSymlink: boolean;
-}
+};
 
 export async function listDir(path: string): Promise<Entry[]> {
   const entries: Entry[] = [];

@@ -132,11 +132,7 @@ win.bind("listDir", async (arg) => {
   const { path } = arg as { path?: string };
   // path undefined → the workspace default; an absolute child path resolves to itself.
   const dir = settings.resolveModuleDir(path, await settings.readJson("settings"));
-  // Entry[] (fs.ts declares Entry as an `interface`) doesn't structurally satisfy
-  // win.bind's required object-shaped return type the way a `type` alias array would
-  // (e.g. chat.listModels' ModelInfo[]); the cast preserves the real runtime array,
-  // which the frontend (filetree/bindings.ts) expects as Promise<Entry[]>.
-  return await fs.listDir(dir) as unknown as Record<string, unknown>;
+  return await fs.listDir(dir);
 });
 
 win.addEventListener("close", () => term?.killAllSessions());
