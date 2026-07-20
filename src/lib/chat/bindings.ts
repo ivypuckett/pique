@@ -3,7 +3,8 @@
 // (separate module graphs, nothing cross-checks them at compile time).
 import type { ChatEvent, CommandInfo, ModelInfo, ThinkingLevel } from "./agent.ts";
 import type { ExtInfo, ExtSearchResult } from "./extensions.ts";
-export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, ThinkingLevel };
+import type { ProviderInfo } from "./providers.ts";
+export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, ProviderInfo, ThinkingLevel };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id.
@@ -36,4 +37,20 @@ export interface ExtBindings {
 export function extBindings(): ExtBindings | null {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
   return b ? (b as ExtBindings) : null;
+}
+
+// Model-provider management, backed by the provider* handlers in desktop.ts.
+// Global (not keyed by a chat id): providers are a per-machine set shared with
+// the `pi` CLI. Connecting/adding takes effect on chat agents without a restart.
+export interface ProviderBindings {
+  providerList(): Promise<ProviderInfo[]>;
+  providerConnect(arg: { id: string; apiKey: string }): Promise<unknown>;
+  providerDisconnect(arg: { id: string }): Promise<unknown>;
+  providerAddCustom(arg: { id: string; baseUrl: string; apiKey?: string; models: string[] }): Promise<unknown>;
+  providerRemoveCustom(arg: { id: string }): Promise<unknown>;
+}
+
+export function providerBindings(): ProviderBindings | null {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  return b ? (b as ProviderBindings) : null;
 }

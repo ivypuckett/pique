@@ -92,7 +92,10 @@ let nextId = 1;
 // deno-lint-ignore no-explicit-any
 let runtime: any | undefined;
 
-async function ensureRuntime() {
+// The single shared ModelRuntime, created lazily. Exported so provider
+// management (providers.ts) mutates the same runtime the chat agents stream
+// from — auth/models changes there take effect without a restart.
+export async function ensureRuntime() {
   if (!runtime) runtime = await ModelRuntime.create();
   return runtime;
 }

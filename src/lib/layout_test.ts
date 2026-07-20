@@ -203,7 +203,7 @@ Deno.test("addEditorTab adds an active center terminal tab titled with the basen
   assertEquals(tab.kind, "terminal");
   assertEquals(tab.title, "layout.ts");
   assertEquals(next.center.activeTabId, tab.id);
-  assertEquals(tab.props, { argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"], autoCloseOnExit: true });
+  assertEquals(tab.props, { argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"], autoCloseOnExit: true, autoFocus: true });
 });
 
 Deno.test("addEditorTab falls back to the full path when there is no basename", () => {

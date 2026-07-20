@@ -1,7 +1,13 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
   import { pickDirectory } from "./bindings.ts";
-  import { extBindings, type ExtInfo, type ExtSearchResult } from "../chat/bindings.ts";
+  import {
+    extBindings,
+    type ExtInfo,
+    type ExtSearchResult,
+    providerBindings,
+    type ProviderInfo,
+  } from "../chat/bindings.ts";
 
   async function browse(): Promise<void> {
     const dir = await pickDirectory($settings.workspace.defaultDir);
@@ -19,6 +25,93 @@
   // Guards the install (extensions run arbitrary code): the source is only sent
   // after the user confirms this inline warning panel.
   let confirming = $state(false);
+
+  // Model providers. Null in web-dev (no bindings) → the section shows a
+  // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
+  const prov = providerBindings();
+  let providers = $state<ProviderInfo[]>([]);
+  let provError = $state("");
+  let provBusy = $state(false);
+  // Per-provider API-key drafts, keyed by provider id (only the unconnected rows).
+  let keyInputs = $state<Record<string, string>>({});
+  // Custom-endpoint form.
+  let showCustom = $state(false);
+  let cId = $state("");
+  let cBaseUrl = $state("");
+  let cKey = $state("");
+  let cModels = $state("");
+
+  async function refreshProviders(): Promise<void> {
+    if (!prov) return;
+    try {
+      providers = await prov.providerList();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function connectProvider(id: string): Promise<void> {
+    if (!prov) return;
+    const apiKey = (keyInputs[id] ?? "").trim();
+    if (apiKey === "") return;
+    provBusy = true;
+    provError = "";
+    try {
+      await prov.providerConnect({ id, apiKey });
+      keyInputs[id] = "";
+      await refreshProviders();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
+  }
+
+  async function disconnectProvider(id: string): Promise<void> {
+    if (!prov) return;
+    provBusy = true;
+    provError = "";
+    try {
+      await prov.providerDisconnect({ id });
+      await refreshProviders();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
+  }
+
+  async function addCustomProvider(): Promise<void> {
+    if (!prov) return;
+    const models = cModels.split(/[\n,]/).map((m) => m.trim()).filter((m) => m !== "");
+    provBusy = true;
+    provError = "";
+    try {
+      await prov.providerAddCustom({
+        id: cId.trim(),
+        baseUrl: cBaseUrl.trim(),
+        apiKey: cKey.trim() || undefined,
+        models,
+      });
+      cId = cBaseUrl = cKey = cModels = "";
+      showCustom = false;
+      await refreshProviders();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
+  }
+
+  async function removeCustomProvider(id: string): Promise<void> {
+    if (!prov) return;
+    provBusy = true;
+    provError = "";
+    try {
+      await prov.providerRemoveCustom({ id });
+      await refreshProviders();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
+  }
 
   // Browse: query pi packages via npm (see extensions.ts). A result's Install
   // routes through the same `confirming` gate as the manual source input.
@@ -59,6 +152,15 @@
       extNotice = "";
       confirming = false;
       refreshExts();
+    }
+  });
+
+  // Re-list providers whenever the modal opens; clear any stale error/form state.
+  $effect(() => {
+    if ($settingsOpen && prov) {
+      provError = "";
+      showCustom = false;
+      refreshProviders();
     }
   });
 
@@ -155,6 +257,126 @@
           <button type="button" class="btn btn-sm" onclick={browse}>Browse…</button>
         </div>
       </div>
+
+      <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Providers</div>
+      {#if !prov}
+        <div class="text-xs opacity-70">Available in the desktop app only.</div>
+      {:else}
+        <div class="mt-0.5 text-xs opacity-70">
+          Connect any model provider. API keys unlock the built-in providers; add a custom
+          endpoint for an OpenAI-compatible server (LM Studio, Ollama, …). Shared with your
+          <code>pi</code> CLI. Reopen Chat modules to pick newly available models.
+        </div>
+
+        {#if providers.length > 0}
+          <ul class="mt-3 max-h-72 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
+            {#each providers as p (p.id)}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <span class="font-mono text-xs">{p.name}</span>
+                    {#if p.isCustom}<span class="badge badge-ghost badge-xs ml-1.5 align-middle">custom</span>{/if}
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2">
+                    {#if p.configured}
+                      <span class="text-xs text-success">Connected</span>
+                    {:else}
+                      <span class="text-xs opacity-50">Not connected</span>
+                    {/if}
+                    {#if p.isCustom}
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        disabled={provBusy}
+                        onclick={() => removeCustomProvider(p.id)}
+                      >Remove</button>
+                    {:else if p.configured && p.canApiKey}
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        disabled={provBusy}
+                        onclick={() => disconnectProvider(p.id)}
+                      >Disconnect</button>
+                    {/if}
+                  </div>
+                </div>
+                {#if !p.configured && p.canApiKey}
+                  <div class="mt-2 flex gap-2">
+                    <input
+                      class="input input-bordered input-xs flex-1 font-mono"
+                      type="password"
+                      placeholder="API key"
+                      aria-label={`${p.name} API key`}
+                      bind:value={keyInputs[p.id]}
+                      disabled={provBusy}
+                      onkeydown={(e) => e.key === "Enter" && connectProvider(p.id)}
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-xs"
+                      disabled={provBusy || (keyInputs[p.id] ?? "").trim() === ""}
+                      onclick={() => connectProvider(p.id)}
+                    >Connect</button>
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        {#if showCustom}
+          <div class="mt-3 rounded border border-base-300 p-3">
+            <div class="text-sm font-medium">Custom endpoint</div>
+            <div class="mt-2 grid gap-2">
+              <input
+                class="input input-bordered input-sm font-mono"
+                placeholder="id  ·  e.g. lmstudio"
+                aria-label="Provider id"
+                bind:value={cId}
+                disabled={provBusy}
+              />
+              <input
+                class="input input-bordered input-sm font-mono"
+                placeholder="base URL  ·  http://localhost:1234/v1"
+                aria-label="Base URL"
+                bind:value={cBaseUrl}
+                disabled={provBusy}
+              />
+              <input
+                class="input input-bordered input-sm font-mono"
+                type="password"
+                placeholder="API key (optional)"
+                aria-label="Custom endpoint API key"
+                bind:value={cKey}
+                disabled={provBusy}
+              />
+              <textarea
+                class="textarea textarea-bordered textarea-sm font-mono"
+                rows="3"
+                placeholder="model ids, one per line"
+                aria-label="Model ids"
+                bind:value={cModels}
+                disabled={provBusy}
+              ></textarea>
+            </div>
+            <div class="mt-2 flex gap-2">
+              <button
+                type="button"
+                class="btn btn-sm"
+                disabled={provBusy || cId.trim() === "" || cBaseUrl.trim() === "" || cModels.trim() === ""}
+                onclick={addCustomProvider}
+              >Add</button>
+              <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={() => (showCustom = false)}
+              >Cancel</button>
+            </div>
+          </div>
+        {:else}
+          <button type="button" class="btn btn-sm mt-3" disabled={provBusy} onclick={() => (showCustom = true)}
+          >Add custom endpoint…</button>
+        {/if}
+
+        {#if provError}<div class="mt-2 break-all text-xs text-error">{provError}</div>{/if}
+      {/if}
 
       <div class="mt-6 mb-3 text-xs uppercase tracking-wide text-primary">Extensions</div>
       {#if !ext}

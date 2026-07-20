@@ -17,6 +17,7 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
+let providers: typeof import("./lib/chat/providers.ts");
 let extensions: typeof import("./lib/chat/extensions.ts");
 let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
@@ -117,6 +118,39 @@ win.bind("chatSetThinking", async (arg) => {
   return true;
 });
 
+// Model-provider management — connect any provider pi supports (see chat/providers.ts).
+// API keys persist to ~/.pi/agent/auth.json; custom endpoints to ~/.pi/agent/models.json.
+win.bind("providerList", async () => await providers.listProviders());
+
+win.bind("providerConnect", async (arg) => {
+  const { id, apiKey } = arg as { id: string; apiKey: string };
+  await providers.connectProvider(id, apiKey);
+  return true;
+});
+
+win.bind("providerDisconnect", async (arg) => {
+  const { id } = arg as { id: string };
+  await providers.disconnectProvider(id);
+  return true;
+});
+
+win.bind("providerAddCustom", async (arg) => {
+  const { id, baseUrl, apiKey, models } = arg as {
+    id: string;
+    baseUrl: string;
+    apiKey?: string;
+    models: string[];
+  };
+  await providers.addCustomProvider({ id, baseUrl, apiKey, models });
+  return true;
+});
+
+win.bind("providerRemoveCustom", async (arg) => {
+  const { id } = arg as { id: string };
+  await providers.removeCustomProvider(id);
+  return true;
+});
+
 // Pi-extension management — global per-install set under ~/.pique/agent. installExtension
 // fetches from npm/git and writes settings.json; the frontend gates it behind a confirm.
 win.bind("extList", async () => await extensions.listExtensions());
@@ -173,6 +207,7 @@ win.addEventListener("close", () => term?.killAllSessions());
 // deno desktop auto-navigates the adopted window to the served address.
 term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
+providers = await import("./lib/chat/providers.ts");
 extensions = await import("./lib/chat/extensions.ts");
 settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
