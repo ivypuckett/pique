@@ -5,8 +5,16 @@
   import "@xterm/xterm/css/xterm.css";
   import { terminalBindings } from "./bindings.ts";
   import { xtermThemeFromDaisyui } from "./theme.ts";
+  import { closeTab } from "../store.ts";
 
-  let { title, cwd }: { title: string; cwd?: string } = $props();
+  let { title, cwd, argv, autoCloseOnExit, viewId, tabId }: {
+    title: string;
+    cwd?: string;
+    argv?: string[];
+    autoCloseOnExit?: boolean;
+    viewId?: string;
+    tabId?: string;
+  } = $props();
   let host: HTMLDivElement;
 
   onMount(() => {
@@ -47,7 +55,7 @@
 
     (async () => {
       try {
-        const started = await b.termStart({ cols: term.cols, rows: term.rows, cwd });
+        const started = await b.termStart({ cols: term.cols, rows: term.rows, cwd, argv });
         id = started.id;
         // Unmounted while the session was starting: kill it and stop — the cleanup
         // below already ran with id undefined, so it could not have killed it.
@@ -64,7 +72,11 @@
           const { data, done } = await b.termRead({ id });
           if (!alive) break; // unmounted while parked in the long-poll — do not touch a disposed term
           if (done) {
-            term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
+            if (autoCloseOnExit && viewId && tabId) {
+              closeTab(viewId, tabId);
+            } else {
+              term.write("\r\n\x1b[2m[session ended]\x1b[0m\r\n");
+            }
             break;
           }
           if (data.length) term.write(new Uint8Array(data));
