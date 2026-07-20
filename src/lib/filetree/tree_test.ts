@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { flatten, type Node, nodeFromEntry, sortEntries, updateAt } from "./tree.ts";
+import { flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
 import type { Entry } from "../fs.ts";
 
 const e = (name: string, isDir: boolean): Entry => ({
@@ -12,6 +12,17 @@ const e = (name: string, isDir: boolean): Entry => ({
 Deno.test("sortEntries puts directories first, then case-insensitive alpha", () => {
   const sorted = sortEntries([e("banana.txt", false), e("Zebra", true), e("apple", true), e("Ant.txt", false)]);
   assertEquals(sorted.map((x) => x.name), ["apple", "Zebra", "Ant.txt", "banana.txt"]);
+});
+
+Deno.test("splitName keeps the extension pinned as the tail", () => {
+  assertEquals(splitName("layout.ts"), { head: "layout", tail: ".ts" });
+  assertEquals(splitName("archive.tar.gz"), { head: "archive.tar", tail: ".gz" });
+});
+
+Deno.test("splitName leaves an empty tail when there is no real extension", () => {
+  assertEquals(splitName("README"), { head: "README", tail: "" });
+  assertEquals(splitName(".gitignore"), { head: ".gitignore", tail: "" });
+  assertEquals(splitName("trailingdot."), { head: "trailingdot.", tail: "" });
 });
 
 Deno.test("nodeFromEntry starts collapsed with no loaded children", () => {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fileTreeBindings } from "./bindings.ts";
-  import { flatten, type Node, nodeFromEntry, sortEntries, updateAt } from "./tree.ts";
+  import { flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
   import { openEditor } from "../store.ts";
 
   let { cwd, viewId }: { title: string; cwd?: string; viewId?: string; tabId?: string } = $props();
@@ -144,7 +144,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-  class="h-full w-full overflow-auto font-mono text-sm outline-none"
+  class="h-full min-w-0 w-full overflow-auto font-mono text-sm outline-none"
   tabindex="0"
   role="tree"
   aria-label="File tree"
@@ -156,13 +156,23 @@
     <div class="p-2 opacity-60">Empty</div>
   {:else}
     {#each rows as row, i (row.node.path)}
+      {@const parts = splitName(row.node.name)}
       <div
-        class="cursor-pointer truncate whitespace-pre px-1"
+        class="flex cursor-pointer items-center px-1"
         class:bg-base-300={i === cursor}
         role="treeitem"
         aria-selected={i === cursor}
+        title={row.node.name}
+        style:padding-left="{row.depth * 12 + 4}px"
         onclick={() => (cursor = i)}
-      >{"  ".repeat(row.depth)}{row.node.isDir ? (row.node.expanded ? "▾ " : "▸ ") : "  "}{row.node.name}{row.node.isSymlink ? " ↩" : ""}</div>
+      >
+        <span class="w-4 flex-none">{row.node.isDir ? (row.node.expanded ? "▾" : "▸") : ""}</span>
+        <span class="flex min-w-0 flex-1">
+          <span class="min-w-0 flex-1 truncate">{parts.head}</span>
+          {#if parts.tail}<span class="flex-none whitespace-pre">{parts.tail}</span>{/if}
+        </span>
+        {#if row.node.isSymlink}<span class="flex-none pl-1 opacity-60">↩</span>{/if}
+      </div>
     {/each}
   {/if}
 </div>

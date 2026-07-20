@@ -26,6 +26,16 @@ export function sortEntries(entries: Entry[]): Entry[] {
   });
 }
 
+// Split a filename into a shrinkable head and a pinned extension (e.g. ".ts") so the
+// UI can middle-truncate long names as "head….ext" instead of cutting the extension.
+// Names with no extension, and dotfiles with no other dot (".gitignore"), get an empty
+// tail and truncate normally from the end.
+export function splitName(name: string): { head: string; tail: string } {
+  const i = name.lastIndexOf(".");
+  if (i > 0 && i < name.length - 1) return { head: name.slice(0, i), tail: name.slice(i) };
+  return { head: name, tail: "" };
+}
+
 // Depth-first list of currently visible rows: a directory's children appear only
 // when it is expanded and its children are loaded.
 export function flatten(nodes: Node[], depth = 0): Row[] {
