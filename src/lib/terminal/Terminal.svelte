@@ -7,11 +7,12 @@
   import { xtermThemeFromDaisyui } from "./theme.ts";
   import { closeTab } from "../store.ts";
 
-  let { title, cwd, argv, autoCloseOnExit, viewId, tabId }: {
+  let { title, cwd, argv, autoCloseOnExit, autoFocus, viewId, tabId }: {
     title: string;
     cwd?: string;
     argv?: string[];
     autoCloseOnExit?: boolean;
+    autoFocus?: boolean;
     viewId?: string;
     tabId?: string;
   } = $props();
@@ -28,6 +29,11 @@
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
+
+    // Editor tabs open from the file tree and set autoFocus so keystrokes land in the
+    // editor right away. Only grab focus when actually visible — a background/restored
+    // tab (hidden via display:none) must not steal focus on mount.
+    if (autoFocus && host.offsetParent !== null) term.focus();
 
     // Re-derive the palette when the active daisyui theme changes at runtime.
     const themeObserver = new MutationObserver(() => {

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { get } from "svelte/store";
   import TopBar from "./lib/TopBar.svelte";
   import WorkspacePane from "./lib/WorkspacePane.svelte";
   import Session from "./lib/Session.svelte";
@@ -8,6 +9,7 @@
   import { settingsOpen } from "./lib/settings/store.ts";
   import {
     activeId,
+    activeView,
     addView,
     addWorkspace,
     closeView,
@@ -44,6 +46,23 @@
   function clearChord() {
     clearTimeout(chordTimer);
     chordMode = null;
+  }
+
+  // ctrl+e: focus the file tree in the presented view's left column. When that column is
+  // collapsed the tree isn't rendered, so expand it first and focus after the DOM updates.
+  async function focusFileTree() {
+    const view = get(activeView);
+    if (view.left.collapsed) toggleCollapse(view.id, "left");
+    await tick();
+    // Every view stays mounted (hidden ones via display:none), so pick the tree that's
+    // actually visible — offsetParent is null for anything inside a hidden ancestor.
+    const trees = document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File tree"]');
+    for (const tree of trees) {
+      if (tree.offsetParent !== null) {
+        tree.focus();
+        break;
+      }
+    }
   }
 
   onMount(() => {
@@ -110,6 +129,13 @@
         e.preventDefault();
         e.stopPropagation();
         settingsOpen.set(true);
+      }
+
+      // ctrl+e: focus the file tree in the left column.
+      if (e.code === "KeyE") {
+        e.preventDefault();
+        e.stopPropagation();
+        focusFileTree();
       }
     }
     globalThis.addEventListener("keydown", onKeydown, true);

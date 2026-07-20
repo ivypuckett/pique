@@ -5,7 +5,7 @@ export interface ModuleRef {
   id: string;
   title: string;
   kind: string; // key into the module registry; "placeholder" for now
-  props?: { argv?: string[]; autoCloseOnExit?: boolean }; // per-tab payload, spread into the module
+  props?: { argv?: string[]; autoCloseOnExit?: boolean; autoFocus?: boolean }; // per-tab payload, spread into the module
 }
 
 export interface ColumnState {
@@ -193,7 +193,7 @@ export function addEditorTab(v: ViewState, path: string): ViewState {
     id,
     title: basename(path),
     kind: "terminal",
-    props: { argv: ["$EDITOR", path], autoCloseOnExit: true },
+    props: { argv: ["$EDITOR", path], autoCloseOnExit: true, autoFocus: true },
   };
   return {
     ...v,
