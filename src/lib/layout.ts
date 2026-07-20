@@ -37,7 +37,7 @@ export function createInitialView(id = "view-1"): ViewState {
       rowSplitPct: 50,
       activeTabId: "left-1",
       rows: [
-        { id: "left-1", title: "Left A", kind: "placeholder" },
+        { id: "left-1", title: "Files", kind: "filetree" },
         { id: "left-2", title: "Left B", kind: "placeholder" },
       ],
     },

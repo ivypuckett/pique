@@ -2,6 +2,7 @@ import type { Component } from "svelte";
 import Placeholder from "./Placeholder.svelte";
 import Terminal from "../terminal/Terminal.svelte";
 import Chat from "../chat/Chat.svelte";
+import FileTree from "../filetree/FileTree.svelte";
 
 export const registry: Record<
   string,
@@ -17,4 +18,5 @@ export const registry: Record<
   placeholder: Placeholder,
   terminal: Terminal,
   chat: Chat,
+  filetree: FileTree,
 };
