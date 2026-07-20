@@ -168,7 +168,9 @@
       >
         <span class="w-4 flex-none">{row.node.isDir ? (row.node.expanded ? "▾" : "▸") : ""}</span>
         <span class="flex min-w-0 flex-1">
-          <span class="min-w-0 flex-1 truncate">{parts.head}</span>
+          <!-- head sizes to content and shrinks (truncating with …) only when the row
+               is too narrow; the extension stays pinned right after it, never a gap. -->
+          <span class="min-w-0 truncate">{parts.head}</span>
           {#if parts.tail}<span class="flex-none whitespace-pre">{parts.tail}</span>{/if}
         </span>
         {#if row.node.isSymlink}<span class="flex-none pl-1 opacity-60">↩</span>{/if}
