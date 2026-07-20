@@ -4,6 +4,7 @@ import {
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
+  addEditorTab as addEditorTabFn,
   resizeBoundary as resize,
   resizeRowSplit as resizeRowFn,
   setActiveTab as setActiveTabFn,
@@ -99,6 +100,11 @@ export function resizeRow(viewId: string, id: SideId, newFirstPct: number): void
 
 export function addTab(viewId: string, kind: string): void {
   edit(viewId, (v) => addTabFn(v, kind));
+}
+
+// Open `path` in $EDITOR as a self-closing center tab (called by the file-tree module).
+export function openEditor(viewId: string, path: string): void {
+  edit(viewId, (v) => addEditorTabFn(v, path));
 }
 
 export function setActiveTab(viewId: string, tabId: string): void {
