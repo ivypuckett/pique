@@ -19,6 +19,7 @@ let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
 let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
+let fs: typeof import("./lib/fs.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override } = arg as { cols: number; rows: number; cwd?: string };
@@ -127,6 +128,17 @@ win.bind("pickDirectory", async (arg) => {
   return path ? { path } : null;
 });
 
+win.bind("listDir", async (arg) => {
+  const { path } = arg as { path?: string };
+  // path undefined → the workspace default; an absolute child path resolves to itself.
+  const dir = settings.resolveModuleDir(path, await settings.readJson("settings"));
+  // Entry[] (fs.ts declares Entry as an `interface`) doesn't structurally satisfy
+  // win.bind's required object-shaped return type the way a `type` alias array would
+  // (e.g. chat.listModels' ModelInfo[]); the cast preserves the real runtime array,
+  // which the frontend (filetree/bindings.ts) expects as Promise<Entry[]>.
+  return await fs.listDir(dir) as unknown as Record<string, unknown>;
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.
@@ -135,5 +147,6 @@ term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
 settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
+fs = await import("./lib/fs.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
