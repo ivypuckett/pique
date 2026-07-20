@@ -71,7 +71,7 @@
         <Splitter axis="y" onDrag={onRowDrag} />
       {/if}
       {@const Module = registry[row.kind]}
-      <div class="min-h-0">
+      <div class="min-h-0 min-w-0">
         <ModuleFrame title={row.title}>
           {#snippet actions()}
             {#if isSide && i === 0}

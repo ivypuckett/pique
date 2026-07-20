@@ -37,19 +37,22 @@
       title={dir || "~"}
       onclick={pickDir}
     >{shown}</button>
-    {#if $activeWorkspace.views.length > 1}
-      <div class="flex items-center gap-1">
-        {#each $activeWorkspace.views as v, i (v.id)}
-          <button
-            class="btn btn-ghost btn-xs px-2"
-            class:btn-active={v.id === $activeWorkspace.activeId}
-            aria-label="Switch to view {i + 1}"
-            aria-pressed={v.id === $activeWorkspace.activeId}
-            onclick={() => focusView(v.id)}
-          >{i + 1}</button>
-        {/each}
-      </div>
-    {/if}
+    <div class="flex items-center gap-1">
+      <span class="text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">View</span>
+      {#each $activeWorkspace.views as v, i (v.id)}
+        {@const active = v.id === $activeWorkspace.activeId}
+        <button
+          class="btn btn-ghost btn-xs px-2"
+          class:btn-active={active}
+          class:text-primary={active}
+          class:font-medium={active}
+          class:opacity-60={!active}
+          aria-label="Switch to view {i + 1}"
+          aria-pressed={active}
+          onclick={() => focusView(v.id)}
+        >{i + 1}</button>
+      {/each}
+    </div>
   </div>
   <div class="flex items-center gap-1">
     <button

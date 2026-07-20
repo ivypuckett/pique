@@ -26,14 +26,22 @@
     Workspaces
   </span>
   {#each $session.workspaces as w (w.id)}
+    {@const active = w.id === $session.activeId}
     <button
-      class="btn btn-ghost btn-sm justify-start font-normal"
-      class:btn-active={w.id === $session.activeId}
+      class="btn btn-ghost btn-sm justify-start gap-2"
+      class:btn-active={active}
+      class:text-primary={active}
+      class:font-medium={active}
+      class:font-normal={!active}
+      class:opacity-60={!active}
       aria-label="Switch to {w.title}"
       title="{w.title} — {fullDir(w.cwd)}"
-      aria-pressed={w.id === $session.activeId}
+      aria-pressed={active}
       onclick={() => focusWorkspace(w.id)}
-    ><span class="min-w-0 truncate">{num(w.id)} {shortDir(w.cwd)}</span></button>
+    >
+      <span class="h-4 w-0.5 shrink-0 rounded-full {active ? 'bg-primary' : 'bg-transparent'}"></span>
+      <span class="min-w-0 truncate">{num(w.id)} {shortDir(w.cwd)}</span>
+    </button>
   {/each}
   <button
     class="btn btn-ghost btn-sm mt-auto justify-start font-normal opacity-70"
