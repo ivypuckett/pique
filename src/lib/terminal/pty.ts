@@ -7,11 +7,26 @@ interface Session {
 const sessions = new Map<string, Session>();
 let counter = 0;
 
-/** Spawn the user's shell in a PTY at the given size and cwd; returns a session id. */
-export function startSession(opts: { cols: number; rows: number; cwd?: string }): string {
-  const shell = Deno.env.get("SHELL") ?? "bash";
-  const pty = new Pty(shell, {
-    args: ["-i"],
+/**
+ * Spawn a PTY at the given size and cwd; returns a session id.
+ * Default: the user's interactive shell. If `argv` is given, spawn that command
+ * instead — an `argv[0]` of "$EDITOR" is resolved to $EDITOR (fallback "vi").
+ */
+export function startSession(
+  opts: { cols: number; rows: number; cwd?: string; argv?: string[] },
+): string {
+  let cmd: string;
+  let args: string[];
+  if (opts.argv && opts.argv.length > 0) {
+    const [first, ...rest] = opts.argv;
+    cmd = first === "$EDITOR" ? (Deno.env.get("EDITOR") ?? "vi") : first;
+    args = rest;
+  } else {
+    cmd = Deno.env.get("SHELL") ?? "bash";
+    args = ["-i"];
+  }
+  const pty = new Pty(cmd, {
+    args,
     env: { TERM: "xterm-256color" },
     cwd: opts.cwd,
     size: { rows: opts.rows, cols: opts.cols },
