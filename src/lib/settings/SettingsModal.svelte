@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
   import { pickDirectory } from "./bindings.ts";
-  import { extBindings, type ExtInfo } from "../chat/bindings.ts";
+  import { extBindings, type ExtInfo, type ExtSearchResult } from "../chat/bindings.ts";
 
   async function browse(): Promise<void> {
     const dir = await pickDirectory($settings.workspace.defaultDir);
@@ -19,6 +19,29 @@
   // Guards the install (extensions run arbitrary code): the source is only sent
   // after the user confirms this inline warning panel.
   let confirming = $state(false);
+
+  // Browse: query pi packages via npm (see extensions.ts). A result's Install
+  // routes through the same `confirming` gate as the manual source input.
+  let query = $state("");
+  let results = $state<ExtSearchResult[]>([]);
+  let searching = $state(false);
+
+  async function search(): Promise<void> {
+    if (!ext) return;
+    searching = true;
+    extError = "";
+    try {
+      results = await ext.extSearch({ query: query.trim() });
+    } catch (e) {
+      extError = e instanceof Error ? e.message : String(e);
+    }
+    searching = false;
+  }
+
+  function installResult(r: ExtSearchResult): void {
+    source = r.source;
+    confirming = true;
+  }
 
   async function refreshExts(): Promise<void> {
     if (!ext) return;
@@ -158,6 +181,45 @@
           </ul>
         {:else}
           <div class="mt-3 text-xs opacity-60">None installed.</div>
+        {/if}
+
+        <div class="mt-4 mb-2 text-xs opacity-70">Browse the pi package catalog (via npm):</div>
+        <div class="flex gap-2">
+          <input
+            class="input input-bordered input-sm flex-1"
+            placeholder="Search extensions…"
+            aria-label="Search extensions"
+            bind:value={query}
+            disabled={busy || searching}
+            onkeydown={(e) => e.key === "Enter" && search()}
+          />
+          <button type="button" class="btn btn-sm" disabled={busy || searching} onclick={search}>
+            {searching ? "Searching…" : "Search"}
+          </button>
+        </div>
+
+        {#if results.length > 0}
+          <ul class="mt-3 max-h-56 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
+            {#each results as r (r.source)}
+              <li class="flex items-start justify-between gap-2 px-3 py-2">
+                <div class="min-w-0">
+                  <div class="truncate font-mono text-xs" title={r.source}>{r.name}</div>
+                  {#if r.description}
+                    <div class="mt-0.5 line-clamp-2 text-xs opacity-70">{r.description}</div>
+                  {/if}
+                  <div class="mt-0.5 text-[0.65rem] opacity-50">
+                    {#if r.author}{r.author} · {/if}{r.downloads.toLocaleString()}/mo
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs shrink-0"
+                  disabled={busy}
+                  onclick={() => installResult(r)}
+                >Install</button>
+              </li>
+            {/each}
+          </ul>
         {/if}
 
         {#if confirming}

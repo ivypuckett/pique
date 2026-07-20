@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
-import { isValidSource, toExtInfo } from "./extensions.ts";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { isValidSource, npmSearchUrl, toExtInfo, toSearchResult } from "./extensions.ts";
 
 Deno.test("isValidSource accepts pi source forms", () => {
   for (
@@ -37,5 +37,44 @@ Deno.test("toExtInfo omits a missing installed path", () => {
   assertEquals(
     toExtInfo({ source: "git:y", scope: "user", filtered: false }),
     { source: "git:y", scope: "user", path: undefined },
+  );
+});
+
+Deno.test("npmSearchUrl constrains to the pi-package keyword and encodes the query", () => {
+  const url = npmSearchUrl("code review");
+  assertStringIncludes(url, "registry.npmjs.org/-/v1/search");
+  assertStringIncludes(url, encodeURIComponent("keywords:pi-package code review"));
+});
+
+Deno.test("npmSearchUrl handles a blank query (keyword only)", () => {
+  assertStringIncludes(npmSearchUrl("  "), encodeURIComponent("keywords:pi-package"));
+});
+
+Deno.test("toSearchResult projects an npm search object to an install-ready hit", () => {
+  assertEquals(
+    toSearchResult({
+      package: {
+        name: "@vigolium/piolium",
+        description: "Security audits",
+        publisher: { username: "j3ssie" },
+        links: { npm: "https://www.npmjs.com/package/@vigolium/piolium" },
+      },
+      downloads: { monthly: 281697 },
+    }),
+    {
+      source: "npm:@vigolium/piolium",
+      name: "@vigolium/piolium",
+      description: "Security audits",
+      author: "j3ssie",
+      downloads: 281697,
+      npm: "https://www.npmjs.com/package/@vigolium/piolium",
+    },
+  );
+});
+
+Deno.test("toSearchResult defaults missing fields", () => {
+  assertEquals(
+    toSearchResult({ package: { name: "pi-x" } }),
+    { source: "npm:pi-x", name: "pi-x", description: "", author: "", downloads: 0, npm: undefined },
   );
 });

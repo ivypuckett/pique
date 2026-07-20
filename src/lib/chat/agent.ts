@@ -4,6 +4,10 @@
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ModelInfo = { provider: string; id: string; name: string; current: boolean };
+// JSON-safe projection of pi's SlashCommandInfo for the chat `/` menu. Mirrors the
+// three sources pi's TUI lists (extension commands, prompt templates, skills); the
+// `name` is the token typed after `/`, so skills already carry their `skill:` prefix.
+export type CommandInfo = { name: string; description: string; source: "extension" | "prompt" | "skill" };
 
 export type ChatEvent =
   | { kind: "text"; delta: string }
@@ -194,4 +198,33 @@ export async function setModel(id: string, provider: string, modelId: string): P
 
 export function setThinkingLevel(id: string, level: ThinkingLevel): void {
   agents.get(id)?.session.setThinkingLevel(level);
+}
+
+// The `/` menu list: the same three sources pi's TUI concatenates in getCommands —
+// extension commands, file-based prompt templates, and skills (prefixed `skill:`).
+// pi's own builtins (/model, /settings, …) are TUI actions pique covers in its own
+// UI, so they're omitted. session.prompt() already expands/runs all three, so the
+// menu only helps compose the text — no execution logic lives here.
+export function listCommands(id: string): CommandInfo[] {
+  const session = agents.get(id)?.session;
+  if (!session) return [];
+  // deno-lint-ignore no-explicit-any
+  const ext: CommandInfo[] = session.extensionRunner.getRegisteredCommands().map((c: any) => ({
+    name: c.invocationName,
+    description: c.description ?? "",
+    source: "extension",
+  }));
+  // deno-lint-ignore no-explicit-any
+  const prompts: CommandInfo[] = session.promptTemplates.map((t: any) => ({
+    name: t.name,
+    description: t.description ?? "",
+    source: "prompt",
+  }));
+  // deno-lint-ignore no-explicit-any
+  const skills: CommandInfo[] = session.resourceLoader.getSkills().skills.map((s: any) => ({
+    name: `skill:${s.name}`,
+    description: s.description ?? "",
+    source: "skill",
+  }));
+  return [...ext, ...prompts, ...skills];
 }

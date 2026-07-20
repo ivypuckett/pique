@@ -99,6 +99,11 @@ win.bind("chatListModels", async (arg) => {
   return await chat.listModels(id);
 });
 
+win.bind("chatListCommands", async (arg) => {
+  const { id } = arg as { id: string };
+  return chat.listCommands(id);
+});
+
 win.bind("chatSetModel", async (arg) => {
   const { id, provider, model } = arg as { id: string; provider: string; model: string };
   await chat.setModel(id, provider, model);
@@ -115,6 +120,11 @@ win.bind("chatSetThinking", async (arg) => {
 // Pi-extension management — global per-install set under ~/.pique/agent. installExtension
 // fetches from npm/git and writes settings.json; the frontend gates it behind a confirm.
 win.bind("extList", async () => await extensions.listExtensions());
+
+win.bind("extSearch", async (arg) => {
+  const { query } = arg as { query: string };
+  return await extensions.searchExtensions(query);
+});
 
 win.bind("extInstall", async (arg) => {
   const { source } = arg as { source: string };

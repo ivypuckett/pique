@@ -1,9 +1,9 @@
 // Frontend half of the chat binding contract. The backend half is the chat*
 // win.bind handlers in src/desktop.ts — keep arg/return shapes in sync by hand
 // (separate module graphs, nothing cross-checks them at compile time).
-import type { ChatEvent, ModelInfo, ThinkingLevel } from "./agent.ts";
-import type { ExtInfo } from "./extensions.ts";
-export type { ChatEvent, ExtInfo, ModelInfo, ThinkingLevel };
+import type { ChatEvent, CommandInfo, ModelInfo, ThinkingLevel } from "./agent.ts";
+import type { ExtInfo, ExtSearchResult } from "./extensions.ts";
+export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, ThinkingLevel };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id.
@@ -14,6 +14,7 @@ export interface ChatBindings {
   chatAbort(arg: { id: string }): Promise<unknown>;
   chatStop(arg: { id: string }): Promise<unknown>;
   chatListModels(arg: { id: string }): Promise<ModelInfo[]>;
+  chatListCommands(arg: { id: string }): Promise<CommandInfo[]>;
   chatSetModel(arg: { id: string; provider: string; model: string }): Promise<unknown>;
   chatSetThinking(arg: { id: string; level: ThinkingLevel }): Promise<unknown>;
 }
@@ -27,6 +28,7 @@ export function chatBindings(): ChatBindings | null {
 // Not keyed by a chat id: extensions are a global, per-install set (~/.pique/agent).
 export interface ExtBindings {
   extList(): Promise<ExtInfo[]>;
+  extSearch(arg: { query: string }): Promise<ExtSearchResult[]>;
   extInstall(arg: { source: string }): Promise<unknown>;
   extRemove(arg: { source: string }): Promise<unknown>;
 }

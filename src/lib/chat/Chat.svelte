@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { chatBindings, type ChatEvent, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
+  import { chatBindings, type ChatEvent, type CommandInfo, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
   import { get } from "svelte/store";
   import { settings } from "../settings/store.ts";
 
@@ -18,6 +18,35 @@
   let streaming = $state(false);
   let models = $state<ModelInfo[]>([]);
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
+
+  // `/` command menu (skills / prompt templates / extension commands). Loaded once
+  // the agent is ready; session.prompt() expands/runs them, so this is pure compose UI.
+  let commands = $state<CommandInfo[]>([]);
+  let menuIndex = $state(0);
+  let dismissed = $state(false);
+  let inputEl = $state<HTMLInputElement>();
+  // The token after `/`, or undefined once a space is typed (which closes the menu).
+  const query = $derived(/^\/(\S*)$/.exec(input)?.[1]);
+  const menu = $derived.by(() => {
+    if (query === undefined || dismissed) return [];
+    const q = query.toLowerCase();
+    return commands.filter((c) => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
+  });
+  // Reset the highlight whenever the filtered list changes (but not on plain arrowing).
+  $effect(() => { menu; menuIndex = 0; });
+
+  function selectCommand(c: CommandInfo) {
+    input = `/${c.name} `;
+    inputEl?.focus();
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (menu.length === 0) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); menuIndex = (menuIndex + 1) % menu.length; }
+    else if (e.key === "ArrowUp") { e.preventDefault(); menuIndex = (menuIndex - 1 + menu.length) % menu.length; }
+    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); selectCommand(menu[menuIndex]); }
+    else if (e.key === "Escape") { e.preventDefault(); dismissed = true; }
+  }
   let level = $state<ThinkingLevel>(get(settings).chat.defaultThinkingLevel ?? "off");
 
   const b = chatBindings();
@@ -57,6 +86,7 @@
       if (!alive) { b.chatStop({ id }).catch(() => {}); return; }
       ready = true;
       models = await b.chatListModels({ id });
+      commands = await b.chatListCommands({ id });
       while (alive) {
         const events = await b.chatRead({ id });
         if (!alive) break;
@@ -117,10 +147,37 @@
     {/each}
   </div>
 
-  <form class="flex gap-2 border-t border-base-300 p-2" onsubmit={(e) => { e.preventDefault(); send(); }}>
-    <input class="input input-bordered flex-1" placeholder="Message…" bind:value={input} disabled={!ready || streaming} />
-    <button class="btn btn-primary" type="submit" disabled={!ready || streaming}>Send</button>
-  </form>
+  <div class="relative">
+    {#if menu.length > 0}
+      <ul class="absolute bottom-full left-2 right-2 mb-1 z-10 max-h-60 overflow-y-auto rounded border border-base-300 bg-base-100 shadow-lg">
+        {#each menu as c, i}
+          <li>
+            <button
+              type="button"
+              class="flex w-full items-baseline gap-2 px-2 py-1 text-left text-sm {i === menuIndex ? 'bg-base-300' : ''}"
+              onmousedown={(e) => { e.preventDefault(); selectCommand(c); }}
+            >
+              <span class="font-mono whitespace-nowrap">/{c.name}</span>
+              <span class="truncate opacity-60">{c.description}</span>
+              <span class="ml-auto whitespace-nowrap text-xs opacity-40">{c.source}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <form class="flex gap-2 border-t border-base-300 p-2" onsubmit={(e) => { e.preventDefault(); send(); }}>
+      <input
+        class="input input-bordered flex-1"
+        placeholder="Message… (/ for commands)"
+        bind:value={input}
+        bind:this={inputEl}
+        oninput={() => { dismissed = false; }}
+        onkeydown={onKeydown}
+        disabled={!ready || streaming}
+      />
+      <button class="btn btn-primary" type="submit" disabled={!ready || streaming}>Send</button>
+    </form>
+  </div>
 
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
     <select class="select select-bordered select-sm" onchange={pickModel} disabled={!ready}>
