@@ -9,6 +9,7 @@
   let roots = $state<Node[]>([]);
   let cursor = $state(0);
   let unavailable = $state(false);
+  let focused = $state(false);
   let pendingG = false;
 
   const rows = $derived(flatten(roots));
@@ -149,6 +150,8 @@
   role="tree"
   aria-label="File tree"
   onkeydown={onKey}
+  onfocusin={() => (focused = true)}
+  onfocusout={() => (focused = false)}
 >
   {#if unavailable}
     <div class="p-2 opacity-60">File tree unavailable — run the desktop app.</div>
@@ -161,7 +164,8 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         class="flex cursor-pointer items-center px-1"
-        class:bg-base-300={i === cursor}
+        class:bg-base-300={i === cursor && focused}
+        class:bg-base-200={i === cursor && !focused}
         role="treeitem"
         tabindex="-1"
         aria-selected={i === cursor}
