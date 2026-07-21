@@ -219,14 +219,14 @@ export function setActiveTab(v: ViewState, tabId: string): ViewState {
 
 export function closeTab(v: ViewState, tabId: string): ViewState {
   const rows = v.center.rows;
-  if (rows.length <= 1) return v; // center always keeps at least one tab
   const idx = rows.findIndex((r) => r.id === tabId);
   if (idx === -1) return v;
   const nextRows = rows.filter((r) => r.id !== tabId);
   let activeTabId = v.center.activeTabId;
   if (activeTabId === tabId) {
     // Prefer the previous tab; fall back to the next (now at idx after removal).
-    activeTabId = (nextRows[idx - 1] ?? nextRows[idx]).id;
+    // Empty center (last tab closed) carries no active id.
+    activeTabId = (nextRows[idx - 1] ?? nextRows[idx])?.id ?? "";
   }
   return { ...v, center: { ...v.center, rows: nextRows, activeTabId } };
 }
@@ -244,8 +244,10 @@ function isColumnState(c: unknown): boolean {
   return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
     typeof col.savedWidthPct === "number" && typeof col.rowSplitPct === "number" &&
     typeof col.activeTabId === "string" &&
-    Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef) &&
-    (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId);
+    Array.isArray(col.rows) && col.rows.every(isModuleRef) &&
+    // The center may hold zero tabs (all closed); sides always have rows. When the
+    // column is non-empty the active id must point at one of them.
+    (col.rows.length === 0 || (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId));
 }
 
 // Structural guard for persisted state: rejects valid JSON of the wrong shape so a

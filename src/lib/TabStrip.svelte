@@ -13,15 +13,16 @@
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"
       class:bg-base-100={tab.id === col.activeTabId}
       class:font-medium={tab.id === col.activeTabId}
+      onauxclick={(e) => {
+        if (e.button === 1) closeTab(viewId, tab.id);
+      }}
     >
       <button class="truncate" onclick={() => setActiveTab(viewId, tab.id)}>{tab.title}</button>
-      {#if col.rows.length > 1}
-        <button
-          class="btn btn-ghost btn-xs px-1"
-          aria-label="Close {tab.title} tab"
-          onclick={() => closeTab(viewId, tab.id)}
-        >×</button>
-      {/if}
+      <button
+        class="btn btn-ghost btn-xs px-1"
+        aria-label="Close {tab.title} tab"
+        onclick={() => closeTab(viewId, tab.id)}
+      >×</button>
     </div>
   {/each}
   <div class="dropdown dropdown-end">
