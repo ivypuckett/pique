@@ -4,6 +4,7 @@ import {
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
+  addDiffTab as addDiffTabFn,
   addEditorTab as addEditorTabFn,
   resizeBoundary as resize,
   resizeRowSplit as resizeRowFn,
@@ -105,6 +106,11 @@ export function addTab(viewId: string, kind: string): void {
 // Open `path` in $EDITOR as a self-closing center tab (called by the file-tree module).
 export function openEditor(viewId: string, path: string): void {
   edit(viewId, (v) => addEditorTabFn(v, path));
+}
+
+// Open the git diff of `path` as a center tab (called by the file-tree module, gd chord).
+export function openDiff(viewId: string, path: string): void {
+  edit(viewId, (v) => addDiffTabFn(v, path));
 }
 
 export function setActiveTab(viewId: string, tabId: string): void {

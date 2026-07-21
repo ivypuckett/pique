@@ -22,6 +22,7 @@ let extensions: typeof import("./lib/chat/extensions.ts");
 let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
+let git: typeof import("./lib/gitdiff/git.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
@@ -201,6 +202,12 @@ win.bind("listDir", async (arg) => {
   return await fs.listDir(dir);
 });
 
+win.bind("gitDiff", async (arg) => {
+  const { cwd: override, staged, path } = arg as { cwd?: string; staged?: boolean; path?: string };
+  const cwd = settings.resolveModuleDir(override, await settings.readJson("settings"));
+  return { diff: await git.gitDiff(cwd, staged ?? false, path) };
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.
@@ -212,5 +219,6 @@ extensions = await import("./lib/chat/extensions.ts");
 settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");
+git = await import("./lib/gitdiff/git.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

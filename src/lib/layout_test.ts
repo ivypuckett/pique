@@ -9,6 +9,7 @@ import {
 } from "./layout.ts";
 import {
   addTab,
+  addDiffTab,
   addEditorTab,
   closeTab,
   isViewState,
@@ -209,4 +210,16 @@ Deno.test("addEditorTab adds an active center terminal tab titled with the basen
 Deno.test("addEditorTab falls back to the full path when there is no basename", () => {
   const tab = addEditorTab(createInitialView(), "/").center.rows.at(-1)!;
   assertEquals(tab.title, "/");
+});
+
+Deno.test("addDiffTab adds an active center gitdiff tab scoped to the file path", () => {
+  const v = createInitialView();
+  const before = v.center.rows.length;
+  const next = addDiffTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
+  assertEquals(next.center.rows.length, before + 1);
+  const tab = next.center.rows[next.center.rows.length - 1];
+  assertEquals(tab.kind, "gitdiff");
+  assertEquals(tab.title, "layout.ts");
+  assertEquals(next.center.activeTabId, tab.id);
+  assertEquals(tab.props, { path: "/home/ivy/workspace/pique/src/lib/layout.ts" });
 });

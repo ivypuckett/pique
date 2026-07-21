@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { fileTreeBindings } from "./bindings.ts";
   import { flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
-  import { openEditor } from "../store.ts";
+  import { openDiff, openEditor } from "../store.ts";
 
   let { cwd, viewId }: { title: string; cwd?: string; viewId?: string; tabId?: string } = $props();
 
@@ -103,6 +103,14 @@
     if (key === "g") {
       if (wasG) cursor = 0;
       else pendingG = true;
+      ev.preventDefault();
+      return;
+    }
+
+    // gd: open the git diff of the item under the cursor. Files diff themselves; a
+    // directory diffs every changed file under it (git treats the path as a pathspec).
+    if (wasG && key === "d") {
+      if (viewId) openDiff(viewId, rows[cursor].node.path);
       ev.preventDefault();
       return;
     }

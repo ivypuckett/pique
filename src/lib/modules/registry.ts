@@ -3,6 +3,7 @@ import Placeholder from "./Placeholder.svelte";
 import Terminal from "../terminal/Terminal.svelte";
 import Chat from "../chat/Chat.svelte";
 import FileTree from "../filetree/FileTree.svelte";
+import GitDiff from "../gitdiff/GitDiff.svelte";
 
 export const registry: Record<
   string,
@@ -19,4 +20,5 @@ export const registry: Record<
   terminal: Terminal,
   chat: Chat,
   filetree: FileTree,
+  gitdiff: GitDiff,
 };

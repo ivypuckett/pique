@@ -5,7 +5,7 @@ export interface ModuleRef {
   id: string;
   title: string;
   kind: string; // key into the module registry; "placeholder" for now
-  props?: { argv?: string[]; autoCloseOnExit?: boolean; autoFocus?: boolean }; // per-tab payload, spread into the module
+  props?: { argv?: string[]; autoCloseOnExit?: boolean; autoFocus?: boolean; path?: string }; // per-tab payload, spread into the module
 }
 
 export interface ColumnState {
@@ -161,8 +161,9 @@ export function toggleRows(v: ViewState, id: SideId): ViewState {
 }
 
 // Display label for a module kind, used for new-tab titles and the picker menu.
+const LABELS: Record<string, string> = { gitdiff: "Git Diff" };
 export function moduleLabel(kind: string): string {
-  return kind.charAt(0).toUpperCase() + kind.slice(1);
+  return LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function nextCenterId(rows: ModuleRef[]): string {
@@ -195,6 +196,16 @@ export function addEditorTab(v: ViewState, path: string): ViewState {
     kind: "terminal",
     props: { argv: ["$EDITOR", path], autoCloseOnExit: true, autoFocus: true },
   };
+  return {
+    ...v,
+    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+  };
+}
+
+// Add a center tab showing the git diff of a single file (called by the file-tree module).
+export function addDiffTab(v: ViewState, path: string): ViewState {
+  const id = nextCenterId(v.center.rows);
+  const tab: ModuleRef = { id, title: basename(path), kind: "gitdiff", props: { path } };
   return {
     ...v,
     center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
