@@ -208,6 +208,12 @@ win.bind("gitDiff", async (arg) => {
   return { diff: await git.gitDiff(cwd, staged ?? false, path) };
 });
 
+win.bind("gitChanges", async (arg) => {
+  const { path } = arg as { path?: string };
+  const root = settings.resolveModuleDir(path, await settings.readJson("settings"));
+  return { changes: await git.changedPaths(root) };
+});
+
 win.addEventListener("close", () => term?.killAllSessions());
 
 // Bindings are attached; now load deps and serve the static Vite build.

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fileTreeBindings } from "./bindings.ts";
-  import { flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
+  import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
   import { openDiff, openEditor } from "../store.ts";
 
   let { cwd, viewId }: { title: string; cwd?: string; viewId?: string; tabId?: string } = $props();
@@ -11,6 +11,32 @@
   let unavailable = $state(false);
   let focused = $state(false);
   let pendingG = false;
+
+  // Git change highlighting. `changedFiles` maps each changed file path to its untracked
+  // flag (to color the file); `dirtyDirs` holds every folder that contains a change.
+  let changedFiles = $state(new Map<string, boolean>());
+  let dirtyDirs = $state(new Set<string>());
+
+  async function loadChanges() {
+    if (!b?.gitChanges) return;
+    try {
+      const { changes } = await b.gitChanges({ path: cwd });
+      changedFiles = new Map(changes.map((c) => [c.path, c.untracked]));
+      dirtyDirs = dirtyDirsFrom(changes.map((c) => c.path));
+    } catch {
+      changedFiles = new Map();
+      dirtyDirs = new Set();
+    }
+  }
+
+  // A daisyUI text color for a node's git state, or "" for unchanged. Untracked files are
+  // green (like VS Code's new files); everything else that's changed — modified/deleted
+  // files and folders containing any change — is amber.
+  function changeClass(node: Node): string {
+    if (node.isDir) return dirtyDirs.has(node.path) ? "text-warning" : "";
+    if (!changedFiles.has(node.path)) return "";
+    return changedFiles.get(node.path) ? "text-success" : "text-warning";
+  }
 
   const rows = $derived(flatten(roots));
   const b = fileTreeBindings();
@@ -31,6 +57,7 @@
     } catch {
       roots = [];
     }
+    await loadChanges();
   });
 
   function clampCursor() {
@@ -92,6 +119,7 @@
     // preserving expansion. The root itself is always on screen, so it refreshes too.
     roots = await relist(cwd, roots);
     clampCursor();
+    await loadChanges();
   }
 
   async function onKey(ev: KeyboardEvent) {
@@ -182,7 +210,7 @@
         onclick={() => (cursor = i)}
       >
         <span class="w-4 flex-none">{row.node.isDir ? (row.node.expanded ? "▾" : "▸") : ""}</span>
-        <span class="flex min-w-0 flex-1">
+        <span class="flex min-w-0 flex-1 {changeClass(row.node)}">
           <!-- head sizes to content and shrinks (truncating with …) only when the row
                is too narrow; the extension stays pinned right after it, never a gap. -->
           <span class="min-w-0 truncate">{parts.head}</span>

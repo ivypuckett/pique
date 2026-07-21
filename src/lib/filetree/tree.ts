@@ -49,6 +49,23 @@ export function flatten(nodes: Node[], depth = 0): Row[] {
   return rows;
 }
 
+// Set of every ancestor directory that contains a changed path. For "/a/b/c.ts" this
+// adds "/a" and "/a/b" (not the file itself), so any folder node on the way down to a
+// change can be highlighted, even folders not yet lazily loaded.
+export function dirtyDirsFrom(paths: string[]): Set<string> {
+  const dirs = new Set<string>();
+  for (const p of paths) {
+    const i = p.lastIndexOf("/");
+    let dir = i <= 0 ? "" : p.slice(0, i);
+    while (dir !== "") {
+      dirs.add(dir);
+      const j = dir.lastIndexOf("/");
+      dir = j <= 0 ? "" : dir.slice(0, j);
+    }
+  }
+  return dirs;
+}
+
 // Return a new tree with the node at `path` replaced by fn(node). Recurses into
 // loaded children; nodes off the path are returned unchanged (by reference).
 export function updateAt(nodes: Node[], path: string, fn: (n: Node) => Node): Node[] {
