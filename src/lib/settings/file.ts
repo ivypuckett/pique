@@ -74,6 +74,22 @@ export function resolveWorkspaceDir(settings: Json): string {
   return home;
 }
 
+// How many directory levels to descend, when the workspace root is not itself a git
+// repo, looking for the repos inside so their changed folders can be highlighted.
+// Reads workspace.gitScanDepth, clamped to [0, 10] (0 = don't descend). Any missing,
+// non-numeric, or out-of-range value falls back to the default of 3.
+export function resolveGitScanDepth(settings: Json): number {
+  const fallback = 3;
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    const ws = (settings as { [k: string]: Json }).workspace;
+    if (ws && typeof ws === "object" && !Array.isArray(ws)) {
+      const d = (ws as { [k: string]: Json }).gitScanDepth;
+      if (typeof d === "number" && Number.isInteger(d) && d >= 0) return Math.min(d, 10);
+    }
+  }
+  return fallback;
+}
+
 // Working directory for one spawned module: its per-workspace override when set
 // (leading `~` expanded), else the global default from resolveWorkspaceDir. The
 // override is a raw string threaded down from the workspace state; a blank or

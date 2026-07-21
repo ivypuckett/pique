@@ -210,8 +210,9 @@ win.bind("gitDiff", async (arg) => {
 
 win.bind("gitChanges", async (arg) => {
   const { path } = arg as { path?: string };
-  const root = settings.resolveModuleDir(path, await settings.readJson("settings"));
-  return { changes: await git.changedPaths(root) };
+  const cfg = await settings.readJson("settings");
+  const root = settings.resolveModuleDir(path, cfg);
+  return { changes: await git.changedPaths(root, settings.resolveGitScanDepth(cfg)) };
 });
 
 win.addEventListener("close", () => term?.killAllSessions());

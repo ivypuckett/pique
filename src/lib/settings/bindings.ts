@@ -14,14 +14,19 @@ export interface Settings {
     defaultModel?: string;
     defaultThinkingLevel?: ThinkingLevel;
   };
-  workspace: { defaultDir?: string };
+  // gitScanDepth: how many directory levels to descend looking for git repos when the
+  // workspace root is not itself a repo, to highlight changed folders. Absent → the
+  // resolveGitScanDepth default (see settings/file.ts).
+  workspace: { defaultDir?: string; gitScanDepth?: number };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
   appearance: { theme: "catppuccin-frappe" },
   chat: { defaultThinkingLevel: "off" },
-  workspace: {},
+  // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
+  // (separate module graph) — keep the two in sync.
+  workspace: { gitScanDepth: 3 },
 };
 
 interface ConfigBindings {

@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { readJson, resolveModuleDir, resolveWorkspaceDir, writeJson } from "./file.ts";
+import { readJson, resolveGitScanDepth, resolveModuleDir, resolveWorkspaceDir, writeJson } from "./file.ts";
 
 // Each test runs against a throwaway HOME so it exercises real disk I/O without
 // touching the developer's own ~/.pique.
@@ -91,4 +91,20 @@ Deno.test("resolveModuleDir falls back to the default for a blank/absent overrid
   assertEquals(resolveModuleDir("   ", { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
   // No override and no default → $HOME, same as resolveWorkspaceDir.
   assertEquals(resolveModuleDir(undefined, null), Deno.env.get("HOME"));
+});
+
+Deno.test("resolveGitScanDepth reads a valid configured depth, clamped to 10", () => {
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 0 } }), 0);
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 5 } }), 5);
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 99 } }), 10);
+});
+
+Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () => {
+  assertEquals(resolveGitScanDepth(null), 3);
+  assertEquals(resolveGitScanDepth({}), 3);
+  assertEquals(resolveGitScanDepth({ workspace: {} }), 3);
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: -1 } }), 3);
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 2.5 } }), 3);
+  // deno-lint-ignore no-explicit-any
+  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: "4" as any } }), 3);
 });

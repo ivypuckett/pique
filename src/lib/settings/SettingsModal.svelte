@@ -287,6 +287,25 @@
         </div>
       </div>
 
+      <div class="mt-4">
+        <div class="text-sm">Git highlight scan depth</div>
+        <div class="mt-0.5 text-xs opacity-70">
+          When the working directory isn't itself a git repo, how many folder levels to
+          descend looking for the repos inside, so folders with changes get highlighted.
+          0 disables the scan. Applies to file trees opened after the change.
+        </div>
+        <div class="mt-2">
+          <input
+            class="input input-bordered input-sm w-24"
+            type="number"
+            min="0"
+            max="10"
+            aria-label="Git highlight scan depth"
+            bind:value={$settings.workspace.gitScanDepth}
+          />
+        </div>
+      </div>
+
       {/if}
 
       {#if section === "providers"}
