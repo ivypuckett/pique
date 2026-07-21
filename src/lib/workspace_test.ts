@@ -46,9 +46,12 @@ Deno.test("closeView activates the next neighbor when the first view is closed",
   assertEquals(w.activeId, "view-2");
 });
 
-Deno.test("closeView is a no-op with a single view", () => {
-  const w = closeView(createInitialWorkspace());
-  assertEquals(w.views.length, 1);
+Deno.test("closeView resets to a fresh view-1 when closing the last view", () => {
+  let w = addView(createInitialWorkspace()); // view-1, view-2 (view-2 active)
+  w = focusView(w, "view-1");
+  w = closeView(w); // -> ["view-2"]
+  w = closeView(w); // last view -> fresh view-1
+  assertEquals(w.views.map((v) => v.id), ["view-1"]);
   assertEquals(w.activeId, "view-1");
 });
 

@@ -35,9 +35,13 @@ export function addView(w: WorkspaceState): WorkspaceState {
 }
 
 // Remove the active view, keeping at least one. Activates the previous neighbor if one
-// exists, otherwise the next (matching closeTab's neighbor rule).
+// exists, otherwise the next (matching closeTab's neighbor rule). Closing the last view
+// resets it to a fresh empty view rather than refusing.
 export function closeView(w: WorkspaceState): WorkspaceState {
-  if (w.views.length <= 1) return w;
+  if (w.views.length <= 1) {
+    const view = createInitialView("view-1");
+    return { ...w, views: [view], activeId: view.id };
+  }
   const idx = w.views.findIndex((v) => v.id === w.activeId);
   if (idx === -1) return w;
   const views = w.views.filter((v) => v.id !== w.activeId);

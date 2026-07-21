@@ -34,9 +34,13 @@ export function addWorkspace(s: SessionState, cwd?: string): SessionState {
 }
 
 // Remove the active workspace, keeping at least one. Activates the previous neighbor if
-// one exists, otherwise the next (matching closeView's neighbor rule).
+// one exists, otherwise the next (matching closeView's neighbor rule). Closing the last
+// workspace resets it to a fresh empty workspace rather than refusing.
 export function closeWorkspace(s: SessionState): SessionState {
-  if (s.workspaces.length <= 1) return s;
+  if (s.workspaces.length <= 1) {
+    const w = createInitialWorkspace();
+    return { workspaces: [w], activeId: w.id };
+  }
   const idx = s.workspaces.findIndex((w) => w.id === s.activeId);
   if (idx === -1) return s;
   const workspaces = s.workspaces.filter((w) => w.id !== s.activeId);
