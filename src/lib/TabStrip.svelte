@@ -3,7 +3,11 @@
   import { type ColumnState, moduleLabel } from "./layout.ts";
   import { registry } from "./modules/registry.ts";
 
-  let { viewId, col }: { viewId: string; col: ColumnState } = $props();
+  let { viewId, col, onCollapse }: {
+    viewId: string;
+    col: ColumnState;
+    onCollapse?: () => void;
+  } = $props();
   const kinds = Object.keys(registry);
 </script>
 
@@ -33,4 +37,11 @@
       {/each}
     </ul>
   </div>
+  {#if onCollapse}
+    <button
+      class="btn btn-ghost btn-xs ml-auto"
+      aria-label="Collapse right column"
+      onclick={onCollapse}
+    >«</button>
+  {/if}
 </div>

@@ -80,12 +80,12 @@ Deno.test("expanding restores the original layout", () => {
   assertEquals(v.right.widthPct, 20);
 });
 
-Deno.test("toggleRows adds then removes a second row on a side column", () => {
-  const two = toggleRows(createInitialView(), "right");
-  assertEquals(two.right.rows.length, 2);
-  const one = toggleRows(two, "right");
-  assertEquals(one.right.rows.length, 1);
-  assertEquals(one.right.rows[0].id, "right-1");
+Deno.test("toggleRows removes then re-adds the second row on the left column", () => {
+  const one = toggleRows(createInitialView(), "left");
+  assertEquals(one.left.rows.length, 1);
+  assertEquals(one.left.rows[0].id, "left-1");
+  const two = toggleRows(one, "left");
+  assertEquals(two.left.rows.length, 2);
 });
 
 Deno.test("resizeRowSplit sets the first-row height and clamps to MIN_ROW_PCT", () => {
@@ -123,61 +123,61 @@ Deno.test("isViewState rejects a column missing activeTabId", () => {
   assertEquals(isViewState(bad), false);
 });
 
-Deno.test("addTab appends a tab to center and activates it", () => {
+Deno.test("addTab appends a tab to the right column and activates it", () => {
   const v = addTab(createInitialView(), "placeholder");
-  assertEquals(v.center.rows.length, 2);
-  assertEquals(v.center.rows[1], { id: "center-2", title: "Placeholder", kind: "placeholder" });
-  assertEquals(v.center.activeTabId, "center-2");
+  assertEquals(v.right.rows.length, 2);
+  assertEquals(v.right.rows[1], { id: "right-2", title: "Placeholder", kind: "placeholder" });
+  assertEquals(v.right.activeTabId, "right-2");
 });
 
-Deno.test("addTab picks the smallest free center-N id", () => {
-  let v = addTab(createInitialView(), "terminal"); // center-2
-  v = addTab(v, "terminal"); // center-3
-  assertEquals(v.center.rows.map((r) => r.id), ["center-1", "center-2", "center-3"]);
+Deno.test("addTab picks the smallest free right-N id", () => {
+  let v = addTab(createInitialView(), "terminal"); // right-2
+  v = addTab(v, "terminal"); // right-3
+  assertEquals(v.right.rows.map((r) => r.id), ["right-1", "right-2", "right-3"]);
 });
 
-Deno.test("setActiveTab switches the active center tab", () => {
-  const two = addTab(createInitialView(), "placeholder"); // center-2 active
-  const v = setActiveTab(two, "center-1");
-  assertEquals(v.center.activeTabId, "center-1");
+Deno.test("setActiveTab switches the active right tab", () => {
+  const two = addTab(createInitialView(), "placeholder"); // right-2 active
+  const v = setActiveTab(two, "right-1");
+  assertEquals(v.right.activeTabId, "right-1");
 });
 
 Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
   const v = createInitialView();
-  assertEquals(setActiveTab(v, "center-999").center.activeTabId, "center-1");
+  assertEquals(setActiveTab(v, "right-999").right.activeTabId, "right-1");
 });
 
 Deno.test("closeTab removes a tab", () => {
-  const two = addTab(createInitialView(), "placeholder"); // center-1, center-2
-  const v = closeTab(two, "center-2");
-  assertEquals(v.center.rows.map((r) => r.id), ["center-1"]);
+  const two = addTab(createInitialView(), "placeholder"); // right-1, right-2
+  const v = closeTab(two, "right-2");
+  assertEquals(v.right.rows.map((r) => r.id), ["right-1"]);
 });
 
 Deno.test("closeTab is a no-op when only one tab remains", () => {
   const v = createInitialView();
-  assertEquals(closeTab(v, "center-1").center.rows.length, 1);
-  assertEquals(closeTab(v, "center-1").center.activeTabId, "center-1");
+  assertEquals(closeTab(v, "right-1").right.rows.length, 1);
+  assertEquals(closeTab(v, "right-1").right.activeTabId, "right-1");
 });
 
 Deno.test("closeTab activates the previous tab when the active one is closed", () => {
-  let v = addTab(createInitialView(), "placeholder"); // center-2
-  v = addTab(v, "placeholder"); // center-3, active
-  v = closeTab(v, "center-3");
-  assertEquals(v.center.activeTabId, "center-2"); // previous neighbor
+  let v = addTab(createInitialView(), "placeholder"); // right-2
+  v = addTab(v, "placeholder"); // right-3, active
+  v = closeTab(v, "right-3");
+  assertEquals(v.right.activeTabId, "right-2"); // previous neighbor
 });
 
 Deno.test("closeTab activates the next tab when the first (active) tab is closed", () => {
-  let v = addTab(createInitialView(), "placeholder"); // center-2
-  v = setActiveTab(v, "center-1"); // center-1 active
-  v = closeTab(v, "center-1");
-  assertEquals(v.center.rows.map((r) => r.id), ["center-2"]);
-  assertEquals(v.center.activeTabId, "center-2"); // no previous, so next
+  let v = addTab(createInitialView(), "placeholder"); // right-2
+  v = setActiveTab(v, "right-1"); // right-1 active
+  v = closeTab(v, "right-1");
+  assertEquals(v.right.rows.map((r) => r.id), ["right-2"]);
+  assertEquals(v.right.activeTabId, "right-2"); // no previous, so next
 });
 
 Deno.test("closeTab leaves the active tab unchanged when closing a different tab", () => {
-  let v = addTab(createInitialView(), "placeholder"); // center-2, active
-  v = closeTab(v, "center-1");
-  assertEquals(v.center.activeTabId, "center-2");
+  let v = addTab(createInitialView(), "placeholder"); // right-2, active
+  v = closeTab(v, "right-1");
+  assertEquals(v.right.activeTabId, "right-2");
 });
 
 Deno.test("isViewState accepts a real view and rejects malformed shapes", () => {
@@ -195,31 +195,31 @@ Deno.test("isViewState accepts a real view and rejects malformed shapes", () => 
   assertEquals(isViewState(noRows), false);
 });
 
-Deno.test("addEditorTab adds an active center terminal tab titled with the basename", () => {
+Deno.test("addEditorTab adds an active right-column terminal tab titled with the basename", () => {
   const v = createInitialView();
-  const before = v.center.rows.length;
+  const before = v.right.rows.length;
   const next = addEditorTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
-  assertEquals(next.center.rows.length, before + 1);
-  const tab = next.center.rows[next.center.rows.length - 1];
+  assertEquals(next.right.rows.length, before + 1);
+  const tab = next.right.rows[next.right.rows.length - 1];
   assertEquals(tab.kind, "terminal");
   assertEquals(tab.title, "layout.ts");
-  assertEquals(next.center.activeTabId, tab.id);
+  assertEquals(next.right.activeTabId, tab.id);
   assertEquals(tab.props, { argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"], autoCloseOnExit: true, autoFocus: true });
 });
 
 Deno.test("addEditorTab falls back to the full path when there is no basename", () => {
-  const tab = addEditorTab(createInitialView(), "/").center.rows.at(-1)!;
+  const tab = addEditorTab(createInitialView(), "/").right.rows.at(-1)!;
   assertEquals(tab.title, "/");
 });
 
-Deno.test("addDiffTab adds an active center gitdiff tab scoped to the file path", () => {
+Deno.test("addDiffTab adds an active right-column gitdiff tab scoped to the file path", () => {
   const v = createInitialView();
-  const before = v.center.rows.length;
+  const before = v.right.rows.length;
   const next = addDiffTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
-  assertEquals(next.center.rows.length, before + 1);
-  const tab = next.center.rows[next.center.rows.length - 1];
+  assertEquals(next.right.rows.length, before + 1);
+  const tab = next.right.rows[next.right.rows.length - 1];
   assertEquals(tab.kind, "gitdiff");
   assertEquals(tab.title, "layout.ts");
-  assertEquals(next.center.activeTabId, tab.id);
+  assertEquals(next.right.activeTabId, tab.id);
   assertEquals(tab.props, { path: "/home/ivy/workspace/pique/src/lib/layout.ts" });
 });

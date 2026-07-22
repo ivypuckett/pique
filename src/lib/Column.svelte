@@ -15,7 +15,6 @@
     el?: HTMLElement;
   } = $props();
 
-  const isSide = $derived(id === "left" || id === "right");
   const sideId = $derived(id as SideId);
 
   function onRowDrag(clientY: number) {
@@ -40,8 +39,22 @@
     <span class="mt-1 [writing-mode:vertical-rl] text-xs opacity-60">{col.rows[0].title}</span>
   </div>
 {:else if id === "center"}
+  <!-- Center is always the chat pane: a single fixed module, no tab strip. Rendered
+       independently of col.rows so a stale/empty persisted center can't blank it out. -->
+  {@const Chat = registry["chat"]}
   <div class="flex h-full min-w-0 flex-col" bind:this={el}>
-    <TabStrip {viewId} {col} />
+    <div class="relative min-h-0 flex-1">
+      <div class="absolute inset-0">
+        <ModuleFrame title="Chat" header={false}>
+          <Chat title="Chat" {cwd} {workspaceId} {viewId} tabId="center-1" />
+        </ModuleFrame>
+      </div>
+    </div>
+  </div>
+{:else if id === "right"}
+  <!-- Right holds the configurable tabs. -->
+  <div class="flex h-full min-w-0 flex-col" bind:this={el}>
+    <TabStrip {viewId} {col} onCollapse={() => toggleCollapse(viewId, "right")} />
     <div class="relative min-h-0 flex-1">
       {#each col.rows as tab (tab.id)}
         {@const Module = registry[tab.kind]}
@@ -75,7 +88,7 @@
       <div class="min-h-0 min-w-0">
         <ModuleFrame title={row.title}>
           {#snippet actions()}
-            {#if isSide && i === 0}
+            {#if i === 0}
               <button
                 class="btn btn-ghost btn-xs"
                 aria-label={col.rows.length === 2 ? "Remove second row" : "Add second row"}

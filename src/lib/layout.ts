@@ -14,7 +14,7 @@ export interface ColumnState {
   savedWidthPct: number; // width restored on expand
   rows: ModuleRef[]; // center: the tab list (N); sides: 1 or 2 rows
   rowSplitPct: number; // height % of the first row when a side column shows 2 rows
-  activeTabId: string; // visible center tab; sides carry it for shape uniformity
+  activeTabId: string; // visible right tab; center/left carry it for shape uniformity
 }
 
 export interface ViewState {
@@ -55,7 +55,7 @@ export function createInitialView(id = "view-1"): ViewState {
       savedWidthPct: 20,
       rowSplitPct: 50,
       activeTabId: "right-1",
-      rows: [{ id: "right-1", title: "Right", kind: "placeholder" }],
+      rows: [{ id: "right-1", title: "Terminal", kind: "terminal" }],
     },
   };
 }
@@ -166,19 +166,19 @@ export function moduleLabel(kind: string): string {
   return LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
-function nextCenterId(rows: ModuleRef[]): string {
+function nextRightId(rows: ModuleRef[]): string {
   const used = new Set(rows.map((r) => r.id));
   let n = 1;
-  while (used.has(`center-${n}`)) n++;
-  return `center-${n}`;
+  while (used.has(`right-${n}`)) n++;
+  return `right-${n}`;
 }
 
 export function addTab(v: ViewState, kind: string): ViewState {
-  const id = nextCenterId(v.center.rows);
+  const id = nextRightId(v.right.rows);
   const tab: ModuleRef = { id, title: moduleLabel(kind), kind };
   return {
     ...v,
-    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+    right: { ...v.right, rows: [...v.right.rows, tab], activeTabId: id },
   };
 }
 
@@ -187,9 +187,9 @@ function basename(path: string): string {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
-// Add a center terminal tab that runs $EDITOR on `path` and closes itself on exit.
+// Add a right-column terminal tab that runs $EDITOR on `path` and closes itself on exit.
 export function addEditorTab(v: ViewState, path: string): ViewState {
-  const id = nextCenterId(v.center.rows);
+  const id = nextRightId(v.right.rows);
   const tab: ModuleRef = {
     id,
     title: basename(path),
@@ -198,37 +198,37 @@ export function addEditorTab(v: ViewState, path: string): ViewState {
   };
   return {
     ...v,
-    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+    right: { ...v.right, rows: [...v.right.rows, tab], activeTabId: id },
   };
 }
 
-// Add a center tab showing the git diff of a single file (called by the file-tree module).
+// Add a right-column tab showing the git diff of a single file (called by the file-tree module).
 export function addDiffTab(v: ViewState, path: string): ViewState {
-  const id = nextCenterId(v.center.rows);
+  const id = nextRightId(v.right.rows);
   const tab: ModuleRef = { id, title: basename(path), kind: "gitdiff", props: { path } };
   return {
     ...v,
-    center: { ...v.center, rows: [...v.center.rows, tab], activeTabId: id },
+    right: { ...v.right, rows: [...v.right.rows, tab], activeTabId: id },
   };
 }
 
 export function setActiveTab(v: ViewState, tabId: string): ViewState {
-  if (!v.center.rows.some((r) => r.id === tabId)) return v;
-  return { ...v, center: { ...v.center, activeTabId: tabId } };
+  if (!v.right.rows.some((r) => r.id === tabId)) return v;
+  return { ...v, right: { ...v.right, activeTabId: tabId } };
 }
 
 export function closeTab(v: ViewState, tabId: string): ViewState {
-  const rows = v.center.rows;
+  const rows = v.right.rows;
   const idx = rows.findIndex((r) => r.id === tabId);
   if (idx === -1) return v;
   const nextRows = rows.filter((r) => r.id !== tabId);
-  let activeTabId = v.center.activeTabId;
+  let activeTabId = v.right.activeTabId;
   if (activeTabId === tabId) {
     // Prefer the previous tab; fall back to the next (now at idx after removal).
-    // Empty center (last tab closed) carries no active id.
+    // Empty right column (last tab closed) carries no active id.
     activeTabId = (nextRows[idx - 1] ?? nextRows[idx])?.id ?? "";
   }
-  return { ...v, center: { ...v.center, rows: nextRows, activeTabId } };
+  return { ...v, right: { ...v.right, rows: nextRows, activeTabId } };
 }
 
 function isModuleRef(r: unknown): boolean {
