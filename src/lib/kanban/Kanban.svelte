@@ -30,20 +30,53 @@
     return board.cards.filter((c) => c.statusId === statusId).sort((a, b) => a.position - b.position);
   }
 
-  // Drag-to-move. The board op requires a change reason, so a drop opens the reason
-  // modal rather than moving immediately; confirming there commits the move.
-  let dragId = $state<string | null>(null);
+  // Drag-to-move, implemented with pointer events rather than the HTML5 drag API,
+  // which WebKitGTK (the desktop webview) doesn't support. A press that moves past a
+  // small threshold becomes a drag; a press that doesn't is a click (card select).
+  // Dropping over a different column opens the reason modal (the board op requires a
+  // reason), and confirming there commits the move.
   let pending = $state<{ cardId: string; statusId: string } | null>(null);
   let reason = $state("");
 
-  function onDrop(statusId: string): void {
-    const cardId = dragId;
-    dragId = null;
-    if (!cardId) return;
-    const card = board.cards.find((c) => c.id === cardId);
-    if (!card || card.statusId === statusId) return;
-    reason = "";
-    pending = { cardId, statusId };
+  // Live drag state. `drag` is null until the press crosses the move threshold.
+  let press: { cardId: string; fromStatus: string; x: number; y: number } | null = null;
+  let drag = $state<{ cardId: string; fromStatus: string } | null>(null);
+  let dragPos = $state({ x: 0, y: 0 });
+  let overStatus = $state<string | null>(null);
+  const DRAG_THRESHOLD = 5; // px before a press counts as a drag
+
+  function onCardPointerDown(e: PointerEvent, cardId: string, fromStatus: string): void {
+    if (e.button !== 0) return; // left button only
+    press = { cardId, fromStatus, x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerMove(e: PointerEvent): void {
+    if (!press) return;
+    if (!drag) {
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_THRESHOLD) return;
+      drag = { cardId: press.cardId, fromStatus: press.fromStatus };
+    }
+    dragPos = { x: e.clientX, y: e.clientY };
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    overStatus = el?.closest("[data-status-id]")?.getAttribute("data-status-id") ?? null;
+  }
+
+  function onPointerUp(): void {
+    const d = drag;
+    const target = overStatus;
+    const clickedCard = !drag && press ? press.cardId : null;
+    press = null;
+    drag = null;
+    overStatus = null;
+    if (d) {
+      if (target && target !== d.fromStatus) {
+        reason = "";
+        pending = { cardId: d.cardId, statusId: target };
+      }
+      return;
+    }
+    // A press that never became a drag is a plain click → select the card.
+    if (clickedCard) selectedId = clickedCard;
   }
 
   async function confirmMove(): Promise<void> {
@@ -183,6 +216,8 @@
   }
 </script>
 
+<svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
+
 {#if !b}
   <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
 {:else}
@@ -191,10 +226,10 @@
     <div class="flex min-w-0 flex-1 gap-3 overflow-x-auto p-3">
       {#each board.statuses as s (s.id)}
         <div
-          class="flex w-64 shrink-0 flex-col rounded bg-base-200"
+          class="flex w-64 shrink-0 flex-col rounded bg-base-200 ring-2 ring-transparent transition-colors"
+          class:ring-primary={drag && overStatus === s.id && drag.fromStatus !== s.id}
           role="group"
-          ondragover={(e) => e.preventDefault()}
-          ondrop={() => onDrop(s.id)}
+          data-status-id={s.id}
         >
           <div class="flex items-center justify-between px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
             <span class="truncate">{s.name}</span>
@@ -204,11 +239,10 @@
             {#each cardsIn(s.id) as c (c.id)}
               <button
                 type="button"
-                class="cursor-grab rounded border border-base-300 bg-base-100 p-2 text-left hover:border-primary"
+                class="cursor-grab touch-none select-none rounded border border-base-300 bg-base-100 p-2 text-left hover:border-primary"
                 class:border-primary={selectedId === c.id}
-                draggable="true"
-                ondragstart={() => (dragId = c.id)}
-                onclick={() => (selectedId = c.id)}
+                class:opacity-40={drag?.cardId === c.id}
+                onpointerdown={(e) => onCardPointerDown(e, c.id, s.id)}
               >
                 <div class="truncate text-sm">{c.title || "(untitled)"}</div>
                 {#if Object.keys(c.tags).length > 0}
@@ -312,6 +346,16 @@
   </div>
 
   {#if error}<div class="border-t border-base-300 px-3 py-1.5 text-xs text-error">{error}</div>{/if}
+
+  <!-- Floating preview of the card being dragged, following the cursor. -->
+  {#if drag}
+    <div
+      class="pointer-events-none fixed z-50 max-w-56 truncate rounded border border-primary bg-base-100 px-2 py-1 text-sm shadow-lg"
+      style="left: {dragPos.x + 12}px; top: {dragPos.y + 12}px;"
+    >
+      {cardTitle.get(drag.cardId) ?? "(untitled)"}
+    </div>
+  {/if}
 
   <!-- Reason-required move modal -->
   <div class="modal" class:modal-open={pending !== null} role="dialog" aria-modal="true">
