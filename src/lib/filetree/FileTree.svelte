@@ -3,6 +3,7 @@
   import { fileTreeBindings } from "./bindings.ts";
   import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
   import { openDiff, openEditor } from "../store.ts";
+  import { fileTreeContext, shortcuts } from "./shortcuts.ts";
 
   let { cwd, viewId }: { title: string; cwd?: string; viewId?: string; tabId?: string } = $props();
 
@@ -10,7 +11,13 @@
   let cursor = $state(0);
   let unavailable = $state(false);
   let focused = $state(false);
-  let pendingG = false;
+  let pendingG = $state(false);
+  let showHelp = $state(false);
+
+  // Surface this tree's focus/chord state to the status bar so it can reveal the tree's
+  // key hints. Only the focused tree ever flips `focused` true, so the shared store tracks
+  // whichever tree the keyboard is actually driving.
+  $effect(() => fileTreeContext.set({ focused, pendingG }));
 
   // Git change highlighting. `changedFiles` maps each changed file path to its untracked
   // flag (to color the file); `dirtyDirs` holds every folder that contains a change.
@@ -123,6 +130,18 @@
   }
 
   async function onKey(ev: KeyboardEvent) {
+    // Help toggles independently of tree contents so it works even on an empty tree.
+    if (ev.key === "?") {
+      showHelp = !showHelp;
+      ev.preventDefault();
+      return;
+    }
+    if (ev.key === "Escape" && showHelp) {
+      showHelp = false;
+      ev.preventDefault();
+      return;
+    }
+
     if (unavailable || rows.length === 0) return;
     const key = ev.key;
     const wasG = pendingG;
@@ -179,15 +198,19 @@
   }
 </script>
 
+<div class="relative h-full min-w-0 w-full">
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-  class="h-full min-w-0 w-full overflow-auto font-mono text-sm outline-none"
+  class="h-full w-full overflow-auto font-mono text-sm outline-none"
   tabindex="0"
   role="tree"
   aria-label="File tree"
   onkeydown={onKey}
   onfocusin={() => (focused = true)}
-  onfocusout={() => (focused = false)}
+  onfocusout={() => {
+    focused = false;
+    showHelp = false;
+  }}
 >
   {#if unavailable}
     <div class="p-2 opacity-60">File tree unavailable — run the desktop app.</div>
@@ -219,5 +242,23 @@
         {#if row.node.isSymlink}<span class="flex-none pl-1 opacity-60">↩</span>{/if}
       </div>
     {/each}
+  {/if}
+</div>
+
+  {#if showHelp}
+    <div
+      class="absolute inset-x-2 bottom-2 rounded border border-base-300 bg-base-200 p-2 text-xs shadow-lg"
+    >
+      <div class="mb-1 font-semibold uppercase tracking-wide opacity-60">Shortcuts</div>
+      {#each shortcuts as { keys, label } (label)}
+        <div class="flex items-center justify-between gap-3 py-0.5">
+          <span class="flex items-center gap-1">
+            <!-- unkeyed: a shortcut's keys can repeat (e.g. "g g"), so key values aren't unique -->
+            {#each keys as k}<kbd class="kbd kbd-xs">{k}</kbd>{/each}
+          </span>
+          <span class="opacity-70">{label}</span>
+        </div>
+      {/each}
+    </div>
   {/if}
 </div>
