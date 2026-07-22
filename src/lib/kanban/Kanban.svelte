@@ -60,7 +60,10 @@
   async function addCard(statusId: string): Promise<void> {
     if (!b || !workspaceId) return;
     try {
-      const { id } = await b.kanbanCreateCard({ workspaceId, statusId, title: "New card" });
+      // Number the default title so new cards are distinguishable in the board and
+      // in the parent/predecessor dropdowns until the user renames them.
+      const title = `New card ${board.cards.length + 1}`;
+      const { id } = await b.kanbanCreateCard({ workspaceId, statusId, title });
       await refresh();
       selectedId = id;
     } catch (e) {
@@ -71,6 +74,21 @@
   // Card detail drawer.
   let selectedId = $state<string | null>(null);
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
+
+  // A card can't be parented under itself or any of its descendants (that would make
+  // a cycle), so those are excluded from the parent dropdown; the backend rejects it
+  // too, as the authority. Derived from the current parent edges.
+  const invalidParents = $derived.by(() => {
+    const out = new Set<string>();
+    if (!selected) return out;
+    const stack = [selected.id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      out.add(cur);
+      for (const c of board.cards) if (c.parentId === cur && !out.has(c.id)) stack.push(c.id);
+    }
+    return out;
+  });
 
   async function saveMetadata(): Promise<void> {
     if (!b || !workspaceId || !selected) return;
@@ -101,6 +119,7 @@
       await refresh();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      await refresh(); // resync so a rejected edit (e.g. a cycle) doesn't linger in the UI
     }
   }
 
@@ -216,7 +235,7 @@
         <label class="text-xs opacity-70" for="k-parent">Parent</label>
         <select id="k-parent" class="select select-bordered select-sm" bind:value={selected.parentId} onchange={saveConnections}>
           <option value={null}>— none —</option>
-          {#each board.cards.filter((c) => c.id !== selected.id) as c (c.id)}
+          {#each board.cards.filter((c) => !invalidParents.has(c.id)) as c (c.id)}
             <option value={c.id}>{c.title || "(untitled)"}</option>
           {/each}
         </select>

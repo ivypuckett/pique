@@ -236,6 +236,19 @@ export function openBoard(
     },
 
     setConnections({ cardId, artifacts, predecessors, successors, parentId, actor }) {
+      // Reject a parent that would make the card its own ancestor (self-parent or a
+      // cycle). Checked before any write so a rejected edit leaves the card untouched.
+      if (parentId !== undefined && parentId !== null) {
+        if (parentId === cardId) throw new Error("a card cannot be its own parent");
+        const seen = new Set<string>();
+        let cur: string | null = parentId;
+        while (cur) {
+          if (cur === cardId) throw new Error("cannot set parent: would create a cycle");
+          if (seen.has(cur)) break; // guard against a pre-existing cycle in the data
+          seen.add(cur);
+          cur = (getRaw(cur)?.parent_id) ?? null;
+        }
+      }
       const prev = getRaw(cardId);
       if (artifacts !== undefined) {
         db.prepare("UPDATE cards SET artifacts = ? WHERE id = ?").run(

@@ -112,6 +112,24 @@ Deno.test("setConnections updates artifacts and parent", () => {
   b.close();
 });
 
+Deno.test("setConnections rejects self-parenting", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
+  assertThrows(() => b.setConnections({ cardId: a, parentId: a, actor: "human" }));
+  b.close();
+});
+
+Deno.test("setConnections rejects a parent cycle", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
+  const bId = b.createCard({ statusId: status("Todo"), actor: "human" });
+  b.setConnections({ cardId: bId, parentId: a, actor: "human" }); // b's parent = a
+  // Making a's parent = b would form a 2-cycle (a↔b); reject it.
+  assertThrows(() => b.setConnections({ cardId: a, parentId: bId, actor: "human" }));
+  assertEquals(card(b, a).parentId, null); // unchanged after the rejected write
+  b.close();
+});
+
 Deno.test("deleteCard nulls children's parent and prunes predecessor refs", () => {
   const { b, status } = fresh();
   const parent = b.createCard({ statusId: status("Todo"), actor: "human" });
