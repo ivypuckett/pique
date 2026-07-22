@@ -5,13 +5,13 @@
 import { DatabaseSync } from "node:sqlite";
 import { SCHEMA } from "./schema.ts";
 
-export interface StatusRow {
+export type StatusRow = {
   id: string;
   name: string;
   position: number;
 }
 
-export interface CardRow {
+export type CardRow = {
   id: string;
   statusId: string;
   position: number;
@@ -26,14 +26,14 @@ export interface CardRow {
   children: string[]; // cards whose parent_id is this card
 }
 
-export interface Board {
+export type Board = {
   statuses: StatusRow[];
   cards: CardRow[];
 }
 
 export type Actor = "human" | "agent";
 
-export interface LogRow {
+export type LogRow = {
   id: string;
   cardId: string;
   ts: number;

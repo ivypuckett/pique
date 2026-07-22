@@ -23,6 +23,7 @@ let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
+let kanban: typeof import("./lib/kanban/service.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
@@ -215,7 +216,92 @@ win.bind("gitChanges", async (arg) => {
   return { changes: await git.changedPaths(root, settings.resolveGitScanDepth(cfg)) };
 });
 
-win.addEventListener("close", () => term?.killAllSessions());
+// Kanban: each workspace has its own board DB; the service caches an open handle
+// per workspace id, seeding a fresh board from settings.kanban.defaultStatuses.
+// All mutations on this path are the human UI, so actor is "human".
+async function kanbanBoard(workspaceId: string) {
+  return await kanban.board(workspaceId, await settings.readJson("settings"));
+}
+
+win.bind("kanbanGetBoard", async (arg) => {
+  const { workspaceId } = arg as { workspaceId: string };
+  return (await kanbanBoard(workspaceId)).getBoard();
+});
+
+win.bind("kanbanGetLogs", async (arg) => {
+  const { workspaceId, cardId } = arg as { workspaceId: string; cardId?: string };
+  return (await kanbanBoard(workspaceId)).getLogs(cardId);
+});
+
+win.bind("kanbanCreateCard", async (arg) => {
+  const { workspaceId, statusId, title, description } = arg as {
+    workspaceId: string;
+    statusId: string;
+    title?: string;
+    description?: string;
+  };
+  const id = (await kanbanBoard(workspaceId)).createCard({
+    statusId,
+    title,
+    description,
+    actor: "human",
+  });
+  return { id };
+});
+
+win.bind("kanbanDeleteCard", async (arg) => {
+  const { workspaceId, cardId } = arg as { workspaceId: string; cardId: string };
+  (await kanbanBoard(workspaceId)).deleteCard(cardId);
+  return true;
+});
+
+win.bind("kanbanSetStatus", async (arg) => {
+  const { workspaceId, cardId, statusId, reason } = arg as {
+    workspaceId: string;
+    cardId: string;
+    statusId: string;
+    reason: string;
+  };
+  (await kanbanBoard(workspaceId)).setStatus({ cardId, statusId, reason, actor: "human" });
+  return true;
+});
+
+win.bind("kanbanSetMetadata", async (arg) => {
+  const { workspaceId, cardId, title, description, tags } = arg as {
+    workspaceId: string;
+    cardId: string;
+    title?: string;
+    description?: string;
+    tags?: Record<string, string>;
+  };
+  (await kanbanBoard(workspaceId)).setMetadata({ cardId, title, description, tags, actor: "human" });
+  return true;
+});
+
+win.bind("kanbanSetConnections", async (arg) => {
+  const { workspaceId, cardId, artifacts, predecessors, successors, parentId } = arg as {
+    workspaceId: string;
+    cardId: string;
+    artifacts?: string[];
+    predecessors?: string[];
+    successors?: string[];
+    parentId?: string | null;
+  };
+  (await kanbanBoard(workspaceId)).setConnections({
+    cardId,
+    artifacts,
+    predecessors,
+    successors,
+    parentId,
+    actor: "human",
+  });
+  return true;
+});
+
+win.addEventListener("close", () => {
+  term?.killAllSessions();
+  kanban?.closeAllBoards();
+});
 
 // Bindings are attached; now load deps and serve the static Vite build.
 // deno desktop auto-navigates the adopted window to the served address.
@@ -227,5 +313,6 @@ settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
+kanban = await import("./lib/kanban/service.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
