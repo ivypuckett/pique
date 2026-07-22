@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { barHints, fileTreeContext, gChordHints } from "./filetree/shortcuts.ts";
-
   type ChordMode = "view" | "workspace";
   let { chordMode = null }: { chordMode?: ChordMode | null } = $props();
 
@@ -60,20 +58,5 @@
       <kbd class="kbd kbd-xs">{mod},</kbd>
       <span class="opacity-70">settings</span>
     </span>
-
-    <!-- Tree hints: appended (never replacing the global keys) while the file tree holds
-         focus. While its `g` chord is armed, reveal the chord's follow-ups instead. -->
-    {#if $fileTreeContext.focused}
-      <span class="hidden h-4 w-px bg-base-content/20 @[560px]:block"></span>
-      <span class="hidden items-center gap-4 @[560px]:flex">
-        <span class="text-[0.65rem] uppercase tracking-wide opacity-50">tree</span>
-        {#each $fileTreeContext.pendingG ? gChordHints : barHints as { keys, label } (label)}
-          <span class="flex items-center gap-1">
-            {#each keys as k}<kbd class="kbd kbd-xs">{k}</kbd>{/each}
-            <span class="opacity-70">{label}</span>
-          </span>
-        {/each}
-      </span>
-    {/if}
   {/if}
 </footer>

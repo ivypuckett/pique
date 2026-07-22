@@ -1,8 +1,6 @@
-import { writable } from "svelte/store";
-
-// Single source for the file tree's key bindings, shared by its two hint surfaces so they
-// can't drift apart: the in-tree `?` overlay renders `shortcuts` in full, and the status
-// bar renders the compact `barHints` subset. Keep both in this file when bindings change.
+// Single source for the file tree's key bindings, so its two hint surfaces can't drift
+// apart: the in-tree `?` overlay renders `shortcuts` in full, and the tree footer shows
+// `gChordHints` while the `g` chord is armed. Keep both in sync when bindings change.
 
 export type Shortcut = { keys: string[]; label: string };
 
@@ -19,23 +17,8 @@ export const shortcuts: Shortcut[] = [
   { keys: ["?"], label: "toggle this help" },
 ];
 
-// Compact subset for the status bar — the highest-traffic keys plus a pointer to `?`.
-export const barHints: Shortcut[] = [
-  { keys: ["j", "k"], label: "move" },
-  { keys: ["l", "h"], label: "open / close" },
-  { keys: ["?"], label: "help" },
-];
-
-// Revealed in the bar while the `g` chord is armed, mirroring how an armed ctrl-chord
-// shows its sub-keys.
+// Shown in the tree footer while the `g` chord is armed — its two follow-ups.
 export const gChordHints: Shortcut[] = [
   { keys: ["g"], label: "top" },
   { keys: ["d"], label: "diff" },
 ];
-
-// Live UI context the status bar reads so tree hints appear only while the tree is the
-// focused surface. `pendingG` mirrors the tree's armed `g` chord.
-export const fileTreeContext = writable<{ focused: boolean; pendingG: boolean }>({
-  focused: false,
-  pendingG: false,
-});

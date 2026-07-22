@@ -3,7 +3,7 @@
   import { fileTreeBindings } from "./bindings.ts";
   import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
   import { openDiff, openEditor } from "../store.ts";
-  import { fileTreeContext, shortcuts } from "./shortcuts.ts";
+  import { gChordHints, shortcuts } from "./shortcuts.ts";
 
   let { cwd, viewId }: { title: string; cwd?: string; viewId?: string; tabId?: string } = $props();
 
@@ -13,11 +13,6 @@
   let focused = $state(false);
   let pendingG = $state(false);
   let showHelp = $state(false);
-
-  // Surface this tree's focus/chord state to the status bar so it can reveal the tree's
-  // key hints. Only the focused tree ever flips `focused` true, so the shared store tracks
-  // whichever tree the keyboard is actually driving.
-  $effect(() => fileTreeContext.set({ focused, pendingG }));
 
   // Git change highlighting. `changedFiles` maps each changed file path to its untracked
   // flag (to color the file); `dirtyDirs` holds every folder that contains a change.
@@ -198,10 +193,10 @@
   }
 </script>
 
-<div class="relative h-full min-w-0 w-full">
+<div class="relative flex h-full min-w-0 w-full flex-col">
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-  class="h-full w-full overflow-auto font-mono text-sm outline-none"
+  class="min-h-0 w-full flex-1 overflow-auto font-mono text-sm outline-none"
   tabindex="0"
   role="tree"
   aria-label="File tree"
@@ -244,6 +239,25 @@
     {/each}
   {/if}
 </div>
+
+  <!-- Footer: shown only while the tree is focused (keys only act on the focused tree, and
+       `?` only opens then). Advertises the `?` cheatsheet; swaps to the g-chord follow-ups
+       while `g` is armed. Hidden when the overlay is open, since it would sit under it. -->
+  {#if focused && !showHelp}
+    <div class="flex shrink-0 items-center gap-2 border-t border-base-300 px-2 py-1 text-xs">
+      {#if pendingG}
+        {#each gChordHints as { keys, label } (label)}
+          <span class="flex items-center gap-1">
+            {#each keys as k}<kbd class="kbd kbd-xs">{k}</kbd>{/each}
+            <span class="opacity-60">{label}</span>
+          </span>
+        {/each}
+      {:else}
+        <kbd class="kbd kbd-xs">?</kbd>
+        <span class="opacity-60">shortcuts</span>
+      {/if}
+    </div>
+  {/if}
 
   {#if showHelp}
     <div
