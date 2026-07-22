@@ -70,8 +70,8 @@ win.bind("termKill", async (arg) => {
 });
 
 win.bind("chatStart", async (arg) => {
-  const { cwd } = arg as { cwd?: string };
-  return { id: await chat.startAgent({ cwd }) };
+  const { cwd, workspaceId } = arg as { cwd?: string; workspaceId?: string };
+  return { id: await chat.startAgent({ cwd, workspaceId }) };
 });
 
 win.bind("chatPrompt", async (arg) => {

@@ -4,7 +4,8 @@
   import { get } from "svelte/store";
   import { settings } from "../settings/store.ts";
 
-  let { title, cwd }: { title: string; cwd?: string } = $props();
+  let { title, cwd, workspaceId }: { title: string; cwd?: string; workspaceId?: string } =
+    $props();
 
   type Item =
     | { role: "user"; text: string }
@@ -80,7 +81,7 @@
     }
     let alive = true;
     (async () => {
-      const started = await b.chatStart({ cwd });
+      const started = await b.chatStart({ cwd, workspaceId });
       id = started.id;
       // Unmounted while starting: stop the agent and bail (cleanup ran with id unset).
       if (!alive) { b.chatStop({ id }).catch(() => {}); return; }

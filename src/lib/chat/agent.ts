@@ -54,6 +54,7 @@ import {
   // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
 import { piAgentDir, readJson, resolveModuleDir } from "../settings/file.ts";
+import { kanbanTools } from "../kanban/agent-tools.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -102,7 +103,7 @@ export async function ensureRuntime() {
 
 // Start a fresh agent and return its id. `cwd` is the per-workspace override
 // threaded from the frontend; blank/absent falls back to the global default.
-export async function startAgent(opts: { cwd?: string } = {}): Promise<string> {
+export async function startAgent(opts: { cwd?: string; workspaceId?: string } = {}): Promise<string> {
   const modelRuntime = await ensureRuntime();
   // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
   // fall back to the consts when unset or when the persisted model isn't available.
@@ -111,9 +112,15 @@ export async function startAgent(opts: { cwd?: string } = {}): Promise<string> {
   const cwd = resolveModuleDir(opts.cwd, rawSettings);
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
+  // Give the agent the Kanban tools bound to its workspace's board — the same
+  // operations the human UI calls (see kanban/agent-tools.ts), tagged actor "agent".
+  const customTools = opts.workspaceId
+    ? kanbanTools(opts.workspaceId, () => readJson("settings"))
+    : undefined;
   const created = await createAgentSession({
     model,
     cwd,
+    customTools,
     // Load extensions from pique's own dir (~/.pique/agent), separate from the
     // user's `pi` CLI. Safe: auth + models.json still come from ~/.pi/agent via the
     // shared modelRuntime below, and the in-memory sessionManager ignores agentDir.
