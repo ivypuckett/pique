@@ -214,10 +214,27 @@
   const SECTIONS = [
     { id: "appearance", label: "Appearance" },
     { id: "workspace", label: "Workspace" },
+    { id: "kanban", label: "Kanban" },
     { id: "providers", label: "Providers" },
     { id: "extensions", label: "Extensions" },
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
+
+  // Default statuses seeded into each new workspace board (see kanban/board.ts).
+  // Editing here only affects boards created afterward, not existing ones.
+  function addStatus(): void {
+    $settings.kanban.defaultStatuses = [...$settings.kanban.defaultStatuses, { name: "New status" }];
+  }
+  function removeStatus(i: number): void {
+    $settings.kanban.defaultStatuses = $settings.kanban.defaultStatuses.filter((_, j) => j !== i);
+  }
+  function moveStatus(i: number, dir: -1 | 1): void {
+    const next = [...$settings.kanban.defaultStatuses];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    $settings.kanban.defaultStatuses = next;
+  }
 </script>
 
 <svelte:window onkeydown={$settingsOpen ? onWindowKeydown : undefined} />
@@ -305,6 +322,49 @@
           />
         </div>
       </div>
+
+      {/if}
+
+      {#if section === "kanban"}
+      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Kanban</div>
+      <div class="text-sm">Default statuses</div>
+      <div class="mt-0.5 text-xs opacity-70">
+        The columns a new workspace board starts with, in order. Applies to boards
+        created after the change, not existing ones.
+      </div>
+      <ul class="mt-3 flex flex-col gap-2">
+        {#each $settings.kanban.defaultStatuses as _status, i (i)}
+          <li class="flex items-center gap-2">
+            <input
+              class="input input-bordered input-sm flex-1"
+              aria-label={`Status ${i + 1} name`}
+              bind:value={$settings.kanban.defaultStatuses[i].name}
+            />
+            <button
+              type="button"
+              class="btn btn-square btn-ghost btn-sm"
+              aria-label="Move up"
+              disabled={i === 0}
+              onclick={() => moveStatus(i, -1)}
+            >↑</button>
+            <button
+              type="button"
+              class="btn btn-square btn-ghost btn-sm"
+              aria-label="Move down"
+              disabled={i === $settings.kanban.defaultStatuses.length - 1}
+              onclick={() => moveStatus(i, 1)}
+            >↓</button>
+            <button
+              type="button"
+              class="btn btn-square btn-ghost btn-sm"
+              aria-label="Remove status"
+              disabled={$settings.kanban.defaultStatuses.length <= 1}
+              onclick={() => removeStatus(i)}
+            >✕</button>
+          </li>
+        {/each}
+      </ul>
+      <button type="button" class="btn btn-sm mt-3" onclick={addStatus}>Add status</button>
 
       {/if}
 

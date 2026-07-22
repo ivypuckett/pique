@@ -33,6 +33,7 @@
     "npm:daisyui@5": "5.6.18",
     "npm:svelte@5": "5.56.4",
     "npm:tailwindcss@4": "4.3.2",
+    "npm:typebox@1.1.38": "1.1.38",
     "npm:vite@*": "6.4.3",
     "npm:vite@6": "6.4.3"
   },
@@ -1778,6 +1779,7 @@
       "npm:daisyui@5",
       "npm:svelte@5",
       "npm:tailwindcss@4",
+      "npm:typebox@1.1.38",
       "npm:vite@6"
     ]
   }

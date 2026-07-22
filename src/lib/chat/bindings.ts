@@ -9,7 +9,7 @@ export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, Provi
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id.
 export interface ChatBindings {
-  chatStart(arg: { cwd?: string }): Promise<{ id: string }>;
+  chatStart(arg: { cwd?: string; workspaceId?: string }): Promise<{ id: string }>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
   chatRead(arg: { id: string }): Promise<ChatEvent[]>;
   chatAbort(arg: { id: string }): Promise<unknown>;

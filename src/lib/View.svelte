@@ -6,7 +6,10 @@
 
   // cwd: the workspace's working-directory override, threaded down to modules so a
   // freshly spawned terminal/chat starts there. Undefined means "use the default".
-  let { view, cwd }: { view: ViewState; cwd?: string } = $props();
+  // workspaceId: the owning workspace's id, threaded down so a module can address
+  // per-workspace state (e.g. the Kanban board DB).
+  let { view, cwd, workspaceId }: { view: ViewState; cwd?: string; workspaceId?: string } =
+    $props();
 
   let gridEl: HTMLDivElement;
   let leftEl: HTMLElement | undefined = $state();
@@ -27,13 +30,13 @@
   style:grid-template-columns={gridTemplateColumns(view)}
   bind:this={gridEl}
 >
-  <Column viewId={view.id} col={view.left} id="left" {cwd} bind:el={leftEl} />
+  <Column viewId={view.id} col={view.left} id="left" {cwd} {workspaceId} bind:el={leftEl} />
   {#if !view.left.collapsed}
     <Splitter onDrag={(x) => onDrag("left-center", x)} />
   {/if}
-  <Column viewId={view.id} col={view.center} id="center" {cwd} bind:el={centerEl} />
+  <Column viewId={view.id} col={view.center} id="center" {cwd} {workspaceId} bind:el={centerEl} />
   {#if !view.right.collapsed}
     <Splitter onDrag={(x) => onDrag("center-right", x)} />
   {/if}
-  <Column viewId={view.id} col={view.right} id="right" {cwd} />
+  <Column viewId={view.id} col={view.right} id="right" {cwd} {workspaceId} />
 </div>

@@ -22,6 +22,7 @@
     "@xterm/addon-fit": "npm:@xterm/addon-fit@^0.11",
     "@std/http": "jsr:@std/http@^1",
     "@earendil-works/pi-coding-agent": "npm:@earendil-works/pi-coding-agent@^0.80",
+    "typebox": "npm:typebox@1.1.38",
     "@git-diff-view/svelte": "npm:@git-diff-view/svelte@^0.1",
     "@git-diff-view/core": "npm:@git-diff-view/core@^0.1"
   },
