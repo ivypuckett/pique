@@ -90,6 +90,25 @@
     return out;
   });
 
+  // Cards eligible to add as a predecessor: not this card, not already a predecessor,
+  // and not a successor (that would be an immediate cycle).
+  const addablePredecessors = $derived.by(() => {
+    if (!selected) return [];
+    const taken = new Set([selected.id, ...selected.predecessors, ...selected.successors]);
+    return board.cards.filter((c) => !taken.has(c.id));
+  });
+
+  function addPredecessor(id: string): void {
+    if (!selected || !id || selected.predecessors.includes(id)) return;
+    selected.predecessors = [...selected.predecessors, id];
+    saveConnections();
+  }
+  function removePredecessor(id: string): void {
+    if (!selected) return;
+    selected.predecessors = selected.predecessors.filter((p) => p !== id);
+    saveConnections();
+  }
+
   async function saveMetadata(): Promise<void> {
     if (!b || !workspaceId || !selected) return;
     try {
@@ -244,16 +263,48 @@
           <div class="text-xs opacity-70">Children: {selected.children.map((id) => cardTitle.get(id)).join(", ")}</div>
         {/if}
 
-        <label class="text-xs opacity-70" for="k-preds">Predecessors</label>
-        <select id="k-preds" class="select select-bordered select-sm h-24" multiple bind:value={selected.predecessors} onchange={saveConnections}>
-          {#each board.cards.filter((c) => c.id !== selected.id) as c (c.id)}
-            <option value={c.id}>{c.title || "(untitled)"}</option>
-          {/each}
-        </select>
+        <div>
+          <div class="text-xs opacity-70">Predecessors</div>
+          <div class="mt-0.5 text-xs opacity-50">Cards that must be finished before this one.</div>
+          {#if selected.predecessors.length > 0}
+            <div class="mt-1.5 flex flex-wrap gap-1">
+              {#each selected.predecessors as id (id)}
+                <span class="badge badge-outline badge-sm gap-1">
+                  {cardTitle.get(id) ?? id}
+                  <button type="button" class="opacity-60 hover:opacity-100" aria-label="Remove predecessor {cardTitle.get(id) ?? id}" onclick={() => removePredecessor(id)}>✕</button>
+                </span>
+              {/each}
+            </div>
+          {:else}
+            <div class="mt-1.5 text-xs opacity-40">None</div>
+          {/if}
+          {#if addablePredecessors.length > 0}
+            <select
+              class="select select-bordered select-sm mt-1.5 w-full"
+              aria-label="Add predecessor"
+              onchange={(e) => { addPredecessor(e.currentTarget.value); e.currentTarget.value = ""; }}
+            >
+              <option value="">+ Add predecessor…</option>
+              {#each addablePredecessors as c (c.id)}
+                <option value={c.id}>{c.title || "(untitled)"}</option>
+              {/each}
+            </select>
+          {/if}
+        </div>
 
-        {#if selected.successors.length > 0}
-          <div class="text-xs opacity-70">Successors: {selected.successors.map((id) => cardTitle.get(id)).join(", ")}</div>
-        {/if}
+        <div>
+          <div class="text-xs opacity-70">Successors <span class="opacity-50">· automatic</span></div>
+          <div class="mt-0.5 text-xs opacity-50">Cards that list this one as a predecessor.</div>
+          {#if selected.successors.length > 0}
+            <div class="mt-1.5 flex flex-wrap gap-1">
+              {#each selected.successors as id (id)}
+                <span class="badge badge-ghost badge-sm">{cardTitle.get(id) ?? id}</span>
+              {/each}
+            </div>
+          {:else}
+            <div class="mt-1.5 text-xs opacity-40">None</div>
+          {/if}
+        </div>
 
         <button type="button" class="btn btn-ghost btn-xs mt-2 text-error" onclick={removeCard}>Delete card</button>
       </div>
