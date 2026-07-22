@@ -18,6 +18,9 @@ export interface Settings {
   // workspace root is not itself a repo, to highlight changed folders. Absent → the
   // resolveGitScanDepth default (see settings/file.ts).
   workspace: { defaultDir?: string; gitScanDepth?: number };
+  // Statuses a fresh per-workspace board is seeded with (see kanban/board.ts). Ids
+  // are assigned at seed time, so only names are configured here.
+  kanban: { defaultStatuses: { name: string }[] };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +30,9 @@ export const DEFAULT_SETTINGS: Settings = {
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3 },
+  kanban: {
+    defaultStatuses: [{ name: "Backlog" }, { name: "Todo" }, { name: "In Progress" }, { name: "Done" }],
+  },
 };
 
 interface ConfigBindings {

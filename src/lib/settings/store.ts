@@ -24,18 +24,23 @@ export const settings = writable<Settings>(DEFAULT_SETTINGS);
 // write back (and a pre-hydrate default must not clobber the file before we read).
 let hydrated = false;
 
+// Per-section merge so a stored file missing a later-added field still picks up
+// its default, rather than a shallow spread dropping the whole section. Pure, so
+// the merge is unit-testable without the async hydrate.
+export function mergeSettings(raw: Partial<Settings>): Settings {
+  return {
+    version: DEFAULT_SETTINGS.version,
+    appearance: { ...DEFAULT_SETTINGS.appearance, ...raw.appearance },
+    chat: { ...DEFAULT_SETTINGS.chat, ...raw.chat },
+    workspace: { ...DEFAULT_SETTINGS.workspace, ...raw.workspace },
+    kanban: { ...DEFAULT_SETTINGS.kanban, ...raw.kanban },
+  };
+}
+
 export async function hydrateSettings(): Promise<void> {
   const raw = await readConfig("settings");
   if (raw && typeof raw === "object") {
-    // Per-section merge so a stored file missing a later-added field still picks
-    // up its default, rather than a shallow spread dropping the whole section.
-    const r = raw as Partial<Settings>;
-    settings.set({
-      version: DEFAULT_SETTINGS.version,
-      appearance: { ...DEFAULT_SETTINGS.appearance, ...r.appearance },
-      chat: { ...DEFAULT_SETTINGS.chat, ...r.chat },
-      workspace: { ...DEFAULT_SETTINGS.workspace, ...r.workspace },
-    });
+    settings.set(mergeSettings(raw as Partial<Settings>));
   }
   hydrated = true;
 }
