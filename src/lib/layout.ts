@@ -66,7 +66,9 @@ export function visibleIds(v: ViewState): ColumnId[] {
   return ALL_IDS.filter((id) => !v[id].collapsed);
 }
 
-export type Boundary = "left-center" | "center-right";
+// Visual order is chat | explorer | popups (center, left, right). "center-left" is the
+// splitter between chat and the explorer; "left-right" the one between explorer and popups.
+export type Boundary = "center-left" | "left-right";
 
 export const SPLITTER_PX = 6;
 export const RAIL_PX = 40;
@@ -76,7 +78,7 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 export function resizeBoundary(v: ViewState, b: Boundary, newFirstPct: number): ViewState {
-  const [a, c]: [ColumnId, ColumnId] = b === "left-center" ? ["left", "center"] : ["center", "right"];
+  const [a, c]: [ColumnId, ColumnId] = b === "center-left" ? ["center", "left"] : ["left", "right"];
   const combined = v[a].widthPct + v[c].widthPct;
   const first = clamp(newFirstPct, MIN_WIDTH_PCT, combined - MIN_WIDTH_PCT);
   return {
@@ -100,10 +102,11 @@ export function resizeRowSplit(v: ViewState, id: SideId, newFirstPct: number): V
 }
 
 export function gridTemplateColumns(v: ViewState): string {
+  // Visual order: chat (center, never collapses) | explorer (left) | popups (right).
   const parts: string[] = [];
-  parts.push(v.left.collapsed ? `${RAIL_PX}px` : `${v.left.widthPct}fr`);
-  if (!v.left.collapsed) parts.push(`${SPLITTER_PX}px`);
   parts.push(`${v.center.widthPct}fr`);
+  if (!v.left.collapsed) parts.push(`${SPLITTER_PX}px`);
+  parts.push(v.left.collapsed ? `${RAIL_PX}px` : `${v.left.widthPct}fr`);
   if (!v.right.collapsed) parts.push(`${SPLITTER_PX}px`);
   parts.push(v.right.collapsed ? `${RAIL_PX}px` : `${v.right.widthPct}fr`);
   return parts.join(" ");

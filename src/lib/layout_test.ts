@@ -41,20 +41,21 @@ Deno.test("center has one row, left has two", () => {
 });
 
 Deno.test("resizeBoundary moves width between two columns, keeps their sum", () => {
-  const v = resizeBoundary(createInitialView(), "left-center", 30);
-  assertEquals(v.left.widthPct, 30);
-  assertEquals(v.center.widthPct, 50); // 80 combined - 30
+  const v = resizeBoundary(createInitialView(), "center-left", 40);
+  assertEquals(v.center.widthPct, 40);
+  assertEquals(v.left.widthPct, 40); // 80 combined - 40
   assertEquals(v.right.widthPct, 20);
 });
 
 Deno.test("resizeBoundary clamps to MIN_WIDTH_PCT", () => {
-  const v = resizeBoundary(createInitialView(), "left-center", 2);
-  assertEquals(v.left.widthPct, MIN_WIDTH_PCT);
-  assertEquals(v.center.widthPct, 80 - MIN_WIDTH_PCT);
+  const v = resizeBoundary(createInitialView(), "center-left", 2);
+  assertEquals(v.center.widthPct, MIN_WIDTH_PCT);
+  assertEquals(v.left.widthPct, 80 - MIN_WIDTH_PCT);
 });
 
 Deno.test("gridTemplateColumns lists fr tracks and splitters when all visible", () => {
-  assertEquals(gridTemplateColumns(createInitialView()), "20fr 6px 60fr 6px 20fr");
+  // Visual order: chat (center) | explorer (left) | popups (right).
+  assertEquals(gridTemplateColumns(createInitialView()), "60fr 6px 20fr 6px 20fr");
 });
 
 Deno.test("fixedPx counts two splitters when all visible", () => {

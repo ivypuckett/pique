@@ -16,7 +16,9 @@
   let centerEl: HTMLElement | undefined = $state();
 
   function onDrag(b: Boundary, clientX: number) {
-    const firstEl = b === "left-center" ? leftEl : centerEl;
+    // firstEl is the visually-left column of the splitter: chat for center-left,
+    // the explorer for left-right.
+    const firstEl = b === "center-left" ? centerEl : leftEl;
     if (!firstEl || !gridEl) return;
     const flexPx = gridEl.clientWidth - fixedPx(view);
     if (flexPx <= 0) return;
@@ -30,13 +32,13 @@
   style:grid-template-columns={gridTemplateColumns(view)}
   bind:this={gridEl}
 >
-  <Column viewId={view.id} col={view.left} id="left" {cwd} {workspaceId} bind:el={leftEl} />
-  {#if !view.left.collapsed}
-    <Splitter onDrag={(x) => onDrag("left-center", x)} />
-  {/if}
   <Column viewId={view.id} col={view.center} id="center" {cwd} {workspaceId} bind:el={centerEl} />
+  {#if !view.left.collapsed}
+    <Splitter onDrag={(x) => onDrag("center-left", x)} />
+  {/if}
+  <Column viewId={view.id} col={view.left} id="left" {cwd} {workspaceId} bind:el={leftEl} />
   {#if !view.right.collapsed}
-    <Splitter onDrag={(x) => onDrag("center-right", x)} />
+    <Splitter onDrag={(x) => onDrag("left-right", x)} />
   {/if}
   <Column viewId={view.id} col={view.right} id="right" {cwd} {workspaceId} />
 </div>
