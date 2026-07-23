@@ -153,10 +153,11 @@ Deno.test("closeTab removes a tab", () => {
   assertEquals(v.right.rows.map((r) => r.id), ["right-1"]);
 });
 
-Deno.test("closeTab is a no-op when only one tab remains", () => {
+Deno.test("closeTab closes the last tab, emptying the column", () => {
   const v = createInitialView();
-  assertEquals(closeTab(v, "right-1").right.rows.length, 1);
-  assertEquals(closeTab(v, "right-1").right.activeTabId, "right-1");
+  const closed = closeTab(v, "right-1");
+  assertEquals(closed.right.rows.length, 0);
+  assertEquals(closed.right.activeTabId, "");
 });
 
 Deno.test("closeTab activates the previous tab when the active one is closed", () => {
@@ -189,10 +190,11 @@ Deno.test("isViewState accepts a real view and rejects malformed shapes", () => 
   // missing a column
   const { right: _right, ...missingRight } = createInitialView();
   assertEquals(isViewState(missingRight), false);
-  // a column with an empty rows array (collapsed rail reads rows[0])
-  const noRows = createInitialView();
-  noRows.left.rows = [];
-  assertEquals(isViewState(noRows), false);
+  // the right (tab) column is valid with zero tabs — closing every tab empties it
+  const noTabs = createInitialView();
+  noTabs.right.rows = [];
+  noTabs.right.activeTabId = "";
+  assertEquals(isViewState(noTabs), true);
 });
 
 Deno.test("addEditorTab adds an active right-column terminal tab titled with the basename", () => {
