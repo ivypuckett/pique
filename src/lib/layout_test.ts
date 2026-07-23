@@ -67,14 +67,14 @@ Deno.test("gridTemplateColumns lists chat, splitter and the pane when open", () 
   assertEquals(gridTemplateColumns(createInitialView()), "60fr 6px 40fr");
 });
 
-Deno.test("gridTemplateColumns shows a rail for the collapsed pane", () => {
+Deno.test("gridTemplateColumns gives the collapsed pane no space", () => {
   const v = toggleCollapse(createInitialView(), "right");
-  assertEquals(gridTemplateColumns(v), "100fr 40px");
+  assertEquals(gridTemplateColumns(v), "100fr");
 });
 
-Deno.test("fixedPx counts the pane splitter when open, the rail when collapsed", () => {
+Deno.test("fixedPx counts the pane splitter when open, nothing when collapsed", () => {
   assertEquals(fixedPx(createInitialView()), 6);
-  assertEquals(fixedPx(toggleCollapse(createInitialView(), "right")), 40);
+  assertEquals(fixedPx(toggleCollapse(createInitialView(), "right")), 0);
 });
 
 Deno.test("collapsing the pane hands its width to chat and remembers it", () => {

@@ -28,19 +28,7 @@
   }
 </script>
 
-{#if col.collapsed}
-  <div
-    class="flex flex-col items-center gap-1 bg-base-200 pt-2"
-    bind:this={el}
-  >
-    <button
-      class="btn btn-ghost btn-xs"
-      aria-label="Expand {id} column"
-      onclick={() => toggleCollapse(viewId, "right")}
-    >»</button>
-    <span class="mt-1 [writing-mode:vertical-rl] text-xs opacity-60">{col.rows[0].title}</span>
-  </div>
-{:else if id === "center"}
+{#if id === "center"}
   <!-- Center is always the chat pane: a single fixed module, no tab strip. Rendered
        independently of col.rows so a stale/empty persisted center can't blank it out. -->
   {@const Chat = registry["chat"]}

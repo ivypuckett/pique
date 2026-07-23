@@ -63,7 +63,6 @@ export function visibleIds(v: ViewState): ColumnId[] {
 export type Boundary = "center-right" | "explorer-tabs";
 
 export const SPLITTER_PX = 6;
-export const RAIL_PX = 40;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -85,16 +84,15 @@ export function resizeBoundary(v: ViewState, b: Boundary, newFirstPct: number): 
 }
 
 export function fixedPx(v: ViewState): number {
-  // Outer row: the pane contributes one splitter when open, one rail when collapsed.
-  return v.right.collapsed ? RAIL_PX : SPLITTER_PX;
+  // Outer row: the pane contributes one splitter when open, nothing when collapsed.
+  return v.right.collapsed ? 0 : SPLITTER_PX;
 }
 
 export function gridTemplateColumns(v: ViewState): string {
-  // Visual order: chat (center, never collapses) | the pane (right).
-  const parts: string[] = [`${v.center.widthPct}fr`];
-  if (v.right.collapsed) parts.push(`${RAIL_PX}px`);
-  else parts.push(`${SPLITTER_PX}px`, `${v.right.widthPct}fr`);
-  return parts.join(" ");
+  // Visual order: chat (center, never collapses) | the pane (right). A collapsed pane
+  // takes no space at all — chat has absorbed its width.
+  if (v.right.collapsed) return `${v.center.widthPct}fr`;
+  return `${v.center.widthPct}fr ${SPLITTER_PX}px ${v.right.widthPct}fr`;
 }
 
 // Collapse/expand use "prior width" semantics: savedWidthPct records the pane's width the

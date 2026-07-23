@@ -32,13 +32,13 @@
   <Column viewId={view.id} col={view.center} id="center" {cwd} {workspaceId} bind:el={centerEl} />
   {#if !view.right.collapsed}
     <Splitter onDrag={onDrag} />
+    <Column
+      viewId={view.id}
+      col={view.right}
+      id="right"
+      explorer={view.explorer}
+      {cwd}
+      {workspaceId}
+    />
   {/if}
-  <Column
-    viewId={view.id}
-    col={view.right}
-    id="right"
-    explorer={view.explorer}
-    {cwd}
-    {workspaceId}
-  />
 </div>

@@ -19,11 +19,10 @@
   }
 </script>
 
+<!-- The track is a transparent drag hit-area (SPLITTER_PX wide); the visible divider is a
+     1px line centred in it, matching the static workspace-rail border (border-base-300). -->
 <div
-  class="bg-base-300 transition-colors hover:bg-primary {axis === 'x'
-    ? 'cursor-col-resize'
-    : 'cursor-row-resize'}"
-  class:bg-primary={dragging}
+  class="group relative {axis === 'x' ? 'cursor-col-resize' : 'cursor-row-resize'}"
   role="separator"
   aria-orientation={axis === "x" ? "vertical" : "horizontal"}
   tabindex="-1"
@@ -31,4 +30,12 @@
   onpointermove={move}
   onpointerup={up}
   onpointercancel={up}
-></div>
+>
+  <div
+    class="pointer-events-none absolute bg-base-300 transition-colors group-hover:bg-primary {axis ===
+    'x'
+      ? 'inset-y-0 left-1/2 w-px -translate-x-1/2'
+      : 'inset-x-0 top-1/2 h-px -translate-y-1/2'}"
+    class:bg-primary={dragging}
+  ></div>
+</div>
