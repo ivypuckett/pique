@@ -8,6 +8,7 @@ import {
   addEditorTab as addEditorTabFn,
   resizeBoundary as resize,
   setActiveTab as setActiveTabFn,
+  setExplorerHidden as setExplorerHiddenFn,
   type SideId,
   toggleCollapse as collapseFn,
   type ViewState,
@@ -36,6 +37,10 @@ import { readConfig, writeConfig } from "./settings/bindings.ts";
 // The layout tree persists to ~/.pique/layout.json (moved off localStorage — old
 // clients just lose their stored layout, no migration; the app isn't distributed).
 export const session = writable<SessionState>(createInitialSession());
+
+// Whether the workspace rail is hidden (ctrl+b). A transient UI preference, not part of
+// the persisted session — it resets to visible on reload.
+export const workspaceRailHidden = writable(false);
 
 // Async hydrate from disk: the store renders defaults first, then this swaps in the
 // persisted tree once the config read resolves. Call once at startup (main.ts).
@@ -87,6 +92,10 @@ export function resizeBoundary(viewId: string, b: Boundary, newFirstPct: number)
 
 export function toggleCollapse(viewId: string, id: SideId): void {
   edit(viewId, (v) => collapseFn(v, id));
+}
+
+export function setExplorerHidden(viewId: string, hidden: boolean): void {
+  edit(viewId, (v) => setExplorerHiddenFn(v, hidden));
 }
 
 export function addTab(viewId: string, kind: string): void {

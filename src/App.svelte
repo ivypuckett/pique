@@ -16,7 +16,9 @@
     closeWorkspace,
     focusAdjacent,
     focusAdjacentWorkspace,
+    setExplorerHidden,
     toggleCollapse,
+    workspaceRailHidden,
   } from "./lib/store.ts";
   import { pickDirectory } from "./lib/settings/bindings.ts";
 
@@ -48,20 +50,44 @@
     chordMode = null;
   }
 
-  // ctrl+e: focus the file tree in the presented view's left column. When that column is
-  // collapsed the tree isn't rendered, so expand it first and focus after the DOM updates.
-  async function focusFileTree() {
-    const view = get(activeView);
-    if (view.left.collapsed) toggleCollapse(view.id, "left");
-    await tick();
-    // Every view stays mounted (hidden ones via display:none), so pick the tree that's
-    // actually visible — offsetParent is null for anything inside a hidden ancestor.
+  // The visible file tree: every view stays mounted (hidden ones via display:none), so
+  // pick the one that's actually on screen — offsetParent is null inside a hidden ancestor.
+  function visibleTree(): HTMLElement | null {
     const trees = document.querySelectorAll<HTMLElement>('[role="tree"][aria-label="File tree"]');
     for (const tree of trees) {
-      if (tree.offsetParent !== null) {
-        tree.focus();
-        break;
-      }
+      if (tree.offsetParent !== null) return tree;
+    }
+    return null;
+  }
+
+  // The presented view's active tab: only its content is on screen (hidden tabs and
+  // background views are display:none, so offsetParent is null).
+  function focusActiveTab() {
+    const panes = document.querySelectorAll<HTMLElement>("[data-tab-content]");
+    for (const pane of panes) {
+      if (pane.offsetParent === null) continue;
+      pane.querySelector<HTMLElement>('textarea, input, [tabindex]:not([tabindex="-1"])')?.focus();
+      return;
+    }
+  }
+
+  // ctrl+e: cycle the explorer. Hidden (or the pane collapsed) → reveal and focus it;
+  // visible but unfocused → focus it; visible and focused → hide it and hand focus to the tab.
+  async function toggleFileTree() {
+    const view = get(activeView);
+    const focused = visibleTree()?.contains(document.activeElement) ?? false;
+
+    if (view.right.collapsed || view.explorer.hidden) {
+      if (view.right.collapsed) toggleCollapse(view.id, "right");
+      if (view.explorer.hidden) setExplorerHidden(view.id, false);
+      await tick();
+      visibleTree()?.focus();
+    } else if (focused) {
+      setExplorerHidden(view.id, true);
+      await tick();
+      focusActiveTab();
+    } else {
+      visibleTree()?.focus();
     }
   }
 
@@ -116,11 +142,12 @@
 
       if (!mod) return;
 
-      // ctrl+b: toggle a side column of the presented view (shift = right).
+      // ctrl+b: hide/show the workspace rail. ctrl+shift+b: collapse/expand the right pane.
       if (e.code === "KeyB") {
         e.preventDefault();
         e.stopPropagation();
-        toggleCollapse(activeId(), e.shiftKey ? "right" : "left");
+        if (e.shiftKey) toggleCollapse(activeId(), "right");
+        else workspaceRailHidden.update((h) => !h);
       }
 
       // ctrl+,: open the settings modal. A plain shortcut, not a chord — it
@@ -131,11 +158,11 @@
         settingsOpen.set(true);
       }
 
-      // ctrl+e: focus the file tree in the left column.
+      // ctrl+e: show/hide/focus the file explorer.
       if (e.code === "KeyE") {
         e.preventDefault();
         e.stopPropagation();
-        focusFileTree();
+        toggleFileTree();
       }
     }
     globalThis.addEventListener("keydown", onKeydown, true);
@@ -144,7 +171,9 @@
 </script>
 
 <div class="flex h-screen w-screen overflow-hidden bg-base-100">
-  <WorkspacePane />
+  {#if !$workspaceRailHidden}
+    <WorkspacePane />
+  {/if}
   <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
     <TopBar />
     <Session />

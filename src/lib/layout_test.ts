@@ -14,15 +14,16 @@ import {
   closeTab,
   isViewState,
   setActiveTab,
+  setExplorerHidden,
   toggleCollapse,
 } from "./layout.ts";
 
-Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
+Deno.test("createInitialView starts at chat 60 / pane 40, explorer half the pane, none collapsed", () => {
   const v = createInitialView();
-  assertEquals(v.left.widthPct, 20);
   assertEquals(v.center.widthPct, 60);
-  assertEquals(v.right.widthPct, 20);
-  assertEquals([v.left.collapsed, v.center.collapsed, v.right.collapsed], [false, false, false]);
+  assertEquals(v.right.widthPct, 40);
+  assertEquals(v.explorer, { widthPct: 50, hidden: false });
+  assertEquals([v.center.collapsed, v.right.collapsed], [false, false]);
 });
 
 Deno.test("visible widths sum to 100", () => {
@@ -31,56 +32,70 @@ Deno.test("visible widths sum to 100", () => {
   assertEquals(sum, 100);
 });
 
-Deno.test("center and left each have one row", () => {
+Deno.test("center and right each have one row", () => {
   const v = createInitialView();
   assertEquals(v.center.rows.length, 1);
-  assertEquals(v.left.rows.length, 1);
+  assertEquals(v.right.rows.length, 1);
 });
 
-Deno.test("resizeBoundary moves width between two columns, keeps their sum", () => {
-  const v = resizeBoundary(createInitialView(), "center-left", 40);
+Deno.test("resizeBoundary moves width between chat and the pane, keeps their sum", () => {
+  const v = resizeBoundary(createInitialView(), "center-right", 40);
   assertEquals(v.center.widthPct, 40);
-  assertEquals(v.left.widthPct, 40); // 80 combined - 40
-  assertEquals(v.right.widthPct, 20);
+  assertEquals(v.right.widthPct, 60); // 100 combined - 40
 });
 
 Deno.test("resizeBoundary clamps to MIN_WIDTH_PCT", () => {
-  const v = resizeBoundary(createInitialView(), "center-left", 2);
+  const v = resizeBoundary(createInitialView(), "center-right", 2);
   assertEquals(v.center.widthPct, MIN_WIDTH_PCT);
-  assertEquals(v.left.widthPct, 80 - MIN_WIDTH_PCT);
+  assertEquals(v.right.widthPct, 100 - MIN_WIDTH_PCT);
 });
 
-Deno.test("gridTemplateColumns lists fr tracks and splitters when all visible", () => {
-  // Visual order: chat (center) | explorer (left) | popups (right).
-  assertEquals(gridTemplateColumns(createInitialView()), "60fr 6px 20fr 6px 20fr");
+Deno.test("resizeBoundary explorer-tabs sets the explorer's share of the pane", () => {
+  const v = resizeBoundary(createInitialView(), "explorer-tabs", 30);
+  assertEquals(v.explorer.widthPct, 30);
+  // clamped to MIN_WIDTH_PCT at the edges
+  assertEquals(resizeBoundary(v, "explorer-tabs", 2).explorer.widthPct, MIN_WIDTH_PCT);
 });
 
-Deno.test("fixedPx counts two splitters when all visible", () => {
-  assertEquals(fixedPx(createInitialView()), 12);
+Deno.test("setExplorerHidden toggles the explorer flag without touching widths", () => {
+  const hidden = setExplorerHidden(createInitialView(), true);
+  assertEquals(hidden.explorer, { widthPct: 50, hidden: true });
+  assertEquals(setExplorerHidden(hidden, false).explorer.hidden, false);
 });
 
-Deno.test("collapsing left redistributes its width, remembers it", () => {
-  const v = toggleCollapse(createInitialView(), "left");
-  assertEquals(v.left.collapsed, true);
-  assertEquals(v.left.widthPct, 0);
-  assertEquals(v.left.savedWidthPct, 20);
-  assertEquals(v.center.widthPct, 75); // 60 + 20*(60/80)
-  assertEquals(v.right.widthPct, 25); // 20 + 20*(20/80)
-  assertEquals(visibleIds(v), ["center", "right"]);
+Deno.test("gridTemplateColumns lists chat, splitter and the pane when open", () => {
+  assertEquals(gridTemplateColumns(createInitialView()), "60fr 6px 40fr");
+});
+
+Deno.test("gridTemplateColumns shows a rail for the collapsed pane", () => {
+  const v = toggleCollapse(createInitialView(), "right");
+  assertEquals(gridTemplateColumns(v), "100fr 40px");
+});
+
+Deno.test("fixedPx counts the pane splitter when open, the rail when collapsed", () => {
+  assertEquals(fixedPx(createInitialView()), 6);
+  assertEquals(fixedPx(toggleCollapse(createInitialView(), "right")), 40);
+});
+
+Deno.test("collapsing the pane hands its width to chat and remembers it", () => {
+  const v = toggleCollapse(createInitialView(), "right");
+  assertEquals(v.right.collapsed, true);
+  assertEquals(v.right.widthPct, 0);
+  assertEquals(v.right.savedWidthPct, 40);
+  assertEquals(v.center.widthPct, 100);
+  assertEquals(visibleIds(v), ["center"]);
 });
 
 Deno.test("expanding restores the original layout", () => {
-  const collapsed = toggleCollapse(createInitialView(), "left");
-  const v = toggleCollapse(collapsed, "left");
-  assertEquals(v.left.collapsed, false);
-  assertEquals(v.left.widthPct, 20);
+  const collapsed = toggleCollapse(createInitialView(), "right");
+  const v = toggleCollapse(collapsed, "right");
+  assertEquals(v.right.collapsed, false);
+  assertEquals(v.right.widthPct, 40);
   assertEquals(v.center.widthPct, 60);
-  assertEquals(v.right.widthPct, 20);
 });
 
 Deno.test("createInitialView sets activeTabId to the first row of each column", () => {
   const v = createInitialView();
-  assertEquals(v.left.activeTabId, "left-1");
   assertEquals(v.center.activeTabId, "center-1");
   assertEquals(v.right.activeTabId, "right-1");
 });

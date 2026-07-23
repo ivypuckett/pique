@@ -3,15 +3,26 @@
   import { type ColumnState, moduleLabel } from "./layout.ts";
   import { registry } from "./modules/registry.ts";
 
-  let { viewId, col, onCollapse }: {
+  let { viewId, col, explorerHidden, onToggleExplorer, onCollapse }: {
     viewId: string;
     col: ColumnState;
+    explorerHidden?: boolean;
+    onToggleExplorer?: () => void;
     onCollapse?: () => void;
   } = $props();
   const kinds = Object.keys(registry);
 </script>
 
 <div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">
+  {#if onToggleExplorer}
+    <button
+      class="btn btn-ghost btn-xs"
+      class:btn-active={!explorerHidden}
+      aria-label="Toggle file explorer"
+      aria-pressed={!explorerHidden}
+      onclick={onToggleExplorer}
+    >◧</button>
+  {/if}
   {#each col.rows as tab (tab.id)}
     <div
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"

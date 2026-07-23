@@ -18,9 +18,8 @@
   }
 </script>
 
-<!-- Fixed-width, full-height rail listing the session's workspaces. Always visible, even
-     at one workspace: a rail that appeared and disappeared would reflow every terminal in
-     the app. -->
+<!-- Fixed-width, full-height rail listing the session's workspaces. Shown at one workspace
+     too (no auto show/hide on count). ctrl+b toggles it; hiding reflows the main area. -->
 <aside class="flex w-45 shrink-0 flex-col gap-1 border-r border-base-300 bg-base-200 p-2">
   <span class="px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">
     Workspaces

@@ -6,6 +6,7 @@
     resetView,
     setWorkspaceDir,
     toggleCollapse,
+    workspaceRailHidden,
   } from "./store.ts";
   import { settings, settingsOpen } from "./settings/store.ts";
   import { pickDirectory } from "./settings/bindings.ts";
@@ -60,21 +61,24 @@
   <div class="flex items-center gap-1">
     <button
       class="btn btn-ghost btn-sm"
-      class:btn-active={!$activeView.left.collapsed}
-      aria-label="Toggle left column"
-      aria-pressed={!$activeView.left.collapsed}
-      onclick={() => toggleCollapse($activeWorkspace.activeId, "left")}
+      class:btn-active={!$workspaceRailHidden}
+      aria-label="Toggle workspaces"
+      aria-pressed={!$workspaceRailHidden}
+      onclick={() => workspaceRailHidden.update((h) => !h)}
     >◧</button>
     <button
       class="btn btn-ghost btn-sm"
       class:btn-active={!$activeView.right.collapsed}
-      aria-label="Toggle right column"
+      aria-label="Toggle right pane"
       aria-pressed={!$activeView.right.collapsed}
       onclick={() => toggleCollapse($activeWorkspace.activeId, "right")}
     >◨</button>
     <button
       class="btn btn-ghost btn-sm"
-      onclick={() => resetView($activeWorkspace.activeId)}
+      onclick={() => {
+        resetView($activeWorkspace.activeId);
+        workspaceRailHidden.set(false); // reset restores every panel, including the rail
+      }}
     >Reset</button>
     <button
       class="btn btn-ghost btn-sm"

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resizeBoundary } from "./store.ts";
-  import { type Boundary, fixedPx, gridTemplateColumns, type ViewState } from "./layout.ts";
+  import { fixedPx, gridTemplateColumns, type ViewState } from "./layout.ts";
   import Column from "./Column.svelte";
   import Splitter from "./Splitter.svelte";
 
@@ -12,18 +12,15 @@
     $props();
 
   let gridEl: HTMLDivElement;
-  let leftEl: HTMLElement | undefined = $state();
   let centerEl: HTMLElement | undefined = $state();
 
-  function onDrag(b: Boundary, clientX: number) {
-    // firstEl is the visually-left column of the splitter: chat for center-left,
-    // the explorer for left-right.
-    const firstEl = b === "center-left" ? centerEl : leftEl;
-    if (!firstEl || !gridEl) return;
+  // The outer splitter sits between chat and the pane; chat is its visually-left column.
+  function onDrag(clientX: number) {
+    if (!centerEl || !gridEl) return;
     const flexPx = gridEl.clientWidth - fixedPx(view);
     if (flexPx <= 0) return;
-    const newFirstPx = clientX - firstEl.getBoundingClientRect().left;
-    resizeBoundary(view.id, b, (newFirstPx / flexPx) * 100);
+    const newFirstPx = clientX - centerEl.getBoundingClientRect().left;
+    resizeBoundary(view.id, "center-right", (newFirstPx / flexPx) * 100);
   }
 </script>
 
@@ -33,12 +30,15 @@
   bind:this={gridEl}
 >
   <Column viewId={view.id} col={view.center} id="center" {cwd} {workspaceId} bind:el={centerEl} />
-  {#if !view.left.collapsed}
-    <Splitter onDrag={(x) => onDrag("center-left", x)} />
-  {/if}
-  <Column viewId={view.id} col={view.left} id="left" {cwd} {workspaceId} bind:el={leftEl} />
   {#if !view.right.collapsed}
-    <Splitter onDrag={(x) => onDrag("left-right", x)} />
+    <Splitter onDrag={onDrag} />
   {/if}
-  <Column viewId={view.id} col={view.right} id="right" {cwd} {workspaceId} />
+  <Column
+    viewId={view.id}
+    col={view.right}
+    id="right"
+    explorer={view.explorer}
+    {cwd}
+    {workspaceId}
+  />
 </div>

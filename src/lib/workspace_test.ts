@@ -73,9 +73,9 @@ Deno.test("focusView is a no-op for an unknown view id", () => {
 
 Deno.test("updateView edits one view by id, leaving others untouched", () => {
   const w = addView(createInitialWorkspace()); // view-1, view-2
-  const next = updateView(w, "view-2", (v) => toggleCollapse(v, "left"));
-  assertEquals(next.views[0].left.collapsed, false);
-  assertEquals(next.views[1].left.collapsed, true);
+  const next = updateView(w, "view-2", (v) => toggleCollapse(v, "right"));
+  assertEquals(next.views[0].right.collapsed, false);
+  assertEquals(next.views[1].right.collapsed, true);
 });
 
 Deno.test("createInitialWorkspace defaults to ws-1 / Workspace 1", () => {

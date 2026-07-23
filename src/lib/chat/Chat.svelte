@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import type { CommandInfo, ThinkingLevel } from "./bindings.ts";
   import { chatSession } from "./store.ts";
 
@@ -7,8 +7,10 @@
     $props();
 
   // The conversation lives in a per-workspace session, so every view's chat pane shows
-  // the same transcript and input. This component is a thin view over it.
-  const session = chatSession(workspaceId, cwd);
+  // the same transcript and input. This component is a thin view over it. workspaceId is
+  // fixed for this instance (the tree is keyed by it) and cwd only seeds a new session,
+  // so we deliberately read both once at creation — untrack tells Svelte that's intended.
+  const session = untrack(() => chatSession(workspaceId, cwd));
   const { items, input, ready, streaming, models, level } = session;
   const commands = session.commands;
 

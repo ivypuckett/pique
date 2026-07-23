@@ -1,5 +1,5 @@
-export type ColumnId = "left" | "center" | "right";
-export type SideId = "left" | "right";
+export type ColumnId = "center" | "right";
+export type SideId = "right";
 
 export interface ModuleRef {
   id: string;
@@ -16,11 +16,19 @@ export interface ColumnState {
   activeTabId: string; // visible right tab; center/left carry it for shape uniformity
 }
 
+// The file explorer is a sticky addon docked at the left edge of the right pane, full
+// height, sharing the pane's width with the tabs. It isn't a tab (never in col.rows);
+// ctrl+e shows/hides/focuses it.
+export interface ExplorerState {
+  widthPct: number; // the explorer's share of the pane's width; the tabs take the rest
+  hidden: boolean;
+}
+
 export interface ViewState {
   id: string; // stable across the view's lifetime; keys the tiled workspace
-  left: ColumnState;
-  center: ColumnState;
-  right: ColumnState;
+  center: ColumnState; // chat
+  right: ColumnState; // the tabbed pane
+  explorer: ExplorerState; // file-tree addon inside the right pane
 }
 
 export const MIN_WIDTH_PCT = 10;
@@ -28,13 +36,6 @@ export const MIN_WIDTH_PCT = 10;
 export function createInitialView(id = "view-1"): ViewState {
   return {
     id,
-    left: {
-      widthPct: 20,
-      collapsed: false,
-      savedWidthPct: 20,
-      activeTabId: "left-1",
-      rows: [{ id: "left-1", title: "Files", kind: "filetree" }],
-    },
     center: {
       widthPct: 60,
       collapsed: false,
@@ -43,24 +44,23 @@ export function createInitialView(id = "view-1"): ViewState {
       rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
     },
     right: {
-      widthPct: 20,
+      widthPct: 40,
       collapsed: false,
-      savedWidthPct: 20,
+      savedWidthPct: 40,
       activeTabId: "right-1",
       rows: [{ id: "right-1", title: "Terminal", kind: "terminal" }],
     },
+    explorer: { widthPct: 50, hidden: false },
   };
 }
 
-const ALL_IDS: ColumnId[] = ["left", "center", "right"];
-
 export function visibleIds(v: ViewState): ColumnId[] {
-  return ALL_IDS.filter((id) => !v[id].collapsed);
+  return v.right.collapsed ? ["center"] : ["center", "right"];
 }
 
-// Visual order is chat | explorer | popups (center, left, right). "center-left" is the
-// splitter between chat and the explorer; "left-right" the one between explorer and popups.
-export type Boundary = "center-left" | "left-right";
+// Visual order is chat | [explorer · tabs]. "center-right" is the outer splitter between
+// chat and the pane; "explorer-tabs" is the inner one between the explorer and the tabs.
+export type Boundary = "center-right" | "explorer-tabs";
 
 export const SPLITTER_PX = 6;
 export const RAIL_PX = 40;
@@ -70,70 +70,59 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 export function resizeBoundary(v: ViewState, b: Boundary, newFirstPct: number): ViewState {
-  const [a, c]: [ColumnId, ColumnId] = b === "center-left" ? ["center", "left"] : ["left", "right"];
-  const combined = v[a].widthPct + v[c].widthPct;
+  if (b === "explorer-tabs") {
+    // The explorer and tabs split the pane's width (their fractions sum to 100).
+    return { ...v, explorer: { ...v.explorer, widthPct: clamp(newFirstPct, MIN_WIDTH_PCT, 100 - MIN_WIDTH_PCT) } };
+  }
+  // center-right: chat vs the pane. The two always fill the row, so their sum is fixed.
+  const combined = v.center.widthPct + v.right.widthPct;
   const first = clamp(newFirstPct, MIN_WIDTH_PCT, combined - MIN_WIDTH_PCT);
   return {
     ...v,
-    [a]: { ...v[a], widthPct: first },
-    [c]: { ...v[c], widthPct: combined - first },
+    center: { ...v.center, widthPct: first },
+    right: { ...v.right, widthPct: combined - first },
   };
 }
 
 export function fixedPx(v: ViewState): number {
-  const splitters = (v.left.collapsed ? 0 : 1) + (v.right.collapsed ? 0 : 1);
-  const rails = (v.left.collapsed ? 1 : 0) + (v.right.collapsed ? 1 : 0);
-  return splitters * SPLITTER_PX + rails * RAIL_PX;
+  // Outer row: the pane contributes one splitter when open, one rail when collapsed.
+  return v.right.collapsed ? RAIL_PX : SPLITTER_PX;
 }
 
 export function gridTemplateColumns(v: ViewState): string {
-  // Visual order: chat (center, never collapses) | explorer (left) | popups (right).
-  const parts: string[] = [];
-  parts.push(`${v.center.widthPct}fr`);
-  if (!v.left.collapsed) parts.push(`${SPLITTER_PX}px`);
-  parts.push(v.left.collapsed ? `${RAIL_PX}px` : `${v.left.widthPct}fr`);
-  if (!v.right.collapsed) parts.push(`${SPLITTER_PX}px`);
-  parts.push(v.right.collapsed ? `${RAIL_PX}px` : `${v.right.widthPct}fr`);
+  // Visual order: chat (center, never collapses) | the pane (right).
+  const parts: string[] = [`${v.center.widthPct}fr`];
+  if (v.right.collapsed) parts.push(`${RAIL_PX}px`);
+  else parts.push(`${SPLITTER_PX}px`, `${v.right.widthPct}fr`);
   return parts.join(" ");
 }
 
-// Collapse/expand use "prior width" semantics: savedWidthPct records a column's
-// width the instant before it collapsed, and expand restores exactly that. A single
-// collapse+expand round-trips perfectly. Interleaving collapses of BOTH side columns
-// does not return to the pristine 20/60/20 — each column faithfully restores its own
-// pre-collapse width, but those widths were already shifted by the earlier collapse.
-// This is intended behavior for the layout-shell milestone (see design spec).
-function collapse(v: ViewState, id: SideId): ViewState {
-  const others = visibleIds(v).filter((x) => x !== id);
-  const freed = v[id].widthPct;
-  const otherSum = others.reduce((s, x) => s + v[x].widthPct, 0);
-  const next: ViewState = {
+// Collapse/expand use "prior width" semantics: savedWidthPct records the pane's width the
+// instant before it collapsed, and expand restores exactly that. Chat absorbs the freed
+// width and gives it back on expand, so a collapse+expand round-trips perfectly.
+function collapse(v: ViewState): ViewState {
+  return {
     ...v,
-    [id]: { ...v[id], collapsed: true, savedWidthPct: freed, widthPct: 0 },
+    center: { ...v.center, widthPct: v.center.widthPct + v.right.widthPct },
+    right: { ...v.right, collapsed: true, savedWidthPct: v.right.widthPct, widthPct: 0 },
   };
-  for (const x of others) {
-    next[x] = { ...v[x], widthPct: v[x].widthPct + freed * (v[x].widthPct / otherSum) };
-  }
-  return next;
 }
 
-function expand(v: ViewState, id: SideId): ViewState {
-  const target = v[id].savedWidthPct;
-  const others = visibleIds(v); // id is still collapsed, so excluded
-  const otherSum = others.reduce((s, x) => s + v[x].widthPct, 0);
-  const factor = (otherSum - target) / otherSum;
-  const next: ViewState = {
+function expand(v: ViewState): ViewState {
+  const target = v.right.savedWidthPct;
+  return {
     ...v,
-    [id]: { ...v[id], collapsed: false, widthPct: target },
+    center: { ...v.center, widthPct: v.center.widthPct - target },
+    right: { ...v.right, collapsed: false, widthPct: target },
   };
-  for (const x of others) {
-    next[x] = { ...v[x], widthPct: v[x].widthPct * factor };
-  }
-  return next;
 }
 
-export function toggleCollapse(v: ViewState, id: SideId): ViewState {
-  return v[id].collapsed ? expand(v, id) : collapse(v, id);
+export function toggleCollapse(v: ViewState, _id: SideId): ViewState {
+  return v.right.collapsed ? expand(v) : collapse(v);
+}
+
+export function setExplorerHidden(v: ViewState, hidden: boolean): ViewState {
+  return { ...v, explorer: { ...v.explorer, hidden } };
 }
 
 // Display label for a module kind, used for new-tab titles and the picker menu.
@@ -226,11 +215,17 @@ function isColumnState(c: unknown): boolean {
     (col.rows.length === 0 || (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId));
 }
 
+function isExplorerState(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const ex = e as Record<string, unknown>;
+  return typeof ex.widthPct === "number" && typeof ex.hidden === "boolean";
+}
+
 // Structural guard for persisted state: rejects valid JSON of the wrong shape so a
 // stale or corrupt localStorage value falls back to defaults instead of crashing render.
 export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
   return typeof obj.id === "string" &&
-    isColumnState(obj.left) && isColumnState(obj.center) && isColumnState(obj.right);
+    isColumnState(obj.center) && isColumnState(obj.right) && isExplorerState(obj.explorer);
 }
