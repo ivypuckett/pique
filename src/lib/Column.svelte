@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { resizeRow, toggleCollapse, toggleRows } from "./store.ts";
-  import { type ColumnId, type ColumnState, type SideId, SPLITTER_PX } from "./layout.ts";
+  import { toggleCollapse } from "./store.ts";
+  import { type ColumnId, type ColumnState, type SideId } from "./layout.ts";
   import ModuleFrame from "./ModuleFrame.svelte";
-  import Splitter from "./Splitter.svelte";
   import TabStrip from "./TabStrip.svelte";
   import { registry } from "./modules/registry.ts";
 
@@ -16,14 +15,6 @@
   } = $props();
 
   const sideId = $derived(id as SideId);
-
-  function onRowDrag(clientY: number) {
-    if (!el) return;
-    const flexPx = el.clientHeight - SPLITTER_PX;
-    if (flexPx <= 0) return;
-    const firstPx = clientY - el.getBoundingClientRect().top;
-    resizeRow(viewId, sideId, (firstPx / flexPx) * 100);
-  }
 </script>
 
 {#if col.collapsed}
@@ -73,43 +64,27 @@
     </div>
   </div>
 {:else}
-  <div
-    class="grid h-full min-w-0"
-    style:grid-template-rows={col.rows.length === 2
-      ? `${col.rowSplitPct}fr ${SPLITTER_PX}px ${100 - col.rowSplitPct}fr`
-      : "1fr"}
-    bind:this={el}
-  >
-    {#each col.rows as row, i (row.id)}
-      {#if i === 1}
-        <Splitter axis="y" onDrag={onRowDrag} />
-      {/if}
-      {@const Module = registry[row.kind]}
-      <div class="min-h-0 min-w-0">
-        <ModuleFrame title={row.title}>
-          {#snippet actions()}
-            {#if i === 0}
-              <button
-                class="btn btn-ghost btn-xs"
-                aria-label={col.rows.length === 2 ? "Remove second row" : "Add second row"}
-                onclick={() => toggleRows(viewId, sideId)}
-              >{col.rows.length === 2 ? "−" : "+"}</button>
-              <button
-                class="btn btn-ghost btn-xs"
-                aria-label="Collapse {id} column"
-                onclick={() => toggleCollapse(viewId, sideId)}
-              >«</button>
-            {/if}
-          {/snippet}
-          {#if Module}
-            <Module title={row.title} {cwd} {workspaceId} {viewId} tabId={row.id} {...row.props} />
-          {:else}
-            <div class="text-sm opacity-60">
-              Unknown module: <span class="font-mono">{row.kind}</span>
-            </div>
-          {/if}
-        </ModuleFrame>
-      </div>
-    {/each}
+  <!-- Left column: a single module with a collapse control. -->
+  {@const row = col.rows[0]}
+  {@const Module = registry[row.kind]}
+  <div class="flex h-full min-w-0 flex-col" bind:this={el}>
+    <div class="min-h-0 min-w-0 flex-1">
+      <ModuleFrame title={row.title}>
+        {#snippet actions()}
+          <button
+            class="btn btn-ghost btn-xs"
+            aria-label="Collapse {id} column"
+            onclick={() => toggleCollapse(viewId, sideId)}
+          >«</button>
+        {/snippet}
+        {#if Module}
+          <Module title={row.title} {cwd} {workspaceId} {viewId} tabId={row.id} {...row.props} />
+        {:else}
+          <div class="text-sm opacity-60">
+            Unknown module: <span class="font-mono">{row.kind}</span>
+          </div>
+        {/if}
+      </ModuleFrame>
+    </div>
   </div>
 {/if}

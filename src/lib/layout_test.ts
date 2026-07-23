@@ -13,12 +13,9 @@ import {
   addEditorTab,
   closeTab,
   isViewState,
-  resizeRowSplit,
   setActiveTab,
   toggleCollapse,
-  toggleRows,
 } from "./layout.ts";
-import { MIN_ROW_PCT } from "./layout.ts";
 
 Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
   const v = createInitialView();
@@ -34,10 +31,10 @@ Deno.test("visible widths sum to 100", () => {
   assertEquals(sum, 100);
 });
 
-Deno.test("center has one row, left has two", () => {
+Deno.test("center and left each have one row", () => {
   const v = createInitialView();
   assertEquals(v.center.rows.length, 1);
-  assertEquals(v.left.rows.length, 2);
+  assertEquals(v.left.rows.length, 1);
 });
 
 Deno.test("resizeBoundary moves width between two columns, keeps their sum", () => {
@@ -81,30 +78,6 @@ Deno.test("expanding restores the original layout", () => {
   assertEquals(v.right.widthPct, 20);
 });
 
-Deno.test("toggleRows removes then re-adds the second row on the left column", () => {
-  const one = toggleRows(createInitialView(), "left");
-  assertEquals(one.left.rows.length, 1);
-  assertEquals(one.left.rows[0].id, "left-1");
-  const two = toggleRows(one, "left");
-  assertEquals(two.left.rows.length, 2);
-});
-
-Deno.test("resizeRowSplit sets the first-row height and clamps to MIN_ROW_PCT", () => {
-  const v = resizeRowSplit(createInitialView(), "left", 70);
-  assertEquals(v.left.rowSplitPct, 70);
-  assertEquals(resizeRowSplit(createInitialView(), "left", 2).left.rowSplitPct, MIN_ROW_PCT);
-  assertEquals(
-    resizeRowSplit(createInitialView(), "left", 98).left.rowSplitPct,
-    100 - MIN_ROW_PCT,
-  );
-});
-
-Deno.test("isViewState rejects a column missing rowSplitPct", () => {
-  const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
-  delete bad.left.rowSplitPct;
-  assertEquals(isViewState(bad), false);
-});
-
 Deno.test("createInitialView sets activeTabId to the first row of each column", () => {
   const v = createInitialView();
   assertEquals(v.left.activeTabId, "left-1");
@@ -125,9 +98,9 @@ Deno.test("isViewState rejects a column missing activeTabId", () => {
 });
 
 Deno.test("addTab appends a tab to the right column and activates it", () => {
-  const v = addTab(createInitialView(), "placeholder");
+  const v = addTab(createInitialView(), "terminal");
   assertEquals(v.right.rows.length, 2);
-  assertEquals(v.right.rows[1], { id: "right-2", title: "Placeholder", kind: "placeholder" });
+  assertEquals(v.right.rows[1], { id: "right-2", title: "Terminal", kind: "terminal" });
   assertEquals(v.right.activeTabId, "right-2");
 });
 
@@ -138,7 +111,7 @@ Deno.test("addTab picks the smallest free right-N id", () => {
 });
 
 Deno.test("setActiveTab switches the active right tab", () => {
-  const two = addTab(createInitialView(), "placeholder"); // right-2 active
+  const two = addTab(createInitialView(), "terminal"); // right-2 active
   const v = setActiveTab(two, "right-1");
   assertEquals(v.right.activeTabId, "right-1");
 });
@@ -149,7 +122,7 @@ Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
 });
 
 Deno.test("closeTab removes a tab", () => {
-  const two = addTab(createInitialView(), "placeholder"); // right-1, right-2
+  const two = addTab(createInitialView(), "terminal"); // right-1, right-2
   const v = closeTab(two, "right-2");
   assertEquals(v.right.rows.map((r) => r.id), ["right-1"]);
 });
@@ -162,14 +135,14 @@ Deno.test("closeTab closes the last tab, emptying the column", () => {
 });
 
 Deno.test("closeTab activates the previous tab when the active one is closed", () => {
-  let v = addTab(createInitialView(), "placeholder"); // right-2
-  v = addTab(v, "placeholder"); // right-3, active
+  let v = addTab(createInitialView(), "terminal"); // right-2
+  v = addTab(v, "terminal"); // right-3, active
   v = closeTab(v, "right-3");
   assertEquals(v.right.activeTabId, "right-2"); // previous neighbor
 });
 
 Deno.test("closeTab activates the next tab when the first (active) tab is closed", () => {
-  let v = addTab(createInitialView(), "placeholder"); // right-2
+  let v = addTab(createInitialView(), "terminal"); // right-2
   v = setActiveTab(v, "right-1"); // right-1 active
   v = closeTab(v, "right-1");
   assertEquals(v.right.rows.map((r) => r.id), ["right-2"]);
@@ -177,7 +150,7 @@ Deno.test("closeTab activates the next tab when the first (active) tab is closed
 });
 
 Deno.test("closeTab leaves the active tab unchanged when closing a different tab", () => {
-  let v = addTab(createInitialView(), "placeholder"); // right-2, active
+  let v = addTab(createInitialView(), "terminal"); // right-2, active
   v = closeTab(v, "right-1");
   assertEquals(v.right.activeTabId, "right-2");
 });

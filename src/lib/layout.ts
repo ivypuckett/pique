@@ -4,7 +4,7 @@ export type SideId = "left" | "right";
 export interface ModuleRef {
   id: string;
   title: string;
-  kind: string; // key into the module registry; "placeholder" for now
+  kind: string; // key into the module registry
   props?: { argv?: string[]; autoCloseOnExit?: boolean; autoFocus?: boolean; path?: string }; // per-tab payload, spread into the module
 }
 
@@ -12,8 +12,7 @@ export interface ColumnState {
   widthPct: number; // share of the visible row; visible columns sum to 100
   collapsed: boolean; // center is never collapsed
   savedWidthPct: number; // width restored on expand
-  rows: ModuleRef[]; // center: the tab list (N); sides: 1 or 2 rows
-  rowSplitPct: number; // height % of the first row when a side column shows 2 rows
+  rows: ModuleRef[]; // center: the tab list (N); sides: a single row
   activeTabId: string; // visible right tab; center/left carry it for shape uniformity
 }
 
@@ -25,7 +24,6 @@ export interface ViewState {
 }
 
 export const MIN_WIDTH_PCT = 10;
-export const MIN_ROW_PCT = 10;
 
 export function createInitialView(id = "view-1"): ViewState {
   return {
@@ -34,18 +32,13 @@ export function createInitialView(id = "view-1"): ViewState {
       widthPct: 20,
       collapsed: false,
       savedWidthPct: 20,
-      rowSplitPct: 50,
       activeTabId: "left-1",
-      rows: [
-        { id: "left-1", title: "Files", kind: "filetree" },
-        { id: "left-2", title: "Left B", kind: "placeholder" },
-      ],
+      rows: [{ id: "left-1", title: "Files", kind: "filetree" }],
     },
     center: {
       widthPct: 60,
       collapsed: false,
       savedWidthPct: 60,
-      rowSplitPct: 50,
       activeTabId: "center-1",
       rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
     },
@@ -53,7 +46,6 @@ export function createInitialView(id = "view-1"): ViewState {
       widthPct: 20,
       collapsed: false,
       savedWidthPct: 20,
-      rowSplitPct: 50,
       activeTabId: "right-1",
       rows: [{ id: "right-1", title: "Terminal", kind: "terminal" }],
     },
@@ -94,13 +86,6 @@ export function fixedPx(v: ViewState): number {
   return splitters * SPLITTER_PX + rails * RAIL_PX;
 }
 
-// Height % of the first row when a side column shows two rows, clamped so neither
-// row drops below MIN_ROW_PCT.
-export function resizeRowSplit(v: ViewState, id: SideId, newFirstPct: number): ViewState {
-  const pct = clamp(newFirstPct, MIN_ROW_PCT, 100 - MIN_ROW_PCT);
-  return { ...v, [id]: { ...v[id], rowSplitPct: pct } };
-}
-
 export function gridTemplateColumns(v: ViewState): string {
   // Visual order: chat (center, never collapses) | explorer (left) | popups (right).
   const parts: string[] = [];
@@ -110,10 +95,6 @@ export function gridTemplateColumns(v: ViewState): string {
   if (!v.right.collapsed) parts.push(`${SPLITTER_PX}px`);
   parts.push(v.right.collapsed ? `${RAIL_PX}px` : `${v.right.widthPct}fr`);
   return parts.join(" ");
-}
-
-function cap(id: SideId): string {
-  return id === "left" ? "Left" : "Right";
 }
 
 // Collapse/expand use "prior width" semantics: savedWidthPct records a column's
@@ -153,14 +134,6 @@ function expand(v: ViewState, id: SideId): ViewState {
 
 export function toggleCollapse(v: ViewState, id: SideId): ViewState {
   return v[id].collapsed ? expand(v, id) : collapse(v, id);
-}
-
-export function toggleRows(v: ViewState, id: SideId): ViewState {
-  const col = v[id];
-  const rows: ModuleRef[] = col.rows.length === 1
-    ? [...col.rows, { id: `${id}-2`, title: `${cap(id)} B`, kind: "placeholder" }]
-    : [col.rows[0]];
-  return { ...v, [id]: { ...col, rows } };
 }
 
 // Display label for a module kind, used for new-tab titles and the picker menu.
@@ -245,7 +218,7 @@ function isColumnState(c: unknown): boolean {
   if (typeof c !== "object" || c === null) return false;
   const col = c as Record<string, unknown>;
   return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
-    typeof col.savedWidthPct === "number" && typeof col.rowSplitPct === "number" &&
+    typeof col.savedWidthPct === "number" &&
     typeof col.activeTabId === "string" &&
     Array.isArray(col.rows) && col.rows.every(isModuleRef) &&
     // The center may hold zero tabs (all closed); sides always have rows. When the

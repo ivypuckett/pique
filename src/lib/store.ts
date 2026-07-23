@@ -7,11 +7,9 @@ import {
   addDiffTab as addDiffTabFn,
   addEditorTab as addEditorTabFn,
   resizeBoundary as resize,
-  resizeRowSplit as resizeRowFn,
   setActiveTab as setActiveTabFn,
   type SideId,
   toggleCollapse as collapseFn,
-  toggleRows as rowsFn,
   type ViewState,
 } from "./layout.ts";
 import {
@@ -89,14 +87,6 @@ export function resizeBoundary(viewId: string, b: Boundary, newFirstPct: number)
 
 export function toggleCollapse(viewId: string, id: SideId): void {
   edit(viewId, (v) => collapseFn(v, id));
-}
-
-export function toggleRows(viewId: string, id: SideId): void {
-  edit(viewId, (v) => rowsFn(v, id));
-}
-
-export function resizeRow(viewId: string, id: SideId, newFirstPct: number): void {
-  edit(viewId, (v) => resizeRowFn(v, id, newFirstPct));
 }
 
 export function addTab(viewId: string, kind: string): void {
