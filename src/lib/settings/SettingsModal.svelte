@@ -8,6 +8,7 @@
     providerBindings,
     type ProviderInfo,
   } from "../chat/bindings.ts";
+  import { type DefinedTool, toolBindings } from "../tools/bindings.ts";
 
   async function browse(): Promise<void> {
     const dir = await pickDirectory($settings.workspace.defaultDir);
@@ -196,6 +197,77 @@
     busy = false;
   }
 
+  // Defined tools — pi extensions written by the user or by an agent (define_tool).
+  // Agent-written source sits in a quarantine dir that pi never loads; approving is
+  // what moves it into the auto-discovered dir (see tools/paths.ts). Null in
+  // web-dev, same desktop-only note as extensions/providers.
+  const tools = toolBindings();
+  let defined = $state<DefinedTool[]>([]);
+  let toolError = $state("");
+  let toolNotice = $state("");
+  let toolBusy = $state(false);
+  // The tool whose source is currently expanded for review, and its source text.
+  // Reviewing is deliberately required before Approve: the source IS the artifact.
+  let reviewing = $state<string | null>(null);
+  let reviewSource = $state("");
+
+  const pendingTools = $derived(defined.filter((t) => t.state === "pending"));
+  const approvedTools = $derived(defined.filter((t) => t.state === "approved"));
+
+  async function refreshTools(): Promise<void> {
+    if (!tools) return;
+    try {
+      defined = await tools.toolsList();
+    } catch (e) {
+      toolError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // Re-list whenever the modal opens; collapse any review left open last time.
+  $effect(() => {
+    if ($settingsOpen && tools) {
+      toolError = "";
+      toolNotice = "";
+      reviewing = null;
+      refreshTools();
+    }
+  });
+
+  async function review(t: DefinedTool): Promise<void> {
+    if (!tools) return;
+    if (reviewing === t.name) {
+      reviewing = null;
+      return;
+    }
+    toolError = "";
+    try {
+      reviewSource = (await tools.toolsRead({ name: t.name, state: t.state })).source;
+      reviewing = t.name;
+    } catch (e) {
+      toolError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // The three mutations share a shape: run, re-list, report. `notice` is what the
+  // user sees on success — each spells out when the change actually takes effect.
+  async function toolAction(
+    run: () => Promise<unknown>,
+    notice: string,
+  ): Promise<void> {
+    toolBusy = true;
+    toolError = "";
+    toolNotice = "";
+    try {
+      await run();
+      reviewing = null;
+      await refreshTools();
+      toolNotice = notice;
+    } catch (e) {
+      toolError = e instanceof Error ? e.message : String(e);
+    }
+    toolBusy = false;
+  }
+
   // settingsOpen is the single source of truth for visibility — a class-based
   // daisyui modal, not a native <dialog>. The native dialog's close/cancel
   // events proved unreliable in the target webview (Esc/backdrop closed the
@@ -217,6 +289,7 @@
     { id: "kanban", label: "Kanban" },
     { id: "providers", label: "Providers" },
     { id: "extensions", label: "Extensions" },
+    { id: "tools", label: "Tools" },
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 
@@ -590,6 +663,108 @@
 
         {#if extNotice}<div class="mt-2 text-xs text-success">{extNotice}</div>{/if}
         {#if extError}<div class="mt-2 break-all text-xs text-error">{extError}</div>{/if}
+      {/if}
+      {/if}
+
+      {#if section === "tools"}
+      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Tools</div>
+      {#if !tools}
+        <div class="text-xs opacity-70">Available in the desktop app only.</div>
+      {:else}
+        <div class="mt-0.5 text-xs opacity-70">
+          Tools defined by you or by an agent. An agent-written tool cannot run until you
+          review its code and approve it here, and then only in Chat modules opened
+          afterwards.
+        </div>
+
+        <div class="mt-4 mb-2 text-xs opacity-70">Awaiting review:</div>
+        {#if pendingTools.length > 0}
+          <ul class="divide-y divide-base-300 rounded border border-warning/50">
+            {#each pendingTools as t (t.name)}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-mono text-xs">{t.name}</span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => review(t)}
+                    >{reviewing === t.name ? "Hide" : "Review"}</button>
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      disabled={toolBusy || reviewing !== t.name}
+                      title={reviewing === t.name ? "" : "Review the source first"}
+                      onclick={() =>
+                      toolAction(
+                        () => tools.toolsApprove({ name: t.name }),
+                        `Approved ${t.name}. Open a new Chat module to load it.`,
+                      )}
+                    >Approve</button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      disabled={toolBusy}
+                      onclick={() =>
+                      toolAction(
+                        () => tools.toolsReject({ name: t.name }),
+                        `Rejected ${t.name}.`,
+                      )}
+                    >Reject</button>
+                  </div>
+                </div>
+                {#if reviewing === t.name}
+                  <div class="mt-2 text-xs opacity-80">
+                    This code runs with full system access once approved. Read it before approving.
+                  </div>
+                  <pre class="mt-1.5 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
+                    >{reviewSource}</code></pre>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="text-xs opacity-60">Nothing awaiting review.</div>
+        {/if}
+
+        <div class="mt-4 mb-2 text-xs opacity-70">Approved:</div>
+        {#if approvedTools.length > 0}
+          <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
+            {#each approvedTools as t (t.name)}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-mono text-xs">{t.name}</span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => review(t)}
+                    >{reviewing === t.name ? "Hide" : "View"}</button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      disabled={toolBusy}
+                      onclick={() =>
+                      toolAction(
+                        () => tools.toolsRevoke({ name: t.name }),
+                        `Revoked ${t.name}. Reopen Chat modules to apply.`,
+                      )}
+                    >Revoke</button>
+                  </div>
+                </div>
+                {#if reviewing === t.name}
+                  <pre class="mt-2 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
+                    >{reviewSource}</code></pre>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="text-xs opacity-60">None approved.</div>
+        {/if}
+
+        {#if toolNotice}<div class="mt-2 text-xs text-success">{toolNotice}</div>{/if}
+        {#if toolError}<div class="mt-2 break-all text-xs text-error">{toolError}</div>{/if}
       {/if}
       {/if}
       </div>

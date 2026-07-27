@@ -24,6 +24,7 @@ let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
+let definedTools: typeof import("./lib/tools/service.ts");
 
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
@@ -298,6 +299,34 @@ win.bind("kanbanSetConnections", async (arg) => {
   return true;
 });
 
+// Defined tools — user- and agent-authored pi extensions under ~/.pique/agent.
+// Agents can only write into the quarantine dir (tools/agent-tools.ts); approving
+// is what moves a tool into the dir pi actually loads, so it goes through here.
+win.bind("toolsList", async () => await definedTools.listTools());
+
+win.bind("toolsRead", async (arg) => {
+  const { name, state } = arg as { name: string; state: "pending" | "approved" };
+  return { source: await definedTools.readSource(name, state) };
+});
+
+win.bind("toolsApprove", async (arg) => {
+  const { name } = arg as { name: string };
+  await definedTools.approveTool(name);
+  return true;
+});
+
+win.bind("toolsReject", async (arg) => {
+  const { name } = arg as { name: string };
+  await definedTools.rejectTool(name);
+  return true;
+});
+
+win.bind("toolsRevoke", async (arg) => {
+  const { name } = arg as { name: string };
+  await definedTools.revokeTool(name);
+  return true;
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -314,5 +343,6 @@ dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
+definedTools = await import("./lib/tools/service.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

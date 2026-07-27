@@ -55,6 +55,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { piAgentDir, readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
+import { toolAuthoringTools } from "../tools/agent-tools.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -112,11 +113,14 @@ export async function startAgent(opts: { cwd?: string; workspaceId?: string } = 
   const cwd = resolveModuleDir(opts.cwd, rawSettings);
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
-  // Give the agent the Kanban tools bound to its workspace's board — the same
-  // operations the human UI calls (see kanban/agent-tools.ts), tagged actor "agent".
-  const customTools = opts.workspaceId
-    ? kanbanTools(opts.workspaceId, () => readJson("settings"))
-    : undefined;
+  // Tools compiled into pique. define_tool is always available (tool definition is
+  // global, not workspace-scoped); the Kanban tools need a workspace to bind their
+  // board to. Tools the user has *defined and approved* don't appear here — pi
+  // auto-discovers those from agentDir/extensions (see tools/paths.ts).
+  const customTools = [
+    ...toolAuthoringTools(),
+    ...(opts.workspaceId ? kanbanTools(opts.workspaceId, () => readJson("settings")) : []),
+  ];
   const created = await createAgentSession({
     model,
     cwd,
