@@ -61,6 +61,8 @@ the user's boards.
 | | Mechanism | Merge rule |
 |---|---|---|
 | **Tools** | `agentDir` + `additionalExtensionPaths` | union — root's tools plus its own |
+| **Profiles** | `resolveProfile` / `listVisibleProfiles` | union, nearest name wins |
+| **Base prompt** | `resolveBasePrompt` | nearest `SYSTEM.md` wins, whole file |
 | **Packages** | `agentDir` only | **not inherited** (see Deferred #1) |
 | **Chat defaults** | `resolveScopeConfig` | per key — override one field, inherit the rest |
 | **Kanban statuses** | `resolveScopeConfig` | whole list replaces |
@@ -86,6 +88,18 @@ Two things about this are easy to get wrong and silent when you do:
 
 Both are verified by `chat/scope_integration_test.ts`, which drives the real
 `startAgent` and asserts on `getActiveToolNames()`.
+
+### Profiles and the base prompt
+
+A profile — a base prompt plus a tool allowlist, see [profiles.md](profiles.md) — lives in
+`scopes/<id>/profiles/`, beside `agent/` rather than inside it, because pi interprets what
+it finds under `agentDir`. A workspace can select root's profiles and its own; a local
+profile of the same name **shadows** root's, and is the one that runs.
+
+The optional base prompt is a scope's `agent/SYSTEM.md`. That is pi's own filename, but pi
+only ever discovers the single `agentDir` it was handed — so root's would be invisible to a
+workspace. `profiles/service.ts:resolveBasePrompt` walks the chain nearest-first and passes
+the winner to pi explicitly, which is what makes it inherit at all.
 
 ### The Kanban board
 

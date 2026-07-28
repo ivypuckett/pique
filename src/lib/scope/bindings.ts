@@ -13,6 +13,9 @@ export interface ScopeConfig {
     defaultProvider?: string;
     defaultModel?: string;
     defaultThinkingLevel?: ThinkingLevel;
+    // Profile a Chat module here starts under (profiles/service.ts). "" is a real
+    // value — "no profile" — not the same as the key being absent.
+    defaultProfile?: string;
   };
   // Statuses a fresh board in this scope is seeded with (see kanban/board.ts). Ids
   // are assigned at seed time, so only names are configured here.

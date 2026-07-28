@@ -62,6 +62,7 @@ Deno.test("resolveChatDefaults falls back on null", () => {
     provider: "lmstudio",
     modelId: "google/gemma-4-e4b",
     thinking: "off",
+    profile: "",
   });
 });
 
@@ -70,11 +71,13 @@ Deno.test("resolveChatDefaults falls back on empty / missing chat", () => {
     provider: "lmstudio",
     modelId: "google/gemma-4-e4b",
     thinking: "off",
+    profile: "",
   });
   assertEquals(resolveChatDefaults({ chat: {} }), {
     provider: "lmstudio",
     modelId: "google/gemma-4-e4b",
     thinking: "off",
+    profile: "",
   });
 });
 
@@ -83,20 +86,26 @@ Deno.test("resolveChatDefaults reads a full chat config", () => {
     resolveChatDefaults({
       chat: { defaultProvider: "openai", defaultModel: "gpt-x", defaultThinkingLevel: "high" },
     }),
-    { provider: "openai", modelId: "gpt-x", thinking: "high" },
+    { provider: "openai", modelId: "gpt-x", thinking: "high", profile: "" },
   );
 });
 
 Deno.test("resolveChatDefaults fills only the missing fields", () => {
   assertEquals(
     resolveChatDefaults({ chat: { defaultThinkingLevel: "low" } }),
-    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "low" },
+    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "low", profile: "" },
   );
+});
+
+Deno.test("resolveChatDefaults reads a default profile", () => {
+  assertEquals(resolveChatDefaults({ chat: { defaultProfile: "reviewer" } }).profile, "reviewer");
+  // "" is the picker's "base", and must survive as a value rather than a fallback.
+  assertEquals(resolveChatDefaults({ chat: { defaultProfile: "" } }).profile, "");
 });
 
 Deno.test("resolveChatDefaults ignores non-string values", () => {
   assertEquals(
     resolveChatDefaults({ chat: { defaultProvider: 42, defaultModel: null, defaultThinkingLevel: {} } }),
-    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "off" },
+    { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "off", profile: "" },
   );
 });

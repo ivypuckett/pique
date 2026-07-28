@@ -64,6 +64,10 @@ persistent, silently-loaded capability without a human reading it first.
 tool set, so it can write directly into `extensions/` and bypass `define_tool`
 entirely. Closing that hole is the first item below.
 
+Containment, where you want it, is a **profile**: its `tools:` allowlist filters pi's tool
+registry itself, so an agent started under a profile without `bash`/`write`/`edit` cannot
+reach `extensions/` at all. See [profiles.md](profiles.md).
+
 ---
 
 ## Deferred

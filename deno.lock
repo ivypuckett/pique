@@ -11,6 +11,7 @@
     "jsr:@std/encoding@^1.0.11": "1.0.11",
     "jsr:@std/fmt@1": "1.0.10",
     "jsr:@std/fmt@^1.0.10": "1.0.10",
+    "jsr:@std/front-matter@1": "1.0.9",
     "jsr:@std/fs@1": "1.0.24",
     "jsr:@std/fs@^1.0.24": "1.0.24",
     "jsr:@std/html@^1.0.7": "1.0.7",
@@ -23,6 +24,7 @@
     "jsr:@std/path@^1.1.5": "1.1.6",
     "jsr:@std/path@^1.1.6": "1.1.6",
     "jsr:@std/streams@^1.1.1": "1.1.1",
+    "jsr:@std/yaml@^1.0.5": "1.1.2",
     "npm:@earendil-works/pi-coding-agent@0.80": "0.80.10_zod@4.4.3",
     "npm:@git-diff-view/core@0.1": "0.1.7",
     "npm:@git-diff-view/svelte@0.1": "0.1.7_svelte@5.56.4",
@@ -69,6 +71,12 @@
     "@std/fmt@1.0.10": {
       "integrity": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
     },
+    "@std/front-matter@1.0.9": {
+      "integrity": "ee6201d06674cbef137dda2252f62477450b48249e7d8d9ab57a30f85ff6f051",
+      "dependencies": [
+        "jsr:@std/yaml"
+      ]
+    },
     "@std/fs@1.0.24": {
       "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
       "dependencies": [
@@ -110,6 +118,9 @@
     },
     "@std/streams@1.1.1": {
       "integrity": "92556d350e537e9dce527a6d08f6f15be3ff65e656079dea69d15252187c7613"
+    },
+    "@std/yaml@1.1.2": {
+      "integrity": "de612653c036749ba2044165e316f52412b0f0698afffb7ee80b5331d6d2abae"
     }
   },
   "npm": {
@@ -1768,6 +1779,7 @@
     "dependencies": [
       "jsr:@sigma/pty-ffi@0.42",
       "jsr:@std/assert@1",
+      "jsr:@std/front-matter@1",
       "jsr:@std/http@1",
       "npm:@earendil-works/pi-coding-agent@0.80",
       "npm:@git-diff-view/core@0.1",

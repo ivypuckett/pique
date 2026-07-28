@@ -11,10 +11,16 @@
   // fixed for this instance (the tree is keyed by it) and cwd only seeds a new session,
   // so we deliberately read both once at creation — untrack tells Svelte that's intended.
   const session = untrack(() => chatSession(workspaceId, cwd));
-  const { items, input, ready, streaming, models, level } = session;
+  const { items, input, ready, streaming, models, level, profile, profiles } = session;
   const commands = session.commands;
 
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
+
+  // Switching profile restarts the agent (pi fixes the system prompt at session creation),
+  // so the transcript goes with it — hence a confirm. Held here rather than in the store:
+  // until it is confirmed, nothing about the conversation has changed. The select shows
+  // the pending choice, so cancelling visibly puts it back.
+  let pendingProfile = $state<string | null>(null);
 
   // `/` command menu (skills / prompt templates / extension commands). Loaded once
   // the agent is ready; session.prompt() expands/runs them, so this is pure compose UI.
@@ -104,7 +110,36 @@
     </form>
   </div>
 
+  {#if pendingProfile !== null}
+    <div class="flex items-center gap-2 border-t border-base-300 bg-base-200 p-2 text-sm">
+      <span class="flex-1">
+        Switching to <strong>{pendingProfile === "" ? "base" : pendingProfile}</strong>
+        starts a new conversation.
+      </span>
+      <button
+        class="btn btn-sm btn-primary"
+        onclick={() => { session.pickProfile(pendingProfile!); pendingProfile = null; }}
+      >Switch</button>
+      <button class="btn btn-sm btn-ghost" onclick={() => (pendingProfile = null)}>Cancel</button>
+    </div>
+  {/if}
+
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
+    <select
+      class="select select-bordered select-sm"
+      value={pendingProfile ?? $profile}
+      onchange={(e) => {
+        const value = (e.target as HTMLSelectElement).value;
+        pendingProfile = value === $profile ? null : value;
+      }}
+      disabled={!$ready || $streaming}
+    >
+      <!-- "" is the absence of a profile: the scope's base prompt and nothing appended. -->
+      <option value="">base</option>
+      {#each $profiles as p}
+        <option value={p.name} title={p.description ?? ""}>{p.name}</option>
+      {/each}
+    </select>
     <select class="select select-bordered select-sm" onchange={(e) => session.pickModel((e.target as HTMLSelectElement).value)} disabled={!$ready}>
       {#each $models as m}
         <option value={`${m.provider}/${m.id}`} selected={m.current}>{m.name}</option>

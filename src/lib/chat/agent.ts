@@ -57,6 +57,8 @@ import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { toolAuthoringTools } from "../tools/agent-tools.ts";
 import { inheritedExtensionFiles } from "../tools/service.ts";
+import { profileAuthoringTools } from "../profiles/agent-tools.ts";
+import { resolveBasePrompt, resolveProfile } from "../profiles/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
 import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
 
@@ -75,13 +77,16 @@ const FALLBACK_MODEL = "google/gemma-4-e4b";
 // inherits root's thinking level.
 export function resolveChatDefaults(
   config: unknown,
-): { provider: string; modelId: string; thinking: ThinkingLevel } {
+): { provider: string; modelId: string; thinking: ThinkingLevel; profile: string } {
   const chat = (config as { chat?: Record<string, unknown> } | null)?.chat ?? {};
   const str = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
   return {
     provider: str(chat.defaultProvider, FALLBACK_PROVIDER),
     modelId: str(chat.defaultModel, FALLBACK_MODEL),
     thinking: str(chat.defaultThinkingLevel, "off") as ThinkingLevel,
+    // "" is a real value here, not a missing one: it is the picker's "base" — the scope's
+    // base prompt with no profile appended.
+    profile: str(chat.defaultProfile, ""),
   };
 }
 
@@ -110,21 +115,32 @@ export async function ensureRuntime() {
 // Start a fresh agent in `scope` and return its id. The scope is the workspace the
 // Chat module lives in (root included); everything the agent can see — tools, model
 // defaults, working directory, Kanban board — is resolved against it.
-export async function startAgent(opts: { cwd?: string; scope?: ScopeId } = {}): Promise<string> {
+export async function startAgent(
+  opts: { cwd?: string; scope?: ScopeId; profile?: string } = {},
+): Promise<string> {
   const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
   // Startup model/thinking come from the scope's resolved config (root's, overlaid
   // with the workspace's); fall back to the consts when unset or when the configured
   // model isn't available.
   const config = await resolveScopeConfig(scope);
-  const { provider, modelId, thinking } = resolveChatDefaults(config);
+  const { provider, modelId, thinking, profile: defaultProfile } = resolveChatDefaults(config);
   const cwd = resolveModuleDir(opts.cwd, await readJson("settings"));
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
-  // Tools compiled into pique, both bound to this scope: define_tool quarantines into
-  // it, and the Kanban tools address its board. Tools the user has *defined and
-  // approved* don't appear here — they load as extensions, below.
-  const customTools = [...toolAuthoringTools(scope), ...kanbanTools(scope)];
+  // Absent `profile` means "use the scope's default"; an explicit "" means "no profile",
+  // which is why this uses ?? and not ||. A name that no longer resolves degrades to no
+  // profile, the same way an unavailable model falls back to the const above.
+  const profileName = opts.profile ?? defaultProfile;
+  const profile = profileName ? await resolveProfile(scope, profileName) : null;
+  // Tools compiled into pique, all bound to this scope: define_tool and define_profile
+  // quarantine into it, and the Kanban tools address its board. Tools the user has
+  // *defined and approved* don't appear here — they load as extensions, below.
+  const customTools = [
+    ...toolAuthoringTools(scope),
+    ...profileAuthoringTools(scope),
+    ...kanbanTools(scope),
+  ];
 
   // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
   // scope's own dir is the agentDir (its approved tools and its installed packages),
@@ -137,6 +153,11 @@ export async function startAgent(opts: { cwd?: string; scope?: ScopeId } = {}): 
     cwd,
     agentDir,
     additionalExtensionPaths: await inheritedExtensionFiles(scope),
+    // The two prompt layers (docs/profiles.md). The base is the nearest SYSTEM.md on the
+    // scope chain — undefined when there is none, which is what leaves pi's own preamble
+    // in place. The profile's body is appended to whichever base won.
+    systemPrompt: await resolveBasePrompt(scope),
+    appendSystemPrompt: profile?.body ? [profile.body] : undefined,
   });
   // createAgentSession only reloads a loader it creates itself, so ours must be
   // reloaded by hand or it yields no extensions at all.
@@ -151,6 +172,10 @@ export async function startAgent(opts: { cwd?: string; scope?: ScopeId } = {}): 
     // in-memory sessionManager ignores agentDir.
     agentDir,
     resourceLoader,
+    // The profile's allowlist, filtering builtins, extension tools and the customTools
+    // above alike. undefined (no profile, or a profile with no `tools:` key) means no
+    // allowlist; [] means no tools at all — do NOT coalesce the two.
+    tools: profile?.tools,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
   });
@@ -241,6 +266,13 @@ export function setThinkingLevel(id: string, level: ThinkingLevel): void {
 // inherits. The assembled result of the scope chain, readable after the fact.
 export function activeToolNames(id: string): string[] {
   return agents.get(id)?.session.getActiveToolNames() ?? [];
+}
+
+// The prompt this agent actually runs with: the scope's base (pi's own, or its SYSTEM.md)
+// plus the profile's body. Assembled by pi at session creation and fixed for its lifetime,
+// which is why switching profile restarts the agent rather than mutating it.
+export function systemPromptOf(id: string): string {
+  return agents.get(id)?.session.systemPrompt ?? "";
 }
 
 // The `/` menu list: the same three sources pi's TUI concatenates in getCommands —

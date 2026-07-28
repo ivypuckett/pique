@@ -25,6 +25,7 @@ let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let definedTools: typeof import("./lib/tools/service.ts");
+let profiles: typeof import("./lib/profiles/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
@@ -77,8 +78,10 @@ win.bind("termKill", async (arg) => {
 });
 
 win.bind("chatStart", async (arg) => {
-  const { cwd, scope } = arg as { cwd?: string; scope?: string };
-  return { id: await chat.startAgent({ cwd, scope }) };
+  // `profile` is passed through as-is: undefined means "the scope's default" and ""
+  // means "no profile", a distinction startAgent relies on.
+  const { cwd, scope, profile } = arg as { cwd?: string; scope?: string; profile?: string };
+  return { id: await chat.startAgent({ cwd, scope, profile }) };
 });
 
 win.bind("chatPrompt", async (arg) => {
@@ -396,6 +399,38 @@ win.bind("toolsRevoke", async (arg) => {
   return true;
 });
 
+// Profiles — a named base prompt plus a tool allowlist, per scope. Agents can only write
+// into their scope's quarantine dir (profiles/agent-tools.ts); approving is what makes a
+// profile selectable, so it goes through here. profilesList returns the scope's own
+// profiles; profilesVisible is what a Chat module there can select (its own plus root's).
+win.bind("profilesList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await profiles.listProfiles(scope);
+});
+
+win.bind("profilesVisible", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await profiles.listVisibleProfiles(scope);
+});
+
+win.bind("profilesApprove", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await profiles.approveProfile(scope, name);
+  return true;
+});
+
+win.bind("profilesReject", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await profiles.rejectProfile(scope, name);
+  return true;
+});
+
+win.bind("profilesRevoke", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await profiles.revokeProfile(scope, name);
+  return true;
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -413,6 +448,7 @@ fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 definedTools = await import("./lib/tools/service.ts");
+profiles = await import("./lib/profiles/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.

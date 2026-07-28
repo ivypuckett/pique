@@ -9,8 +9,11 @@ export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, Provi
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id. `scope` is the workspace the module
 // lives in — it decides which tools, defaults and board the agent gets.
+//
+// `profile` names the profile to start under: omitted means "the scope's default",
+// "" means "no profile". The distinction is load-bearing — see chat/agent.ts.
 export interface ChatBindings {
-  chatStart(arg: { cwd?: string; scope?: string }): Promise<{ id: string }>;
+  chatStart(arg: { cwd?: string; scope?: string; profile?: string }): Promise<{ id: string }>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
   chatRead(arg: { id: string }): Promise<ChatEvent[]>;
   chatAbort(arg: { id: string }): Promise<unknown>;
