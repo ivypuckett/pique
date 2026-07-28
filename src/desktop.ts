@@ -255,6 +255,37 @@ win.bind("kanbanGetLogs", async (arg) => {
   return (await kanban.board(scope)).getLogs(cardId);
 });
 
+// Column edits. Same scope argument as every other kanban call, so a workspace can edit
+// the shared root board's columns and nothing can reach a workspace board from outside.
+// board.ts refuses a blank name, a column that still has cards, and the last column; the
+// thrown message surfaces in the module's error strip.
+win.bind("kanbanAddStatus", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  return { id: (await kanban.board(scope)).addStatus({ name }) };
+});
+
+win.bind("kanbanRenameStatus", async (arg) => {
+  const { scope, statusId, name } = arg as { scope: string; statusId: string; name: string };
+  (await kanban.board(scope)).renameStatus({ statusId, name });
+  return true;
+});
+
+win.bind("kanbanMoveStatus", async (arg) => {
+  const { scope, statusId, position } = arg as {
+    scope: string;
+    statusId: string;
+    position: number;
+  };
+  (await kanban.board(scope)).moveStatus({ statusId, position });
+  return true;
+});
+
+win.bind("kanbanDeleteStatus", async (arg) => {
+  const { scope, statusId } = arg as { scope: string; statusId: string };
+  (await kanban.board(scope)).deleteStatus({ statusId });
+  return true;
+});
+
 win.bind("kanbanCreateCard", async (arg) => {
   const { scope, statusId, title, description } = arg as {
     scope: string;
