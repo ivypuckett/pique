@@ -98,6 +98,19 @@ Kanban module shows the same choice as a two-button switcher.
 This preserves the visibility rule exactly — a workspace can name root's board, and
 nothing can name a workspace's board from outside it.
 
+A board owns its own columns. `kanban.defaultStatuses` in a scope's config seeds a board
+that does not exist yet — which in practice means before that scope's Kanban module has
+ever been opened — and after that the columns are added, renamed, reordered and deleted on
+the board itself. Those edits take the same `scope` argument as every other Kanban call, so
+a workspace can restructure the shared root board and nothing can reach a workspace's board
+from outside it.
+
+Two refusals keep the data honest: a column that still holds cards cannot be deleted (move
+them first — an implicit move would need a `set_status` reason nobody supplied), and the
+last remaining column cannot be deleted (a board with zero columns would be silently
+re-seeded from the defaults on next open). Column edits are not written to the card log,
+which is card-scoped by schema.
+
 ## The approval gate, per scope
 
 Defined tools still work the way `defined-tools.md` describes: an agent's `define_tool`

@@ -329,8 +329,8 @@
   const SCOPED_SECTIONS: readonly string[] = ["kanban", "extensions", "tools"];
 
   // Default statuses seeded into a new board in the selected scope (kanban/board.ts).
-  // Editing here only affects boards created afterward, not existing ones. Every edit
-  // writes the whole list, which is also what stops the scope inheriting root's.
+  // Seed only — an existing board's columns are edited on the board (Kanban.svelte).
+  // Every edit writes the whole list, which is also what stops the scope inheriting root's.
   function setStatuses(next: { name: string }[]): void {
     updateScopeConfig((c) => ({ ...c, kanban: { ...c.kanban, defaultStatuses: next } }));
   }
@@ -457,8 +457,9 @@
       <div class="mb-3 text-xs uppercase tracking-wide text-primary">Kanban</div>
       <div class="text-sm">Default statuses</div>
       <div class="mt-0.5 text-xs opacity-70">
-        The columns a new board in this scope starts with, in order. Applies to boards
-        created after the change, not existing ones.
+        The columns a board in this scope starts with, in order. A scope's board is created
+        the first time its Kanban module opens; after that, edit its columns on the board
+        itself.
       </div>
       {#if statuses.length === 0}
         <div class="mt-3 rounded bg-base-200 px-3 py-2 text-xs opacity-70">
