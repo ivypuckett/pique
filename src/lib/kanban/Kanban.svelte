@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { type Board, type CardRow, type KanbanBindings, kanbanBindings } from "./bindings.ts";
   import { ROOT } from "../scope/paths.ts";
 
@@ -114,6 +114,12 @@
       const { id } = await b.kanbanCreateCard({ scope, statusId, title });
       await refresh();
       selectedId = id;
+      // The drawer renders the title input only once the selection lands, so wait for
+      // the DOM before focusing. Focus belongs here, not in an effect keyed on the
+      // selection: every save refreshes the board, which would re-run the effect and
+      // yank focus out of whichever field the user had moved on to.
+      await tick();
+      titleInput?.focus();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -179,6 +185,7 @@
   // Card detail drawer.
   let selectedId = $state<string | null>(null);
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
+  let titleInput = $state<HTMLInputElement | null>(null);
 
   // A card can't be parented under itself or any of its descendants (that would make
   // a cycle), so those are excluded from the parent dropdown; the backend rejects it
@@ -304,13 +311,13 @@
           class:btn-active={!showRoot}
           aria-pressed={!showRoot}
           onclick={() => switchBoard(false)}
-        >This workspace</button>
+        >Workspace</button>
         <button
           class="btn btn-ghost btn-xs"
           class:btn-active={showRoot}
           aria-pressed={showRoot}
           onclick={() => switchBoard(true)}
-        >Root (shared)</button>
+        >Root</button>
       </div>
     {/if}
   <div class="flex min-h-0 flex-1">
@@ -403,25 +410,38 @@
           <button type="button" class="btn btn-square btn-ghost btn-xs" aria-label="Close card" onclick={() => (selectedId = null)}>✕</button>
         </div>
 
-        <label class="text-xs opacity-70" for="k-title">Title</label>
-        <input id="k-title" class="input input-bordered input-sm" bind:value={selected.title} onblur={saveMetadata} />
+        <!-- Each label sits in a group with the control it names, so the 4px inside a
+             group reads against the 12px between them — the label's ownership is in the
+             spacing, not just the `for`. Same shape as the sections further down. -->
+        <div class="flex flex-col gap-1">
+          <label class="text-xs opacity-70" for="k-title">Title</label>
+          <input id="k-title" class="input input-bordered input-sm" bind:this={titleInput} bind:value={selected.title} onblur={saveMetadata} />
+        </div>
 
-        <label class="text-xs opacity-70" for="k-desc">Description</label>
-        <textarea id="k-desc" class="textarea textarea-bordered textarea-sm" rows="4" bind:value={selected.description} onblur={saveMetadata}></textarea>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs opacity-70" for="k-desc">Description</label>
+          <textarea id="k-desc" class="textarea textarea-bordered textarea-sm" rows="4" bind:value={selected.description} onblur={saveMetadata}></textarea>
+        </div>
 
-        <label class="text-xs opacity-70" for="k-tags">Tags (<code>key: value</code> per line)</label>
-        <textarea id="k-tags" class="textarea textarea-bordered textarea-sm font-mono" rows="3" bind:value={tagsText} onblur={() => { commitTags(); saveMetadata(); }}></textarea>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs opacity-70" for="k-tags">Tags (<code>key: value</code> per line)</label>
+          <textarea id="k-tags" class="textarea textarea-bordered textarea-sm font-mono" rows="3" bind:value={tagsText} onblur={() => { commitTags(); saveMetadata(); }}></textarea>
+        </div>
 
-        <label class="text-xs opacity-70" for="k-artifacts">Artifacts (one per line)</label>
-        <textarea id="k-artifacts" class="textarea textarea-bordered textarea-sm font-mono" rows="2" bind:value={artifactsText} onblur={() => { commitArtifacts(); saveConnections(); }}></textarea>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs opacity-70" for="k-artifacts">Artifacts (one per line)</label>
+          <textarea id="k-artifacts" class="textarea textarea-bordered textarea-sm font-mono" rows="2" bind:value={artifactsText} onblur={() => { commitArtifacts(); saveConnections(); }}></textarea>
+        </div>
 
-        <label class="text-xs opacity-70" for="k-parent">Parent</label>
-        <select id="k-parent" class="select select-bordered select-sm" bind:value={selected.parentId} onchange={saveConnections}>
-          <option value={null}>— none —</option>
-          {#each board.cards.filter((c) => !invalidParents.has(c.id)) as c (c.id)}
-            <option value={c.id}>{c.title || "(untitled)"}</option>
-          {/each}
-        </select>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs opacity-70" for="k-parent">Parent</label>
+          <select id="k-parent" class="select select-bordered select-sm" bind:value={selected.parentId} onchange={saveConnections}>
+            <option value={null}>— none —</option>
+            {#each board.cards.filter((c) => !invalidParents.has(c.id)) as c (c.id)}
+              <option value={c.id}>{c.title || "(untitled)"}</option>
+            {/each}
+          </select>
+        </div>
 
         {#if selected.children.length > 0}
           <div class="text-xs opacity-70">Children: {selected.children.map((id) => cardTitle.get(id)).join(", ")}</div>
