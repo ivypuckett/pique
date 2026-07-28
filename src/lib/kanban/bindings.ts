@@ -14,7 +14,9 @@ export interface KanbanBindings {
   kanbanAddStatus(arg: { scope: string; name: string }): Promise<{ id: string }>;
   kanbanRenameStatus(arg: { scope: string; statusId: string; name: string }): Promise<unknown>;
   kanbanMoveStatus(arg: { scope: string; statusId: string; position: number }): Promise<unknown>;
-  kanbanDeleteStatus(arg: { scope: string; statusId: string }): Promise<unknown>;
+  kanbanDeleteStatus(
+    arg: { scope: string; statusId: string; withCards?: boolean },
+  ): Promise<unknown>;
   kanbanCreateCard(
     arg: { scope: string; statusId: string; title?: string; description?: string },
   ): Promise<{ id: string }>;

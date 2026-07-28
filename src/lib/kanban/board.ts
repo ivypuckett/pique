@@ -53,7 +53,9 @@ export interface BoardHandle {
   addStatus(arg: { name: string }): string;
   renameStatus(arg: { statusId: string; name: string }): void;
   moveStatus(arg: { statusId: string; position: number }): void;
-  deleteStatus(arg: { statusId: string }): void;
+  // `withCards` deletes the column's cards along with it; without it a non-empty
+  // column is refused. Opt-in so only the human path (which confirms first) can cascade.
+  deleteStatus(arg: { statusId: string; withCards?: boolean }): void;
   createCard(arg: {
     statusId: string;
     title?: string;
@@ -155,6 +157,23 @@ export function openBoard(
     ids.forEach((id, i) => upd.run(i, id));
   };
 
+  // Delete a card and every edge pointing at it, so no card is left parented under or
+  // waiting on something that no longer exists.
+  const removeCard = (cardId: string): void => {
+    db.prepare("DELETE FROM cards WHERE id = ?").run(cardId);
+    db.prepare("UPDATE cards SET parent_id = NULL WHERE parent_id = ?").run(cardId);
+    // Prune the deleted id from every card's predecessor list.
+    const rows = db.prepare("SELECT id, predecessors FROM cards").all() as unknown as {
+      id: string;
+      predecessors: string;
+    }[];
+    const upd = db.prepare("UPDATE cards SET predecessors = ? WHERE id = ?");
+    for (const r of rows) {
+      const preds = JSON.parse(r.predecessors) as string[];
+      if (preds.includes(cardId)) upd.run(JSON.stringify(preds.filter((p) => p !== cardId)), r.id);
+    }
+  };
+
   const cleanName = (name: string): string => {
     const n = name.trim();
     if (n === "") throw new Error("column name cannot be empty");
@@ -227,15 +246,16 @@ export function openBoard(
       renumber(ids);
     },
 
-    deleteStatus({ statusId }) {
+    deleteStatus({ statusId, withCards = false }) {
       const ids = statusIds();
       if (ids.length <= 1) throw new Error("a board needs at least one column");
-      const { c } = db.prepare("SELECT count(*) c FROM cards WHERE status_id = ?").get(
+      const cardIds = (db.prepare("SELECT id FROM cards WHERE status_id = ?").all(
         statusId,
-      ) as { c: number };
-      if (c > 0) {
-        throw new Error(`cannot delete a column that still has cards (${c} remaining)`);
+      ) as unknown as { id: string }[]).map((r) => r.id);
+      if (cardIds.length > 0 && !withCards) {
+        throw new Error(`cannot delete a column that still has cards (${cardIds.length} remaining)`);
       }
+      for (const id of cardIds) removeCard(id);
       db.prepare("DELETE FROM statuses WHERE id = ?").run(statusId);
       renumber(ids.filter((id) => id !== statusId));
     },
@@ -249,18 +269,7 @@ export function openBoard(
     },
 
     deleteCard(cardId) {
-      db.prepare("DELETE FROM cards WHERE id = ?").run(cardId);
-      db.prepare("UPDATE cards SET parent_id = NULL WHERE parent_id = ?").run(cardId);
-      // Prune the deleted id from every card's predecessor list.
-      const rows = db.prepare("SELECT id, predecessors FROM cards").all() as unknown as {
-        id: string;
-        predecessors: string;
-      }[];
-      const upd = db.prepare("UPDATE cards SET predecessors = ? WHERE id = ?");
-      for (const r of rows) {
-        const preds = JSON.parse(r.predecessors) as string[];
-        if (preds.includes(cardId)) upd.run(JSON.stringify(preds.filter((p) => p !== cardId)), r.id);
-      }
+      removeCard(cardId);
     },
 
     setStatus({ cardId, statusId, reason, actor }) {

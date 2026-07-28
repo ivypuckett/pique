@@ -121,18 +121,21 @@
 
   // Column edits. All four share one shape — call, refresh, surface any thrown message in
   // the error strip — so they share one wrapper. board.ts is the authority on what is
-  // allowed (blank names, non-empty columns, the last column); this does not re-check.
+  // allowed (blank names, the last column, cascading deletes); this does not re-check.
   async function column(
     fn: (b: KanbanBindings, scope: string) => Promise<unknown>,
   ): Promise<void> {
     if (!b || !scope) return;
+    let message = "";
     try {
       await fn(b, scope);
-      error = "";
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      message = e instanceof Error ? e.message : String(e);
     }
+    // Set after the refresh, not before: a successful refresh clears `error`, which
+    // would otherwise swallow the message we just caught.
     await refresh();
+    error = message;
   }
 
   function addColumn(): Promise<void> {
@@ -151,8 +154,26 @@
     return column((b, scope) => b.kanbanMoveStatus({ scope, statusId, position }));
   }
 
-  function deleteColumn(statusId: string): Promise<void> {
+  // An empty column goes straight away — there's nothing to lose. One with cards asks
+  // first, because confirming deletes those cards along with it.
+  let pendingDelete = $state<{ statusId: string; name: string; count: number } | null>(null);
+
+  function deleteColumn(statusId: string, name: string): Promise<void> {
+    const count = cardsIn(statusId).length;
+    if (count > 0) {
+      pendingDelete = { statusId, name, count };
+      return Promise.resolve();
+    }
     return column((b, scope) => b.kanbanDeleteStatus({ scope, statusId }));
+  }
+
+  async function confirmDeleteColumn(): Promise<void> {
+    if (!pendingDelete) return;
+    const { statusId } = pendingDelete;
+    pendingDelete = null;
+    // The drawer may be showing one of the cards about to go with the column.
+    selectedId = null;
+    await column((b, scope) => b.kanbanDeleteStatus({ scope, statusId, withCards: true }));
   }
 
   // Card detail drawer.
@@ -336,7 +357,7 @@
                 type="button"
                 class="btn btn-square btn-ghost btn-xs"
                 aria-label="Delete column {s.name}"
-                onclick={() => deleteColumn(s.id)}
+                onclick={() => deleteColumn(s.id, s.name)}
               >✕</button>
             </div>
           </div>
@@ -466,6 +487,24 @@
       {cardTitle.get(drag.cardId) ?? "(untitled)"}
     </div>
   {/if}
+
+  <!-- Delete-a-non-empty-column confirmation -->
+  <div class="modal" class:modal-open={pendingDelete !== null} role="dialog" aria-modal="true">
+    <div class="modal-box max-w-sm">
+      {#if pendingDelete}
+        <div class="text-sm">
+          Delete <span class="font-medium">{pendingDelete.name}</span>
+          and its {pendingDelete.count}
+          {pendingDelete.count === 1 ? "card" : "cards"}?
+        </div>
+        <div class="mt-1 text-xs opacity-60">This can't be undone.</div>
+      {/if}
+      <div class="mt-3 flex justify-end gap-2">
+        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (pendingDelete = null)}>Cancel</button>
+        <button type="button" class="btn btn-error btn-sm" onclick={confirmDeleteColumn}>Delete</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Reason-required move modal -->
   <div class="modal" class:modal-open={pending !== null} role="dialog" aria-modal="true">

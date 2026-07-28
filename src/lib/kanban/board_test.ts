@@ -207,6 +207,38 @@ Deno.test("deleteStatus refuses a column that still has cards", () => {
   b.close();
 });
 
+Deno.test("deleteStatus with withCards deletes the column's cards and prunes their edges", () => {
+  const { b, status } = fresh();
+  const doomed = b.createCard({ statusId: status("Todo"), title: "x", actor: "human" });
+  const child = b.createCard({ statusId: status("Done"), title: "child", actor: "human" });
+  const after = b.createCard({ statusId: status("Done"), title: "after", actor: "human" });
+  b.setConnections({ cardId: child, parentId: doomed, actor: "human" });
+  b.setConnections({ cardId: after, predecessors: [doomed], actor: "human" });
+
+  b.deleteStatus({ statusId: status("Todo"), withCards: true });
+
+  const statuses = b.getBoard().statuses;
+  assertEquals(statuses.map((s) => s.name), ["Backlog", "In Progress", "Done"]);
+  assertEquals(statuses.map((s) => s.position), [0, 1, 2]);
+  assertEquals(b.getBoard().cards.map((c) => c.id).includes(doomed), false);
+  assertEquals(card(b, child).parentId, null);
+  assertEquals(card(b, after).predecessors, []);
+  b.close();
+});
+
+Deno.test("deleteStatus with withCards still refuses the last remaining column", () => {
+  const b = openBoard(":memory:", { defaultStatuses: [{ name: "Only" }] });
+  const only = b.getBoard().statuses[0].id;
+  b.createCard({ statusId: only, title: "x", actor: "human" });
+  assertThrows(
+    () => b.deleteStatus({ statusId: only, withCards: true }),
+    Error,
+    "a board needs at least one column",
+  );
+  assertEquals(b.getBoard().cards.length, 1);
+  b.close();
+});
+
 Deno.test("deleteStatus refuses the last remaining column", () => {
   const b = openBoard(":memory:", { defaultStatuses: [{ name: "Only" }] });
   const only = b.getBoard().statuses[0].id;

@@ -281,8 +281,12 @@ win.bind("kanbanMoveStatus", async (arg) => {
 });
 
 win.bind("kanbanDeleteStatus", async (arg) => {
-  const { scope, statusId } = arg as { scope: string; statusId: string };
-  (await kanban.board(scope)).deleteStatus({ statusId });
+  const { scope, statusId, withCards } = arg as {
+    scope: string;
+    statusId: string;
+    withCards?: boolean;
+  };
+  (await kanban.board(scope)).deleteStatus({ statusId, withCards });
   return true;
 });
 
