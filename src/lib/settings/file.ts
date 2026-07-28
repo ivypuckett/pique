@@ -32,18 +32,6 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
 }
 
-// pique's own pi config dir. Extensions, installed pi packages, and their
-// settings.json live here — SEPARATE from the user's `pi` CLI at ~/.pi/agent, so
-// installing an extension in pique never touches their pi setup. Credentials and
-// models.json still come from ~/.pi/agent via ModelRuntime (see chat/agent.ts), so
-// only extensions are separated. Passed as `agentDir` to createAgentSession and to
-// the package manager (see chat/extensions.ts).
-export function piAgentDir(): string {
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("HOME is not set");
-  return `${home}/.pique/agent`;
-}
-
 // Expand a leading `~` (`~` or `~/...`) against $HOME; `~user` and non-leading `~`
 // are left as-is. Blank input returns "".
 function expandTilde(dir: string, home: string): string {
@@ -54,18 +42,18 @@ function expandTilde(dir: string, home: string): string {
   return trimmed;
 }
 
-// Effective working directory for spawned shells and chat agents: the persisted
-// workspace.defaultDir when it is a non-empty string, else $HOME. A leading `~`
-// is expanded (`~` or `~/...`); `~user` and non-leading `~` are left as-is.
-// `settings` is whatever readJson("settings") returned — possibly null, missing
-// the section, or holding a non-string — so every field is guarded (mirrors
-// resolveChatDefaults).
-export function resolveWorkspaceDir(settings: Json): string {
+// Effective working directory for spawned shells and chat agents when a workspace
+// has no override of its own: the ROOT workspace's cwd, else $HOME. This is what the
+// old global workspace.defaultDir setting became — root's cwd is the value every
+// other workspace falls back to. A leading `~` is expanded (`~` or `~/...`); `~user`
+// and non-leading `~` are left as-is. `layout` is whatever readJson("layout")
+// returned — possibly null, pre-root, or malformed — so every field is guarded.
+export function resolveWorkspaceDir(layout: Json): string {
   const home = Deno.env.get("HOME") ?? "/";
-  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
-    const ws = (settings as { [k: string]: Json }).workspace;
-    if (ws && typeof ws === "object" && !Array.isArray(ws)) {
-      const dir = (ws as { [k: string]: Json }).defaultDir;
+  if (layout && typeof layout === "object" && !Array.isArray(layout)) {
+    const root = (layout as { [k: string]: Json }).root;
+    if (root && typeof root === "object" && !Array.isArray(root)) {
+      const dir = (root as { [k: string]: Json }).cwd;
       if (typeof dir === "string" && dir.trim() !== "") {
         return expandTilde(dir, home);
       }
@@ -90,13 +78,13 @@ export function resolveGitScanDepth(settings: Json): number {
   return fallback;
 }
 
-// Working directory for one spawned module: its per-workspace override when set
-// (leading `~` expanded), else the global default from resolveWorkspaceDir. The
-// override is a raw string threaded down from the workspace state; a blank or
-// absent one means "use the default", so existing behavior is unchanged.
-export function resolveModuleDir(override: string | undefined, settings: Json): string {
+// Working directory for one spawned module: its own workspace's override when set
+// (leading `~` expanded), else the root workspace's, else $HOME — the cwd half of
+// the scope inheritance chain. The override is a raw string threaded down from the
+// workspace state; a blank or absent one means "inherit".
+export function resolveModuleDir(override: string | undefined, layout: Json): string {
   if (typeof override === "string" && override.trim() !== "") {
     return expandTilde(override, Deno.env.get("HOME") ?? "/");
   }
-  return resolveWorkspaceDir(settings);
+  return resolveWorkspaceDir(layout);
 }

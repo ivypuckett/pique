@@ -1,11 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { type Board, type CardRow, kanbanBindings } from "./bindings.ts";
+  import { ROOT } from "../scope/paths.ts";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
     $props();
 
   const b = kanbanBindings();
+
+  // Which board this module is showing: its own workspace's, or the shared root one
+  // it inherits. Root itself has only one board, so the switcher is hidden there.
+  const inRoot = $derived(workspaceId === ROOT);
+  let showRoot = $state(false);
+  const scope = $derived(inRoot || showRoot ? ROOT : workspaceId);
 
   let board = $state<Board>({ statuses: [], cards: [] });
   let error = $state("");
@@ -15,9 +22,9 @@
   );
 
   async function refresh(): Promise<void> {
-    if (!b || !workspaceId) return;
+    if (!b || !scope) return;
     try {
-      board = await b.kanbanGetBoard({ workspaceId });
+      board = await b.kanbanGetBoard({ scope });
       error = "";
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -25,6 +32,14 @@
   }
 
   onMount(refresh);
+
+  // Card ids are per-board, so a selection can't survive a switch — clear it before
+  // reloading, or the drawer would show a card that isn't on the board any more.
+  async function switchBoard(root: boolean): Promise<void> {
+    showRoot = root;
+    selectedId = null;
+    await refresh();
+  }
 
   function cardsIn(statusId: string): CardRow[] {
     return board.cards.filter((c) => c.statusId === statusId).sort((a, b) => a.position - b.position);
@@ -80,9 +95,9 @@
   }
 
   async function confirmMove(): Promise<void> {
-    if (!b || !workspaceId || !pending || reason.trim() === "") return;
+    if (!b || !scope || !pending || reason.trim() === "") return;
     try {
-      await b.kanbanSetStatus({ workspaceId, ...pending, reason: reason.trim() });
+      await b.kanbanSetStatus({ scope, ...pending, reason: reason.trim() });
       pending = null;
       await refresh();
     } catch (e) {
@@ -91,12 +106,12 @@
   }
 
   async function addCard(statusId: string): Promise<void> {
-    if (!b || !workspaceId) return;
+    if (!b || !scope) return;
     try {
       // Number the default title so new cards are distinguishable in the board and
       // in the parent/predecessor dropdowns until the user renames them.
       const title = `New card ${board.cards.length + 1}`;
-      const { id } = await b.kanbanCreateCard({ workspaceId, statusId, title });
+      const { id } = await b.kanbanCreateCard({ scope, statusId, title });
       await refresh();
       selectedId = id;
     } catch (e) {
@@ -143,10 +158,10 @@
   }
 
   async function saveMetadata(): Promise<void> {
-    if (!b || !workspaceId || !selected) return;
+    if (!b || !scope || !selected) return;
     try {
       await b.kanbanSetMetadata({
-        workspaceId,
+        scope,
         cardId: selected.id,
         title: selected.title,
         description: selected.description,
@@ -159,10 +174,10 @@
   }
 
   async function saveConnections(): Promise<void> {
-    if (!b || !workspaceId || !selected) return;
+    if (!b || !scope || !selected) return;
     try {
       await b.kanbanSetConnections({
-        workspaceId,
+        scope,
         cardId: selected.id,
         artifacts: selected.artifacts,
         predecessors: selected.predecessors,
@@ -176,9 +191,9 @@
   }
 
   async function removeCard(): Promise<void> {
-    if (!b || !workspaceId || !selected) return;
+    if (!b || !scope || !selected) return;
     try {
-      await b.kanbanDeleteCard({ workspaceId, cardId: selected.id });
+      await b.kanbanDeleteCard({ scope, cardId: selected.id });
       selectedId = null;
       await refresh();
     } catch (e) {
@@ -221,7 +236,27 @@
 {#if !b}
   <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
 {:else}
-  <div class="flex h-full min-h-0">
+  <div class="flex h-full min-h-0 flex-col">
+    <!-- Board switcher: a workspace can work its own board or the shared root one it
+         inherits. Hidden in root, which has no other board to switch to. -->
+    {#if !inRoot}
+      <div class="flex shrink-0 items-center gap-1 border-b border-base-300 px-3 py-1.5">
+        <span class="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">Board</span>
+        <button
+          class="btn btn-ghost btn-xs"
+          class:btn-active={!showRoot}
+          aria-pressed={!showRoot}
+          onclick={() => switchBoard(false)}
+        >This workspace</button>
+        <button
+          class="btn btn-ghost btn-xs"
+          class:btn-active={showRoot}
+          aria-pressed={showRoot}
+          onclick={() => switchBoard(true)}
+        >Root (shared)</button>
+      </div>
+    {/if}
+  <div class="flex min-h-0 flex-1">
     <!-- Columns -->
     <div class="flex min-w-0 flex-1 gap-3 overflow-x-auto p-3">
       {#each board.statuses as s (s.id)}
@@ -343,6 +378,7 @@
         <button type="button" class="btn btn-ghost btn-xs mt-2 text-error" onclick={removeCard}>Delete card</button>
       </div>
     {/if}
+  </div>
   </div>
 
   {#if error}<div class="border-t border-base-300 px-3 py-1.5 text-xs text-error">{error}</div>{/if}

@@ -51,45 +51,50 @@ Deno.test("writeJson rejects names with path separators", async () => {
   });
 });
 
-Deno.test("resolveWorkspaceDir returns defaultDir when it is a non-empty string", () => {
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/proj/x" } }), "/proj/x");
+// Both resolvers read the LAYOUT tree now: the fallback directory is the root
+// workspace's cwd, which is what the old global workspace.defaultDir became.
+const layout = (cwd: unknown) => ({ root: { cwd } } as Parameters<typeof resolveWorkspaceDir>[0]);
+
+Deno.test("resolveWorkspaceDir returns root's cwd when it is a non-empty string", () => {
+  assertEquals(resolveWorkspaceDir(layout("/proj/x")), "/proj/x");
 });
 
 Deno.test("resolveWorkspaceDir falls back to $HOME for unset/blank/non-string", () => {
   const home = Deno.env.get("HOME");
   assertEquals(resolveWorkspaceDir(null), home);
   assertEquals(resolveWorkspaceDir({}), home);
-  assertEquals(resolveWorkspaceDir({ workspace: {} }), home);
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "" } }), home);
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "   " } }), home);
-  // deno-lint-ignore no-explicit-any
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: 42 as any } }), home);
+  assertEquals(resolveWorkspaceDir({ root: {} }), home);
+  assertEquals(resolveWorkspaceDir(layout("")), home);
+  assertEquals(resolveWorkspaceDir(layout("   ")), home);
+  assertEquals(resolveWorkspaceDir(layout(42)), home);
+  // A pre-root layout has no root workspace at all.
+  assertEquals(resolveWorkspaceDir({ workspaces: [], activeId: "ws-1" }), home);
 });
 
 Deno.test("resolveWorkspaceDir expands a leading ~", () => {
   const home = Deno.env.get("HOME");
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~" } }), home);
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~/proj/x" } }), `${home}/proj/x`);
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "  ~/proj  " } }), `${home}/proj`);
+  assertEquals(resolveWorkspaceDir(layout("~")), home);
+  assertEquals(resolveWorkspaceDir(layout("~/proj/x")), `${home}/proj/x`);
+  assertEquals(resolveWorkspaceDir(layout("  ~/proj  ")), `${home}/proj`);
 });
 
 Deno.test("resolveWorkspaceDir leaves a non-leading or ~user tilde untouched", () => {
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "~alice" } }), "~alice");
-  assertEquals(resolveWorkspaceDir({ workspace: { defaultDir: "/a/~b" } }), "/a/~b");
+  assertEquals(resolveWorkspaceDir(layout("~alice")), "~alice");
+  assertEquals(resolveWorkspaceDir(layout("/a/~b")), "/a/~b");
 });
 
 Deno.test("resolveModuleDir uses the override when set, expanding a leading ~", () => {
   const home = Deno.env.get("HOME");
-  // The override wins over the global default, regardless of settings.
-  assertEquals(resolveModuleDir("/proj/y", { workspace: { defaultDir: "/proj/x" } }), "/proj/y");
-  assertEquals(resolveModuleDir("~/work", { workspace: { defaultDir: "/proj/x" } }), `${home}/work`);
+  // A workspace's own cwd wins over root's, whatever root holds.
+  assertEquals(resolveModuleDir("/proj/y", layout("/proj/x")), "/proj/y");
+  assertEquals(resolveModuleDir("~/work", layout("/proj/x")), `${home}/work`);
 });
 
-Deno.test("resolveModuleDir falls back to the default for a blank/absent override", () => {
-  assertEquals(resolveModuleDir(undefined, { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
-  assertEquals(resolveModuleDir("", { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
-  assertEquals(resolveModuleDir("   ", { workspace: { defaultDir: "/proj/x" } }), "/proj/x");
-  // No override and no default → $HOME, same as resolveWorkspaceDir.
+Deno.test("resolveModuleDir inherits root's cwd for a blank/absent override", () => {
+  assertEquals(resolveModuleDir(undefined, layout("/proj/x")), "/proj/x");
+  assertEquals(resolveModuleDir("", layout("/proj/x")), "/proj/x");
+  assertEquals(resolveModuleDir("   ", layout("/proj/x")), "/proj/x");
+  // No override and no root cwd → $HOME, same as resolveWorkspaceDir.
   assertEquals(resolveModuleDir(undefined, null), Deno.env.get("HOME"));
 });
 

@@ -31,9 +31,7 @@ export function mergeSettings(raw: Partial<Settings>): Settings {
   return {
     version: DEFAULT_SETTINGS.version,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...raw.appearance },
-    chat: { ...DEFAULT_SETTINGS.chat, ...raw.chat },
     workspace: { ...DEFAULT_SETTINGS.workspace, ...raw.workspace },
-    kanban: { ...DEFAULT_SETTINGS.kanban, ...raw.kanban },
   };
 }
 

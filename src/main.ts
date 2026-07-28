@@ -13,6 +13,13 @@ settings.subscribe((s) => {
 // Load persisted config from ~/.pique before first render so the app doesn't flash
 // the default layout/theme. In web-dev (no backend) both resolve to defaults at once.
 // Wrapped (not top-level await) because the build target predates module TLA.
-Promise.all([hydrateSession(), hydrateSettings()]).then(() => {
-  mount(App, { target: document.getElementById("app")! });
-});
+//
+// Sequenced, not concurrent: hydrateSession reads the OLD settings.workspace.defaultDir
+// to seed the root workspace's cwd on a pre-root layout, and hydrateSettings persists a
+// Settings object that no longer carries that field. Running them together left the
+// read racing the write, correct only by virtue of a 150ms debounce.
+hydrateSession()
+  .then(hydrateSettings)
+  .then(() => {
+    mount(App, { target: document.getElementById("app")! });
+  });

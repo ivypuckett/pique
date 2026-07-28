@@ -1,38 +1,26 @@
 // Frontend half of the config binding contract. The backend half is the config*
 // win.bind handlers in src/desktop.ts, which delegate to settings/file.ts —
 // keep arg/return shapes in sync by hand (separate module graphs).
-import type { ThinkingLevel } from "../chat/agent.ts";
-
-// The persisted user prefs, seeded from the config surfaces that already exist in
-// code but weren't persisted (daisyui theme; chat model/provider/thinking). The
-// layout tree persists separately under the "layout" config (see ../store.ts).
+// App-level user prefs — the ones that are NOT per-scope. Chat defaults and Kanban
+// seed statuses used to live here; they are now per-scope and inherited, so they sit
+// in ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
+// working directory moved too: it is the root workspace's cwd, in the layout tree.
+// The layout tree persists separately under the "layout" config (see ../store.ts).
 export interface Settings {
   version: number;
   appearance: { theme: string };
-  chat: {
-    defaultProvider?: string;
-    defaultModel?: string;
-    defaultThinkingLevel?: ThinkingLevel;
-  };
   // gitScanDepth: how many directory levels to descend looking for git repos when the
   // workspace root is not itself a repo, to highlight changed folders. Absent → the
   // resolveGitScanDepth default (see settings/file.ts).
-  workspace: { defaultDir?: string; gitScanDepth?: number };
-  // Statuses a fresh per-workspace board is seeded with (see kanban/board.ts). Ids
-  // are assigned at seed time, so only names are configured here.
-  kanban: { defaultStatuses: { name: string }[] };
+  workspace: { gitScanDepth?: number };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
   appearance: { theme: "catppuccin-frappe" },
-  chat: { defaultThinkingLevel: "off" },
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3 },
-  kanban: {
-    defaultStatuses: [{ name: "Backlog" }, { name: "Todo" }, { name: "In Progress" }, { name: "Done" }],
-  },
 };
 
 interface ConfigBindings {

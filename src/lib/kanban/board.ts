@@ -48,6 +48,12 @@ export interface BoardHandle {
   raw: DatabaseSync;
   getBoard(): Board;
   getLogs(cardId?: string): LogRow[];
+  // Column edits. Ids are stable across a rename, so cards and existing log payloads
+  // are untouched by one. None of these are logged: the logs table is card-scoped.
+  addStatus(arg: { name: string }): string;
+  renameStatus(arg: { statusId: string; name: string }): void;
+  moveStatus(arg: { statusId: string; position: number }): void;
+  deleteStatus(arg: { statusId: string }): void;
   createCard(arg: {
     statusId: string;
     title?: string;
@@ -138,6 +144,23 @@ export function openBoard(
       statusId,
     ) as { n: number }).n;
 
+  const statusIds = (): string[] =>
+    (db.prepare("SELECT id FROM statuses ORDER BY position").all() as unknown as { id: string }[])
+      .map((r) => r.id);
+
+  // Rewrite every status position to its index in `ids`, so an insert, move or delete
+  // always leaves a dense 0..n-1 ordering.
+  const renumber = (ids: string[]): void => {
+    const upd = db.prepare("UPDATE statuses SET position = ? WHERE id = ?");
+    ids.forEach((id, i) => upd.run(i, id));
+  };
+
+  const cleanName = (name: string): string => {
+    const n = name.trim();
+    if (n === "") throw new Error("column name cannot be empty");
+    return n;
+  };
+
   const log = (
     cardId: string,
     action: LogRow["action"],
@@ -177,6 +200,44 @@ export function openBoard(
         : `SELECT id, card_id AS cardId, ts, actor, action, "from", "to", reason FROM logs ORDER BY ts`;
       const stmt = db.prepare(sql);
       return (cardId ? stmt.all(cardId) : stmt.all()) as unknown as LogRow[];
+    },
+
+    addStatus({ name }) {
+      const clean = cleanName(name);
+      const id = crypto.randomUUID();
+      db.prepare("INSERT INTO statuses (id, name, position) VALUES (?, ?, ?)").run(
+        id,
+        clean,
+        statusIds().length,
+      );
+      return id;
+    },
+
+    renameStatus({ statusId, name }) {
+      db.prepare("UPDATE statuses SET name = ? WHERE id = ?").run(cleanName(name), statusId);
+    },
+
+    moveStatus({ statusId, position }) {
+      const ids = statusIds();
+      const from = ids.indexOf(statusId);
+      if (from === -1) return;
+      const to = Math.max(0, Math.min(position, ids.length - 1));
+      ids.splice(from, 1);
+      ids.splice(to, 0, statusId);
+      renumber(ids);
+    },
+
+    deleteStatus({ statusId }) {
+      const ids = statusIds();
+      if (ids.length <= 1) throw new Error("a board needs at least one column");
+      const { c } = db.prepare("SELECT count(*) c FROM cards WHERE status_id = ?").get(
+        statusId,
+      ) as { c: number };
+      if (c > 0) {
+        throw new Error(`cannot delete a column that still has cards (${c} remaining)`);
+      }
+      db.prepare("DELETE FROM statuses WHERE id = ?").run(statusId);
+      renumber(ids.filter((id) => id !== statusId));
     },
 
     createCard({ statusId, title = "", description = "", actor: _actor }) {

@@ -4,16 +4,21 @@
     activeWorkspace,
     focusView,
     resetView,
+    session,
     setWorkspaceDir,
     toggleCollapse,
     workspaceRailHidden,
   } from "./store.ts";
-  import { settings, settingsOpen } from "./settings/store.ts";
+  import { settingsOpen } from "./settings/store.ts";
   import { pickDirectory } from "./settings/bindings.ts";
+  import { ROOT } from "./scope/paths.ts";
 
-  // The workspace override, falling back to the global default; blank shows a "~"
-  // hint (the default resolves to the home directory backend-side).
-  const dir = $derived($activeWorkspace.cwd ?? $settings.workspace.defaultDir ?? "");
+  // This workspace's own override, falling back to root's (root has nothing to fall
+  // back to); blank shows a "~" hint, since the backend resolves the default to the
+  // home directory.
+  const dir = $derived(
+    $activeWorkspace.cwd ?? ($activeWorkspace.id === ROOT ? "" : $session.root.cwd) ?? "",
+  );
 
   // The button is a fixed 32ch monospace box; ~28 chars fit inside its padding.
   // A path longer than that keeps its tail (the meaningful end) behind a leading

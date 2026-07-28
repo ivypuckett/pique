@@ -4,21 +4,23 @@
 import type { Board, LogRow } from "./board.ts";
 export type { Board, CardRow, LogRow, StatusRow } from "./board.ts";
 
-// Every call is keyed by the workspace id — each workspace has its own board DB.
-// Mutations from this (human) path are logged with actor "human" on the backend.
+// Every call is keyed by scope — each scope has its own board DB. A workspace can
+// pass its own id or "root" to work the shared board it inherits; there is no way to
+// name another workspace's board from here. Mutations from this (human) path are
+// logged with actor "human" on the backend.
 export interface KanbanBindings {
-  kanbanGetBoard(arg: { workspaceId: string }): Promise<Board>;
-  kanbanGetLogs(arg: { workspaceId: string; cardId?: string }): Promise<LogRow[]>;
+  kanbanGetBoard(arg: { scope: string }): Promise<Board>;
+  kanbanGetLogs(arg: { scope: string; cardId?: string }): Promise<LogRow[]>;
   kanbanCreateCard(
-    arg: { workspaceId: string; statusId: string; title?: string; description?: string },
+    arg: { scope: string; statusId: string; title?: string; description?: string },
   ): Promise<{ id: string }>;
-  kanbanDeleteCard(arg: { workspaceId: string; cardId: string }): Promise<unknown>;
+  kanbanDeleteCard(arg: { scope: string; cardId: string }): Promise<unknown>;
   kanbanSetStatus(
-    arg: { workspaceId: string; cardId: string; statusId: string; reason: string },
+    arg: { scope: string; cardId: string; statusId: string; reason: string },
   ): Promise<unknown>;
   kanbanSetMetadata(
     arg: {
-      workspaceId: string;
+      scope: string;
       cardId: string;
       title?: string;
       description?: string;
@@ -27,7 +29,7 @@ export interface KanbanBindings {
   ): Promise<unknown>;
   kanbanSetConnections(
     arg: {
-      workspaceId: string;
+      scope: string;
       cardId: string;
       artifacts?: string[];
       predecessors?: string[];

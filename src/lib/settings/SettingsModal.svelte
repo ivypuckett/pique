@@ -1,6 +1,5 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
-  import { pickDirectory } from "./bindings.ts";
   import {
     extBindings,
     type ExtInfo,
@@ -9,14 +8,28 @@
     type ProviderInfo,
   } from "../chat/bindings.ts";
   import { type DefinedTool, toolBindings } from "../tools/bindings.ts";
+  import { editing, editScope, updateScopeConfig } from "../scope/store.ts";
+  import { ROOT } from "../scope/paths.ts";
+  import { activeWorkspace } from "../store.ts";
 
-  async function browse(): Promise<void> {
-    const dir = await pickDirectory($settings.workspace.defaultDir);
-    if (dir) $settings.workspace.defaultDir = dir;
-  }
+  // Which scope the scoped sections (Kanban, Extensions, Tools) act on. Root is the
+  // shared parent; the active workspace is the only other scope reachable from here,
+  // because a workspace can never configure a sibling.
+  const scopes = $derived(
+    $activeWorkspace.id === ROOT
+      ? [{ id: ROOT, label: "Root" }]
+      : [{ id: ROOT, label: "Root (shared)" }, { id: $activeWorkspace.id, label: $activeWorkspace.title }],
+  );
+  const scope = $derived($editing.scope);
+  const inRoot = $derived(scope === ROOT);
+
+  // Statuses of the scope being edited, falling back to root's compiled-in list only
+  // for display — an unset value means "inherit", so the list is only written when
+  // the user actually edits it.
+  const statuses = $derived($editing.config.kanban?.defaultStatuses ?? []);
 
   // Pi-extension management. Null in web-dev (no bindings) → the section shows a
-  // desktop-only note. Extensions install into ~/.pique/agent, separate from `pi`.
+  // desktop-only note. Extensions install into the selected scope's agent dir.
   const ext = extBindings();
   let installed = $state<ExtInfo[]>([]);
   let source = $state("");
@@ -140,15 +153,23 @@
   async function refreshExts(): Promise<void> {
     if (!ext) return;
     try {
-      installed = await ext.extList();
+      installed = await ext.extList({ scope });
     } catch (e) {
       extError = e instanceof Error ? e.message : String(e);
     }
   }
 
-  // Re-list whenever the modal opens; clear any stale notice/error from last time.
+  // Point the modal at the active workspace's scope each time it opens, so the
+  // sections describe where the user actually is rather than wherever they last
+  // browsed. Root is its own scope and stays selected there.
   $effect(() => {
-    if ($settingsOpen && ext) {
+    if ($settingsOpen) editScope($activeWorkspace.id);
+  });
+
+  // Re-list whenever the modal opens OR the scope changes — both change what these
+  // lists should show. Clears any stale notice/error from the previous scope.
+  $effect(() => {
+    if ($settingsOpen && ext && scope) {
       extError = "";
       extNotice = "";
       confirming = false;
@@ -172,7 +193,7 @@
     extError = "";
     extNotice = "";
     try {
-      await ext.extInstall({ source: source.trim() });
+      await ext.extInstall({ scope, source: source.trim() });
       source = "";
       await refreshExts();
       extNotice = "Installed. Reopen your Chat modules to load it.";
@@ -188,7 +209,7 @@
     extError = "";
     extNotice = "";
     try {
-      await ext.extRemove({ source: s });
+      await ext.extRemove({ scope, source: s });
       await refreshExts();
       extNotice = "Removed. Reopen your Chat modules to apply.";
     } catch (e) {
@@ -211,21 +232,25 @@
   let reviewing = $state<string | null>(null);
   let reviewSource = $state("");
 
-  const pendingTools = $derived(defined.filter((t) => t.state === "pending"));
-  const approvedTools = $derived(defined.filter((t) => t.state === "approved"));
+  // `defined` is every tool visible from the selected scope — its own plus root's.
+  // They are split by owner, because only a scope's OWN tools can be approved or
+  // revoked here; inherited ones are managed where they live.
+  const ownPending = $derived(defined.filter((t) => t.state === "pending" && t.scope === scope));
+  const ownApproved = $derived(defined.filter((t) => t.state === "approved" && t.scope === scope));
+  const inheritedTools = $derived(defined.filter((t) => t.scope !== scope));
 
   async function refreshTools(): Promise<void> {
     if (!tools) return;
     try {
-      defined = await tools.toolsList();
+      defined = await tools.toolsVisible({ scope });
     } catch (e) {
       toolError = e instanceof Error ? e.message : String(e);
     }
   }
 
-  // Re-list whenever the modal opens; collapse any review left open last time.
+  // Re-list whenever the modal opens or the scope changes; collapse any open review.
   $effect(() => {
-    if ($settingsOpen && tools) {
+    if ($settingsOpen && tools && scope) {
       toolError = "";
       toolNotice = "";
       reviewing = null;
@@ -233,16 +258,22 @@
     }
   });
 
+  // Keyed by scope AND name: the same tool name can exist in root and in a workspace,
+  // and expanding one must not expand the other.
+  function toolKey(t: DefinedTool): string {
+    return `${t.scope}/${t.name}`;
+  }
+
   async function review(t: DefinedTool): Promise<void> {
     if (!tools) return;
-    if (reviewing === t.name) {
+    if (reviewing === toolKey(t)) {
       reviewing = null;
       return;
     }
     toolError = "";
     try {
-      reviewSource = (await tools.toolsRead({ name: t.name, state: t.state })).source;
-      reviewing = t.name;
+      reviewSource = (await tools.toolsRead({ scope: t.scope, name: t.name, state: t.state })).source;
+      reviewing = toolKey(t);
     } catch (e) {
       toolError = e instanceof Error ? e.message : String(e);
     }
@@ -293,20 +324,31 @@
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 
-  // Default statuses seeded into each new workspace board (see kanban/board.ts).
-  // Editing here only affects boards created afterward, not existing ones.
+  // Sections whose content belongs to a scope rather than the app. Appearance and
+  // Workspace are app-wide; Providers are shared with the `pi` CLI machine-wide.
+  const SCOPED_SECTIONS: readonly string[] = ["kanban", "extensions", "tools"];
+
+  // Default statuses seeded into a new board in the selected scope (kanban/board.ts).
+  // Editing here only affects boards created afterward, not existing ones. Every edit
+  // writes the whole list, which is also what stops the scope inheriting root's.
+  function setStatuses(next: { name: string }[]): void {
+    updateScopeConfig((c) => ({ ...c, kanban: { ...c.kanban, defaultStatuses: next } }));
+  }
   function addStatus(): void {
-    $settings.kanban.defaultStatuses = [...$settings.kanban.defaultStatuses, { name: "New status" }];
+    setStatuses([...statuses, { name: "New status" }]);
   }
   function removeStatus(i: number): void {
-    $settings.kanban.defaultStatuses = $settings.kanban.defaultStatuses.filter((_, j) => j !== i);
+    setStatuses(statuses.filter((_, j) => j !== i));
+  }
+  function renameStatus(i: number, name: string): void {
+    setStatuses(statuses.map((s, j) => (j === i ? { name } : s)));
   }
   function moveStatus(i: number, dir: -1 | 1): void {
-    const next = [...$settings.kanban.defaultStatuses];
+    const next = [...statuses];
     const j = i + dir;
     if (j < 0 || j >= next.length) return;
     [next[i], next[j]] = [next[j], next[i]];
-    $settings.kanban.defaultStatuses = next;
+    setStatuses(next);
   }
 </script>
 
@@ -338,6 +380,27 @@
         </ul>
       </nav>
       <div class="min-w-0 flex-1 overflow-y-auto p-5">
+      <!-- Scope selector: Kanban, Extensions and Tools are per-scope and inherited,
+           so they need to say which scope they are showing. The other sections are
+           app-level and ignore it. -->
+      {#if SCOPED_SECTIONS.includes(section) && scopes.length > 1}
+        <div class="mb-4 flex items-center gap-1 border-b border-base-300 pb-3">
+          <span class="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">Scope</span>
+          {#each scopes as s (s.id)}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              class:btn-active={scope === s.id}
+              aria-pressed={scope === s.id}
+              onclick={() => editScope(s.id)}
+            >{s.label}</button>
+          {/each}
+          <span class="ml-2 text-xs opacity-60">
+            {inRoot ? "Shared with every workspace." : "This workspace only; adds to what it inherits from root."}
+          </span>
+        </div>
+      {/if}
+
       {#if section === "appearance"}
       <div class="mb-3 text-xs uppercase tracking-wide text-primary">Appearance</div>
       <div class="flex items-center justify-between gap-4">
@@ -363,17 +426,9 @@
       <div>
         <div class="text-sm">Default working directory</div>
         <div class="mt-0.5 text-xs opacity-70">
-          Where new terminals and chat agents start. Empty means your home directory.
-          Applies to sessions opened after the change.
-        </div>
-        <div class="mt-2 flex gap-2">
-          <input
-            class="input input-bordered input-sm flex-1"
-            placeholder="~"
-            aria-label="Default working directory"
-            bind:value={$settings.workspace.defaultDir}
-          />
-          <button type="button" class="btn btn-sm" onclick={browse}>Browse…</button>
+          Set per workspace from the path button in the top bar. The Root workspace's
+          directory is the default every other workspace falls back to when it has
+          none of its own; empty means your home directory.
         </div>
       </div>
 
@@ -402,16 +457,24 @@
       <div class="mb-3 text-xs uppercase tracking-wide text-primary">Kanban</div>
       <div class="text-sm">Default statuses</div>
       <div class="mt-0.5 text-xs opacity-70">
-        The columns a new workspace board starts with, in order. Applies to boards
+        The columns a new board in this scope starts with, in order. Applies to boards
         created after the change, not existing ones.
       </div>
+      {#if statuses.length === 0}
+        <div class="mt-3 rounded bg-base-200 px-3 py-2 text-xs opacity-70">
+          {inRoot
+            ? "Using the built-in defaults: Backlog, Todo, In Progress, Done."
+            : "Inheriting root's statuses. Adding one here overrides them for this workspace."}
+        </div>
+      {/if}
       <ul class="mt-3 flex flex-col gap-2">
-        {#each $settings.kanban.defaultStatuses as _status, i (i)}
+        {#each statuses as status, i (i)}
           <li class="flex items-center gap-2">
             <input
               class="input input-bordered input-sm flex-1"
               aria-label={`Status ${i + 1} name`}
-              bind:value={$settings.kanban.defaultStatuses[i].name}
+              value={status.name}
+              oninput={(e) => renameStatus(i, e.currentTarget.value)}
             />
             <button
               type="button"
@@ -424,14 +487,13 @@
               type="button"
               class="btn btn-square btn-ghost btn-sm"
               aria-label="Move down"
-              disabled={i === $settings.kanban.defaultStatuses.length - 1}
+              disabled={i === statuses.length - 1}
               onclick={() => moveStatus(i, 1)}
             >↓</button>
             <button
               type="button"
               class="btn btn-square btn-ghost btn-sm"
               aria-label="Remove status"
-              disabled={$settings.kanban.defaultStatuses.length <= 1}
               onclick={() => removeStatus(i)}
             >✕</button>
           </li>
@@ -678,9 +740,9 @@
         </div>
 
         <div class="mt-4 mb-2 text-xs opacity-70">Awaiting review:</div>
-        {#if pendingTools.length > 0}
+        {#if ownPending.length > 0}
           <ul class="divide-y divide-base-300 rounded border border-warning/50">
-            {#each pendingTools as t (t.name)}
+            {#each ownPending as t (toolKey(t))}
               <li class="px-3 py-2">
                 <div class="flex items-center justify-between gap-2">
                   <span class="truncate font-mono text-xs">{t.name}</span>
@@ -689,15 +751,15 @@
                       type="button"
                       class="btn btn-ghost btn-xs"
                       onclick={() => review(t)}
-                    >{reviewing === t.name ? "Hide" : "Review"}</button>
+                    >{reviewing === toolKey(t) ? "Hide" : "Review"}</button>
                     <button
                       type="button"
                       class="btn btn-warning btn-xs"
-                      disabled={toolBusy || reviewing !== t.name}
-                      title={reviewing === t.name ? "" : "Review the source first"}
+                      disabled={toolBusy || reviewing !== toolKey(t)}
+                      title={reviewing === toolKey(t) ? "" : "Review the source first"}
                       onclick={() =>
                       toolAction(
-                        () => tools.toolsApprove({ name: t.name }),
+                        () => tools.toolsApprove({ scope, name: t.name }),
                         `Approved ${t.name}. Open a new Chat module to load it.`,
                       )}
                     >Approve</button>
@@ -707,15 +769,16 @@
                       disabled={toolBusy}
                       onclick={() =>
                       toolAction(
-                        () => tools.toolsReject({ name: t.name }),
+                        () => tools.toolsReject({ scope, name: t.name }),
                         `Rejected ${t.name}.`,
                       )}
                     >Reject</button>
                   </div>
                 </div>
-                {#if reviewing === t.name}
+                {#if reviewing === toolKey(t)}
                   <div class="mt-2 text-xs opacity-80">
                     This code runs with full system access once approved. Read it before approving.
+                    {#if inRoot}Approving here grants it to every workspace.{/if}
                   </div>
                   <pre class="mt-1.5 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
                     >{reviewSource}</code></pre>
@@ -728,9 +791,9 @@
         {/if}
 
         <div class="mt-4 mb-2 text-xs opacity-70">Approved:</div>
-        {#if approvedTools.length > 0}
+        {#if ownApproved.length > 0}
           <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
-            {#each approvedTools as t (t.name)}
+            {#each ownApproved as t (toolKey(t))}
               <li class="px-3 py-2">
                 <div class="flex items-center justify-between gap-2">
                   <span class="truncate font-mono text-xs">{t.name}</span>
@@ -739,20 +802,20 @@
                       type="button"
                       class="btn btn-ghost btn-xs"
                       onclick={() => review(t)}
-                    >{reviewing === t.name ? "Hide" : "View"}</button>
+                    >{reviewing === toolKey(t) ? "Hide" : "View"}</button>
                     <button
                       type="button"
                       class="btn btn-ghost btn-xs"
                       disabled={toolBusy}
                       onclick={() =>
                       toolAction(
-                        () => tools.toolsRevoke({ name: t.name }),
+                        () => tools.toolsRevoke({ scope, name: t.name }),
                         `Revoked ${t.name}. Reopen Chat modules to apply.`,
                       )}
                     >Revoke</button>
                   </div>
                 </div>
-                {#if reviewing === t.name}
+                {#if reviewing === toolKey(t)}
                   <pre class="mt-2 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
                     >{reviewSource}</code></pre>
                 {/if}
@@ -761,6 +824,35 @@
           </ul>
         {:else}
           <div class="text-xs opacity-60">None approved.</div>
+        {/if}
+
+        <!-- Inherited from root: visible to this workspace's agents, but approved and
+             revoked in root, so they are read-only here. -->
+        {#if inheritedTools.length > 0}
+          <div class="mt-4 mb-2 text-xs opacity-70">Inherited from Root:</div>
+          <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300 border-dashed">
+            {#each inheritedTools as t (toolKey(t))}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-mono text-xs opacity-70">{t.name}</span>
+                  <div class="flex shrink-0 items-center gap-2">
+                    {#if t.state === "pending"}
+                      <span class="text-[0.65rem] opacity-60">pending in Root</span>
+                    {/if}
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => review(t)}
+                    >{reviewing === toolKey(t) ? "Hide" : "View"}</button>
+                  </div>
+                </div>
+                {#if reviewing === toolKey(t)}
+                  <pre class="mt-2 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
+                    >{reviewSource}</code></pre>
+                {/if}
+              </li>
+            {/each}
+          </ul>
         {/if}
 
         {#if toolNotice}<div class="mt-2 text-xs text-success">{toolNotice}</div>{/if}

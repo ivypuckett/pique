@@ -25,6 +25,13 @@ let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let definedTools: typeof import("./lib/tools/service.ts");
+let scopeConfig: typeof import("./lib/scope/config.ts");
+
+// A module with no cwd of its own inherits the root workspace's, which lives in the
+// layout tree — so working-directory resolution reads "layout", not "settings".
+async function moduleDir(override?: string): Promise<string> {
+  return settings.resolveModuleDir(override, await settings.readJson("layout"));
+}
 
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
@@ -33,8 +40,7 @@ win.bind("termStart", async (arg) => {
     cwd?: string;
     argv?: string[];
   };
-  const cwd = settings.resolveModuleDir(override, await settings.readJson("settings"));
-  return { id: term.startSession({ cols, rows, cwd, argv }) };
+  return { id: term.startSession({ cols, rows, cwd: await moduleDir(override), argv }) };
 });
 
 win.bind("termWrite", async (arg) => {
@@ -71,8 +77,8 @@ win.bind("termKill", async (arg) => {
 });
 
 win.bind("chatStart", async (arg) => {
-  const { cwd, workspaceId } = arg as { cwd?: string; workspaceId?: string };
-  return { id: await chat.startAgent({ cwd, workspaceId }) };
+  const { cwd, scope } = arg as { cwd?: string; scope?: string };
+  return { id: await chat.startAgent({ cwd, scope }) };
 });
 
 win.bind("chatPrompt", async (arg) => {
@@ -154,9 +160,13 @@ win.bind("providerRemoveCustom", async (arg) => {
   return true;
 });
 
-// Pi-extension management — global per-install set under ~/.pique/agent. installExtension
-// fetches from npm/git and writes settings.json; the frontend gates it behind a confirm.
-win.bind("extList", async () => await extensions.listExtensions());
+// Pi-extension management — one package set per scope, under that scope's agent dir.
+// installExtension fetches from npm/git and writes the scope's settings.json; the
+// frontend gates it behind a confirm.
+win.bind("extList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await extensions.listExtensions(scope);
+});
 
 win.bind("extSearch", async (arg) => {
   const { query } = arg as { query: string };
@@ -164,14 +174,14 @@ win.bind("extSearch", async (arg) => {
 });
 
 win.bind("extInstall", async (arg) => {
-  const { source } = arg as { source: string };
-  await extensions.installExtension(source);
+  const { scope, source } = arg as { scope: string; source: string };
+  await extensions.installExtension(scope, source);
   return true;
 });
 
 win.bind("extRemove", async (arg) => {
-  const { source } = arg as { source: string };
-  await extensions.removeExtension(source);
+  const { scope, source } = arg as { scope: string; source: string };
+  await extensions.removeExtension(scope, source);
   return true;
 });
 
@@ -188,11 +198,28 @@ win.bind("configWrite", async (arg) => {
   return true;
 });
 
+// Scoped config — chat defaults and Kanban seed statuses, per scope. Read returns a
+// scope's OWN values (what the settings UI edits); Resolve returns them layered onto
+// root's (what an agent there actually sees).
+win.bind("scopeConfigRead", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await scopeConfig.readScopeConfig(scope);
+});
+
+win.bind("scopeConfigWrite", async (arg) => {
+  const { scope, data } = arg as { scope: string; data: unknown };
+  await scopeConfig.writeScopeConfig(scope, data);
+  return true;
+});
+
+win.bind("scopeConfigResolve", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await scopeConfig.resolveScopeConfig(scope);
+});
+
 win.bind("pickDirectory", async (arg) => {
   const { startDir } = arg as { startDir?: string };
-  const start = startDir && startDir.trim() !== ""
-    ? startDir
-    : settings.resolveWorkspaceDir(await settings.readJson("settings"));
+  const start = startDir && startDir.trim() !== "" ? startDir : await moduleDir();
   const path = await dialog.pickDirectory(start);
   return path ? { path } : null;
 });
@@ -200,48 +227,42 @@ win.bind("pickDirectory", async (arg) => {
 win.bind("listDir", async (arg) => {
   const { path } = arg as { path?: string };
   // path undefined → the workspace default; an absolute child path resolves to itself.
-  const dir = settings.resolveModuleDir(path, await settings.readJson("settings"));
-  return await fs.listDir(dir);
+  return await fs.listDir(await moduleDir(path));
 });
 
 win.bind("gitDiff", async (arg) => {
   const { cwd: override, staged, path } = arg as { cwd?: string; staged?: boolean; path?: string };
-  const cwd = settings.resolveModuleDir(override, await settings.readJson("settings"));
-  return { diff: await git.gitDiff(cwd, staged ?? false, path) };
+  return { diff: await git.gitDiff(await moduleDir(override), staged ?? false, path) };
 });
 
 win.bind("gitChanges", async (arg) => {
   const { path } = arg as { path?: string };
-  const cfg = await settings.readJson("settings");
-  const root = settings.resolveModuleDir(path, cfg);
-  return { changes: await git.changedPaths(root, settings.resolveGitScanDepth(cfg)) };
+  const depth = settings.resolveGitScanDepth(await settings.readJson("settings"));
+  return { changes: await git.changedPaths(await moduleDir(path), depth) };
 });
 
-// Kanban: each workspace has its own board DB; the service caches an open handle
-// per workspace id, seeding a fresh board from settings.kanban.defaultStatuses.
-// All mutations on this path are the human UI, so actor is "human".
-async function kanbanBoard(workspaceId: string) {
-  return await kanban.board(workspaceId, await settings.readJson("settings"));
-}
-
+// Kanban: each scope has its own board DB; the service caches an open handle per
+// scope, seeding a fresh board from that scope's resolved kanban.defaultStatuses.
+// The frontend passes the scope it wants — its own workspace, or "root" to work the
+// shared board. All mutations on this path are the human UI, so actor is "human".
 win.bind("kanbanGetBoard", async (arg) => {
-  const { workspaceId } = arg as { workspaceId: string };
-  return (await kanbanBoard(workspaceId)).getBoard();
+  const { scope } = arg as { scope: string };
+  return (await kanban.board(scope)).getBoard();
 });
 
 win.bind("kanbanGetLogs", async (arg) => {
-  const { workspaceId, cardId } = arg as { workspaceId: string; cardId?: string };
-  return (await kanbanBoard(workspaceId)).getLogs(cardId);
+  const { scope, cardId } = arg as { scope: string; cardId?: string };
+  return (await kanban.board(scope)).getLogs(cardId);
 });
 
 win.bind("kanbanCreateCard", async (arg) => {
-  const { workspaceId, statusId, title, description } = arg as {
-    workspaceId: string;
+  const { scope, statusId, title, description } = arg as {
+    scope: string;
     statusId: string;
     title?: string;
     description?: string;
   };
-  const id = (await kanbanBoard(workspaceId)).createCard({
+  const id = (await kanban.board(scope)).createCard({
     statusId,
     title,
     description,
@@ -251,44 +272,44 @@ win.bind("kanbanCreateCard", async (arg) => {
 });
 
 win.bind("kanbanDeleteCard", async (arg) => {
-  const { workspaceId, cardId } = arg as { workspaceId: string; cardId: string };
-  (await kanbanBoard(workspaceId)).deleteCard(cardId);
+  const { scope, cardId } = arg as { scope: string; cardId: string };
+  (await kanban.board(scope)).deleteCard(cardId);
   return true;
 });
 
 win.bind("kanbanSetStatus", async (arg) => {
-  const { workspaceId, cardId, statusId, reason } = arg as {
-    workspaceId: string;
+  const { scope, cardId, statusId, reason } = arg as {
+    scope: string;
     cardId: string;
     statusId: string;
     reason: string;
   };
-  (await kanbanBoard(workspaceId)).setStatus({ cardId, statusId, reason, actor: "human" });
+  (await kanban.board(scope)).setStatus({ cardId, statusId, reason, actor: "human" });
   return true;
 });
 
 win.bind("kanbanSetMetadata", async (arg) => {
-  const { workspaceId, cardId, title, description, tags } = arg as {
-    workspaceId: string;
+  const { scope, cardId, title, description, tags } = arg as {
+    scope: string;
     cardId: string;
     title?: string;
     description?: string;
     tags?: Record<string, string>;
   };
-  (await kanbanBoard(workspaceId)).setMetadata({ cardId, title, description, tags, actor: "human" });
+  (await kanban.board(scope)).setMetadata({ cardId, title, description, tags, actor: "human" });
   return true;
 });
 
 win.bind("kanbanSetConnections", async (arg) => {
-  const { workspaceId, cardId, artifacts, predecessors, successors, parentId } = arg as {
-    workspaceId: string;
+  const { scope, cardId, artifacts, predecessors, successors, parentId } = arg as {
+    scope: string;
     cardId: string;
     artifacts?: string[];
     predecessors?: string[];
     successors?: string[];
     parentId?: string | null;
   };
-  (await kanbanBoard(workspaceId)).setConnections({
+  (await kanban.board(scope)).setConnections({
     cardId,
     artifacts,
     predecessors,
@@ -299,31 +320,44 @@ win.bind("kanbanSetConnections", async (arg) => {
   return true;
 });
 
-// Defined tools — user- and agent-authored pi extensions under ~/.pique/agent.
-// Agents can only write into the quarantine dir (tools/agent-tools.ts); approving
-// is what moves a tool into the dir pi actually loads, so it goes through here.
-win.bind("toolsList", async () => await definedTools.listTools());
+// Defined tools — user- and agent-authored pi extensions, per scope. Agents can only
+// write into their scope's quarantine dir (tools/agent-tools.ts); approving is what
+// moves a tool into the dir pi actually loads, so it goes through here. toolsList
+// returns the scope's own tools; toolsVisible adds the ones it inherits from root.
+win.bind("toolsList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await definedTools.listTools(scope);
+});
+
+win.bind("toolsVisible", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await definedTools.listVisibleTools(scope);
+});
 
 win.bind("toolsRead", async (arg) => {
-  const { name, state } = arg as { name: string; state: "pending" | "approved" };
-  return { source: await definedTools.readSource(name, state) };
+  const { scope, name, state } = arg as {
+    scope: string;
+    name: string;
+    state: "pending" | "approved";
+  };
+  return { source: await definedTools.readSource(scope, name, state) };
 });
 
 win.bind("toolsApprove", async (arg) => {
-  const { name } = arg as { name: string };
-  await definedTools.approveTool(name);
+  const { scope, name } = arg as { scope: string; name: string };
+  await definedTools.approveTool(scope, name);
   return true;
 });
 
 win.bind("toolsReject", async (arg) => {
-  const { name } = arg as { name: string };
-  await definedTools.rejectTool(name);
+  const { scope, name } = arg as { scope: string; name: string };
+  await definedTools.rejectTool(scope, name);
   return true;
 });
 
 win.bind("toolsRevoke", async (arg) => {
-  const { name } = arg as { name: string };
-  await definedTools.revokeTool(name);
+  const { scope, name } = arg as { scope: string; name: string };
+  await definedTools.revokeTool(scope, name);
   return true;
 });
 
@@ -344,5 +378,9 @@ fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 definedTools = await import("./lib/tools/service.ts");
+scopeConfig = await import("./lib/scope/config.ts");
+// Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
+// ~/.pique/scopes/root before anything reads from the new locations. No-op once done.
+await (await import("./lib/scope/migrate.ts")).migrateToScopes();
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

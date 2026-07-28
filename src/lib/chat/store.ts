@@ -5,7 +5,9 @@
 // pane's retain() and stops when the last one releases (i.e. the workspace closes).
 import { get, writable, type Writable } from "svelte/store";
 import { chatBindings, type ChatEvent, type CommandInfo, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
-import { settings } from "../settings/store.ts";
+import { scopeBindings } from "../scope/bindings.ts";
+import { patchScopeChat } from "../scope/store.ts";
+import { ROOT } from "../scope/paths.ts";
 
 export type Item =
   | { role: "user"; text: string }
@@ -31,13 +33,24 @@ export interface ChatSession {
 
 function createSession(key: string, cwd: string | undefined, workspaceId: string | undefined): ChatSession {
   const b = chatBindings();
+  // The scope this conversation runs in — what its defaults are read from and
+  // written back to. A pane with no workspace id falls back to root.
+  const scope = workspaceId ?? ROOT;
   const items = writable<Item[]>([]);
   const input = writable("");
   const ready = writable(false);
   const streaming = writable(false);
   const models = writable<ModelInfo[]>([]);
   const commands = writable<CommandInfo[]>([]);
-  const level = writable<ThinkingLevel>(get(settings).chat.defaultThinkingLevel ?? "off");
+  // Starts at "off" and is corrected once the scope's resolved config loads — the
+  // read is async now that defaults are per-scope files rather than one settings
+  // object already in memory. The backend applies the same resolved value to the
+  // agent itself, so this only keeps the picker's label honest.
+  const level = writable<ThinkingLevel>("off");
+  scopeBindings()?.scopeConfigResolve({ scope }).then((c) => {
+    const l = c?.chat?.defaultThinkingLevel;
+    if (l) level.set(l);
+  });
 
   // The backend agent id, assigned once chatStart resolves.
   let id: string | undefined;
@@ -76,7 +89,7 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
     }
     alive = true;
     (async () => {
-      const started = await b.chatStart({ cwd, workspaceId });
+      const started = await b.chatStart({ cwd, scope: workspaceId });
       id = started.id;
       // Torn down while starting: stop the agent and bail.
       if (!alive) { b.chatStop({ id }).catch(() => {}); id = undefined; return; }
@@ -114,14 +127,17 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
       const m = get(models).find((x) => `${x.provider}/${x.id}` === value);
       if (b && m && id) {
         await b.chatSetModel({ id, provider: m.provider, model: m.id });
-        settings.update((s) => ({ ...s, chat: { ...s.chat, defaultProvider: m.provider, defaultModel: m.id } }));
+        // The pick becomes THIS scope's default, not the app's — a workspace that
+        // picks a model stops inheriting root's, and every other workspace is
+        // unaffected.
+        patchScopeChat(scope, { defaultProvider: m.provider, defaultModel: m.id });
         models.set(await b.chatListModels({ id }));
       }
     },
     pickLevel(value: ThinkingLevel) {
       level.set(value);
       if (id) b?.chatSetThinking({ id, level: value });
-      settings.update((s) => ({ ...s, chat: { ...s.chat, defaultThinkingLevel: value } }));
+      patchScopeChat(scope, { defaultThinkingLevel: value });
     },
     retain() {
       if (refs++ === 0) start();

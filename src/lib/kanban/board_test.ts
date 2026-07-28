@@ -112,6 +112,112 @@ Deno.test("setConnections updates artifacts and parent", () => {
   b.close();
 });
 
+Deno.test("addStatus appends a column at the end and returns its id", () => {
+  const { b } = fresh();
+  const id = b.addStatus({ name: "Blocked" });
+  const statuses = b.getBoard().statuses;
+  assertEquals(statuses.map((s) => s.name), ["Backlog", "Todo", "In Progress", "Done", "Blocked"]);
+  assertEquals(statuses.map((s) => s.position), [0, 1, 2, 3, 4]);
+  assertEquals(statuses.at(-1)!.id, id);
+  b.close();
+});
+
+Deno.test("addStatus rejects a blank name", () => {
+  const { b } = fresh();
+  assertThrows(() => b.addStatus({ name: "   " }), Error, "column name cannot be empty");
+  b.close();
+});
+
+Deno.test("renameStatus changes the name and keeps the id, so cards stay put", () => {
+  const { b, status } = fresh();
+  const todo = status("Todo");
+  const cardId = b.createCard({ statusId: todo, title: "x", actor: "human" });
+  b.renameStatus({ statusId: todo, name: "Next" });
+  assertEquals(b.getBoard().statuses.map((s) => s.name), [
+    "Backlog",
+    "Next",
+    "In Progress",
+    "Done",
+  ]);
+  assertEquals(card(b, cardId).statusId, todo);
+  b.close();
+});
+
+Deno.test("renameStatus rejects a blank name", () => {
+  const { b, status } = fresh();
+  assertThrows(
+    () => b.renameStatus({ statusId: status("Todo"), name: "" }),
+    Error,
+    "column name cannot be empty",
+  );
+  b.close();
+});
+
+Deno.test("moveStatus splices a column to an absolute index and renumbers", () => {
+  const { b, status } = fresh();
+  b.moveStatus({ statusId: status("Done"), position: 0 });
+  assertEquals(b.getBoard().statuses.map((s) => s.name), [
+    "Done",
+    "Backlog",
+    "Todo",
+    "In Progress",
+  ]);
+  assertEquals(b.getBoard().statuses.map((s) => s.position), [0, 1, 2, 3]);
+  b.close();
+});
+
+Deno.test("moveStatus clamps an out-of-range position instead of throwing", () => {
+  const { b, status } = fresh();
+  b.moveStatus({ statusId: status("Backlog"), position: 99 });
+  assertEquals(b.getBoard().statuses.map((s) => s.name), [
+    "Todo",
+    "In Progress",
+    "Done",
+    "Backlog",
+  ]);
+  b.moveStatus({ statusId: status("Backlog"), position: -5 });
+  assertEquals(b.getBoard().statuses.map((s) => s.name), [
+    "Backlog",
+    "Todo",
+    "In Progress",
+    "Done",
+  ]);
+  b.close();
+});
+
+Deno.test("deleteStatus removes an empty column and renumbers the rest", () => {
+  const { b, status } = fresh();
+  b.deleteStatus({ statusId: status("In Progress") });
+  const statuses = b.getBoard().statuses;
+  assertEquals(statuses.map((s) => s.name), ["Backlog", "Todo", "Done"]);
+  assertEquals(statuses.map((s) => s.position), [0, 1, 2]);
+  b.close();
+});
+
+Deno.test("deleteStatus refuses a column that still has cards", () => {
+  const { b, status } = fresh();
+  b.createCard({ statusId: status("Todo"), title: "x", actor: "human" });
+  b.createCard({ statusId: status("Todo"), title: "y", actor: "human" });
+  assertThrows(
+    () => b.deleteStatus({ statusId: status("Todo") }),
+    Error,
+    "cannot delete a column that still has cards (2 remaining)",
+  );
+  assertEquals(b.getBoard().statuses.length, 4);
+  b.close();
+});
+
+Deno.test("deleteStatus refuses the last remaining column", () => {
+  const b = openBoard(":memory:", { defaultStatuses: [{ name: "Only" }] });
+  const only = b.getBoard().statuses[0].id;
+  assertThrows(
+    () => b.deleteStatus({ statusId: only }),
+    Error,
+    "a board needs at least one column",
+  );
+  b.close();
+});
+
 Deno.test("setConnections rejects self-parenting", () => {
   const { b, status } = fresh();
   const a = b.createCard({ statusId: status("Todo"), actor: "human" });

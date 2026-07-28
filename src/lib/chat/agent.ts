@@ -49,13 +49,16 @@ export function toFrontendEvent(event: any): ChatEvent | null {
 
 import {
   createAgentSession,
+  DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
-  // deno-lint-ignore no-explicit-any
 } from "@earendil-works/pi-coding-agent";
-import { piAgentDir, readJson, resolveModuleDir } from "../settings/file.ts";
+import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { toolAuthoringTools } from "../tools/agent-tools.ts";
+import { inheritedExtensionFiles } from "../tools/service.ts";
+import { resolveScopeConfig } from "../scope/config.ts";
+import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -65,13 +68,15 @@ type Session = any;
 const FALLBACK_PROVIDER = "lmstudio";
 const FALLBACK_MODEL = "google/gemma-4-e4b";
 
-// Pure projection of persisted settings → the agent's startup model + thinking.
-// `settings` is whatever readJson("settings") returned: possibly null, missing
-// `chat`, or holding non-string values, so every field is guarded.
+// Pure projection of a scope's resolved config → the agent's startup model +
+// thinking. `config` is whatever resolveScopeConfig returned: possibly null, missing
+// `chat`, or holding non-string values, so every field is guarded. Because the config
+// is already merged along the scope chain, a workspace that pins only a model still
+// inherits root's thinking level.
 export function resolveChatDefaults(
-  settings: unknown,
+  config: unknown,
 ): { provider: string; modelId: string; thinking: ThinkingLevel } {
-  const chat = (settings as { chat?: Record<string, unknown> } | null)?.chat ?? {};
+  const chat = (config as { chat?: Record<string, unknown> } | null)?.chat ?? {};
   const str = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
   return {
     provider: str(chat.defaultProvider, FALLBACK_PROVIDER),
@@ -102,33 +107,50 @@ export async function ensureRuntime() {
   return runtime;
 }
 
-// Start a fresh agent and return its id. `cwd` is the per-workspace override
-// threaded from the frontend; blank/absent falls back to the global default.
-export async function startAgent(opts: { cwd?: string; workspaceId?: string } = {}): Promise<string> {
+// Start a fresh agent in `scope` and return its id. The scope is the workspace the
+// Chat module lives in (root included); everything the agent can see — tools, model
+// defaults, working directory, Kanban board — is resolved against it.
+export async function startAgent(opts: { cwd?: string; scope?: ScopeId } = {}): Promise<string> {
+  const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
-  // Startup model/thinking come from persisted chat defaults (~/.pique/settings.json);
-  // fall back to the consts when unset or when the persisted model isn't available.
-  const rawSettings = await readJson("settings");
-  const { provider, modelId, thinking } = resolveChatDefaults(rawSettings);
-  const cwd = resolveModuleDir(opts.cwd, rawSettings);
+  // Startup model/thinking come from the scope's resolved config (root's, overlaid
+  // with the workspace's); fall back to the consts when unset or when the configured
+  // model isn't available.
+  const config = await resolveScopeConfig(scope);
+  const { provider, modelId, thinking } = resolveChatDefaults(config);
+  const cwd = resolveModuleDir(opts.cwd, await readJson("settings"));
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
-  // Tools compiled into pique. define_tool is always available (tool definition is
-  // global, not workspace-scoped); the Kanban tools need a workspace to bind their
-  // board to. Tools the user has *defined and approved* don't appear here — pi
-  // auto-discovers those from agentDir/extensions (see tools/paths.ts).
-  const customTools = [
-    ...toolAuthoringTools(),
-    ...(opts.workspaceId ? kanbanTools(opts.workspaceId, () => readJson("settings")) : []),
-  ];
+  // Tools compiled into pique, both bound to this scope: define_tool quarantines into
+  // it, and the Kanban tools address its board. Tools the user has *defined and
+  // approved* don't appear here — they load as extensions, below.
+  const customTools = [...toolAuthoringTools(scope), ...kanbanTools(scope)];
+
+  // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
+  // scope's own dir is the agentDir (its approved tools and its installed packages),
+  // and every tool it inherits from an ancestor is passed as an explicit extra path.
+  // additionalExtensionPaths takes FILES — handing it a directory fails with "Cannot
+  // find module" and the inherited tools silently never load.
+  await ensureScopeDirs(scope);
+  const agentDir = scopeAgentDir(scope);
+  const resourceLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    additionalExtensionPaths: await inheritedExtensionFiles(scope),
+  });
+  // createAgentSession only reloads a loader it creates itself, so ours must be
+  // reloaded by hand or it yields no extensions at all.
+  await resourceLoader.reload();
+
   const created = await createAgentSession({
     model,
     cwd,
     customTools,
-    // Load extensions from pique's own dir (~/.pique/agent), separate from the
-    // user's `pi` CLI. Safe: auth + models.json still come from ~/.pi/agent via the
-    // shared modelRuntime below, and the in-memory sessionManager ignores agentDir.
-    agentDir: piAgentDir(),
+    // pique's own pi dirs, separate from the user's `pi` CLI. Safe: auth +
+    // models.json still come from ~/.pi/agent via the shared modelRuntime, and the
+    // in-memory sessionManager ignores agentDir.
+    agentDir,
+    resourceLoader,
     sessionManager: SessionManager.inMemory(),
     modelRuntime,
   });
@@ -212,6 +234,13 @@ export async function setModel(id: string, provider: string, modelId: string): P
 
 export function setThinkingLevel(id: string, level: ThinkingLevel): void {
   agents.get(id)?.session.setThinkingLevel(level);
+}
+
+// Names of the tools this agent can actually call: pi's builtins, pique's compiled-in
+// tools, and every defined tool that reached it — its scope's own plus the ones it
+// inherits. The assembled result of the scope chain, readable after the fact.
+export function activeToolNames(id: string): string[] {
+  return agents.get(id)?.session.getActiveToolNames() ?? [];
 }
 
 // The `/` menu list: the same three sources pi's TUI concatenates in getCommands —

@@ -7,9 +7,10 @@ import type { ProviderInfo } from "./providers.ts";
 export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, ModelInfo, ProviderInfo, ThinkingLevel };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
-// returns; every other call carries that id.
+// returns; every other call carries that id. `scope` is the workspace the module
+// lives in — it decides which tools, defaults and board the agent gets.
 export interface ChatBindings {
-  chatStart(arg: { cwd?: string; workspaceId?: string }): Promise<{ id: string }>;
+  chatStart(arg: { cwd?: string; scope?: string }): Promise<{ id: string }>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
   chatRead(arg: { id: string }): Promise<ChatEvent[]>;
   chatAbort(arg: { id: string }): Promise<unknown>;
@@ -26,12 +27,14 @@ export function chatBindings(): ChatBindings | null {
 }
 
 // Pi-extension (pi package) management, backed by the ext* handlers in desktop.ts.
-// Not keyed by a chat id: extensions are a global, per-install set (~/.pique/agent).
+// Keyed by scope, not by chat id: packages install into one scope's agent dir, so
+// installing in root serves every workspace and installing in a workspace serves
+// only it. Search is scope-free (it queries npm).
 export interface ExtBindings {
-  extList(): Promise<ExtInfo[]>;
+  extList(arg: { scope: string }): Promise<ExtInfo[]>;
   extSearch(arg: { query: string }): Promise<ExtSearchResult[]>;
-  extInstall(arg: { source: string }): Promise<unknown>;
-  extRemove(arg: { source: string }): Promise<unknown>;
+  extInstall(arg: { scope: string; source: string }): Promise<unknown>;
+  extRemove(arg: { scope: string; source: string }): Promise<unknown>;
 }
 
 export function extBindings(): ExtBindings | null {

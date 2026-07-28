@@ -24,13 +24,16 @@ import {
 } from "./workspace.ts";
 import {
   addWorkspace as addWorkspaceFn,
+  allWorkspaces,
   closeWorkspace as closeWorkspaceFn,
   createInitialSession,
   focusAdjacent as focusAdjacentWorkspaceFn,
   focusWorkspace as focusWorkspaceFn,
   isSessionState,
+  migrateSession,
   type SessionState,
   updateWorkspace,
+  workspaceById,
 } from "./session.ts";
 import { readConfig, writeConfig } from "./settings/bindings.ts";
 
@@ -48,14 +51,31 @@ let hydrated = false;
 
 export async function hydrateSession(): Promise<void> {
   const raw = await readConfig("layout");
-  if (isSessionState(raw)) session.set(raw);
+  // Layouts written before the root workspace existed are adopted under a fresh
+  // root, seeded with the old global default dir that root's cwd now supersedes.
+  const settings = await readConfig("settings");
+  const defaultDir = (settings as { workspace?: { defaultDir?: unknown } } | null)
+    ?.workspace?.defaultDir;
+  const adopted = !isSessionState(raw);
+  const migrated = migrateSession(raw, typeof defaultDir === "string" ? defaultDir : undefined);
+  if (migrated) session.set(migrated);
   hydrated = true;
+  // set() above ran while `hydrated` was still false, so the persist subscription
+  // skipped it — right for a tree read back unchanged, wrong for one we just
+  // transformed. Write an adopted tree NOW: the settings.workspace.defaultDir that
+  // seeded root's cwd is dropped the first time settings are persisted, so leaving
+  // the old shape on disk until the user's next action risks losing it.
+  if (migrated && adopted) await writeConfig("layout", migrated);
 }
 
+// Every workspace in rail order, root first — what the rail and Session.svelte render.
+export const workspaces = derived(session, allWorkspaces);
+
 // The shown workspace: the rail's selection, and what view-level actions target.
+// Falls back to root, which is the one workspace guaranteed to exist.
 export const activeWorkspace = derived(
   session,
-  (s) => s.workspaces.find((w) => w.id === s.activeId)!,
+  (s) => workspaceById(s, s.activeId) ?? s.root,
 );
 
 // The presented view of the shown workspace: keyboard nav and the top bar act on this.

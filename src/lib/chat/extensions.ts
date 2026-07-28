@@ -1,17 +1,23 @@
 // Deno-side pi-extension (pi package) management. Runs in the desktop process only.
 //
-// Extensions install into pique's OWN pi config dir (piAgentDir = ~/.pique/agent),
+// Extensions install into ONE SCOPE's pi config dir (~/.pique/scopes/<id>/agent),
 // SEPARATE from the user's `pi` CLI (~/.pi/agent) — installing here never touches
 // their pi setup. Only extensions/packages/pi-settings are separated; credentials
-// and models.json stay shared with pi via ModelRuntime.create() (see agent.ts). For
-// installed extensions to actually load, the chat agent is started with
-// `agentDir: piAgentDir()` (see agent.ts:startAgent).
+// and models.json stay shared with pi via ModelRuntime.create() (see agent.ts). A
+// chat agent loads the packages of its own scope, because that scope's dir is the
+// agentDir it is started with (see agent.ts:startAgent).
+//
+// Unlike defined tools, packages are NOT inherited from root: a workspace agent gets
+// root's loose `.ts` tools via additionalExtensionPaths, but pulling root's npm
+// packages down that path is the operation implicated in the boot panic recorded in
+// docs/scopes.md, so it is deliberately not wired up.
 //
 // The frontend half is the ext* win.bind handlers in src/desktop.ts; keep arg/return
 // shapes in sync by hand (separate module graphs, as with the chat bindings).
 
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { piAgentDir, readJson, resolveWorkspaceDir } from "../settings/file.ts";
+import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
+import { ensureScopeDirs, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
 
 // JSON-safe projection of pi's ConfiguredPackage that crosses the win.bind boundary.
 export type ExtInfo = { source: string; scope: string; path?: string };
@@ -67,32 +73,37 @@ export function toExtInfo(pkg: any): ExtInfo {
   };
 }
 
+// One package manager per scope, cached — each writes to its own scope's
+// settings.json, so they must not be shared.
 // deno-lint-ignore no-explicit-any
-let pm: any | undefined;
-async function manager() {
+const managers = new Map<ScopeId, any>();
+async function manager(scope: ScopeId) {
+  let pm = managers.get(scope);
   if (!pm) {
+    await ensureScopeDirs(scope);
     const cwd = resolveWorkspaceDir(await readJson("settings"));
-    const agentDir = piAgentDir();
+    const agentDir = scopeAgentDir(scope);
     const settingsManager = SettingsManager.create(cwd, agentDir);
     pm = new DefaultPackageManager({ cwd, agentDir, settingsManager });
+    managers.set(scope, pm);
   }
   return pm;
 }
 
-export async function listExtensions(): Promise<ExtInfo[]> {
-  return (await manager()).listConfiguredPackages().map(toExtInfo);
+export async function listExtensions(scope: ScopeId): Promise<ExtInfo[]> {
+  return (await manager(scope)).listConfiguredPackages().map(toExtInfo);
 }
 
-// Fetch the package and persist it to pique's settings.json. Global (user) scope —
-// project-local packages need project trust, which is out of scope.
-export async function installExtension(source: string): Promise<void> {
+// Fetch the package and persist it to the scope's settings.json. Global (user) scope
+// in pi's sense — project-local packages need project trust, which is out of scope.
+export async function installExtension(scope: ScopeId, source: string): Promise<void> {
   const s = source.trim();
   if (!isValidSource(s)) throw new Error(`invalid extension source: ${source}`);
-  await (await manager()).installAndPersist(s);
+  await (await manager(scope)).installAndPersist(s);
 }
 
-export async function removeExtension(source: string): Promise<void> {
-  await (await manager()).removeAndPersist(source);
+export async function removeExtension(scope: ScopeId, source: string): Promise<void> {
+  await (await manager(scope)).removeAndPersist(source);
 }
 
 // Browse pi packages via npm's public registry search. Networked; the caller
