@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { type Board, type CardRow, kanbanBindings } from "./bindings.ts";
+  import { type Board, type CardRow, type KanbanBindings, kanbanBindings } from "./bindings.ts";
   import { ROOT } from "../scope/paths.ts";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
@@ -117,6 +117,42 @@
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  // Column edits. All four share one shape — call, refresh, surface any thrown message in
+  // the error strip — so they share one wrapper. board.ts is the authority on what is
+  // allowed (blank names, non-empty columns, the last column); this does not re-check.
+  async function column(
+    fn: (b: KanbanBindings, scope: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!b || !scope) return;
+    try {
+      await fn(b, scope);
+      error = "";
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    await refresh();
+  }
+
+  function addColumn(): Promise<void> {
+    const name = `New column ${board.statuses.length + 1}`;
+    return column((b, scope) => b.kanbanAddStatus({ scope, name }));
+  }
+
+  // Committed on blur and on Enter. A blank or unchanged name is a no-op that just
+  // refreshes, which re-renders the input from `board` — so it snaps back on its own.
+  function renameColumn(statusId: string, name: string, was: string): Promise<void> {
+    if (name.trim() === "" || name === was) return refresh();
+    return column((b, scope) => b.kanbanRenameStatus({ scope, statusId, name }));
+  }
+
+  function moveColumn(statusId: string, position: number): Promise<void> {
+    return column((b, scope) => b.kanbanMoveStatus({ scope, statusId, position }));
+  }
+
+  function deleteColumn(statusId: string): Promise<void> {
+    return column((b, scope) => b.kanbanDeleteStatus({ scope, statusId }));
   }
 
   // Card detail drawer.
@@ -259,16 +295,50 @@
   <div class="flex min-h-0 flex-1">
     <!-- Columns -->
     <div class="flex min-w-0 flex-1 gap-3 overflow-x-auto p-3">
-      {#each board.statuses as s (s.id)}
+      {#each board.statuses as s, i (s.id)}
         <div
           class="flex w-64 shrink-0 flex-col rounded bg-base-200 ring-2 ring-transparent transition-colors"
           class:ring-primary={drag && overStatus === s.id && drag.fromStatus !== s.id}
           role="group"
           data-status-id={s.id}
         >
-          <div class="flex items-center justify-between px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
-            <span class="truncate">{s.name}</span>
-            <span class="opacity-60">{cardsIn(s.id).length}</span>
+          <!-- The name is an always-editable borderless input; the reorder/delete controls
+               stay hidden until the column is hovered or something inside it has focus, so
+               a resting board still reads as plain column headers. -->
+          <div class="group flex items-center gap-1 px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
+            <input
+              class="min-w-0 flex-1 truncate rounded bg-transparent uppercase outline-none focus:bg-base-100 focus:px-1 focus:ring-1 focus:ring-primary"
+              aria-label="Rename column {s.name}"
+              value={s.name}
+              onblur={(e) => renameColumn(s.id, e.currentTarget.value, s.name)}
+              onkeydown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") { e.currentTarget.value = s.name; e.currentTarget.blur(); }
+              }}
+            />
+            <span class="shrink-0 opacity-60">{cardsIn(s.id).length}</span>
+            <div class="flex shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-xs"
+                aria-label="Move column {s.name} left"
+                disabled={i === 0}
+                onclick={() => moveColumn(s.id, i - 1)}
+              >←</button>
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-xs"
+                aria-label="Move column {s.name} right"
+                disabled={i === board.statuses.length - 1}
+                onclick={() => moveColumn(s.id, i + 1)}
+              >→</button>
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-xs"
+                aria-label="Delete column {s.name}"
+                onclick={() => deleteColumn(s.id)}
+              >✕</button>
+            </div>
           </div>
           <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
             {#each cardsIn(s.id) as c (c.id)}
@@ -295,9 +365,13 @@
           </div>
         </div>
       {/each}
-      {#if board.statuses.length === 0}
-        <div class="p-4 text-xs opacity-60">No statuses. Configure default statuses in Settings → Kanban.</div>
-      {/if}
+      <!-- A board can no longer reach zero columns (deleteStatus refuses the last one, and
+           the seed is never empty), so this is the only column affordance needed here. -->
+      <button
+        type="button"
+        class="btn btn-ghost h-auto w-40 shrink-0 self-start justify-start border border-dashed border-base-300 py-2 text-xs font-normal opacity-70"
+        onclick={addColumn}
+      >+ Add column</button>
     </div>
 
     <!-- Detail drawer -->
