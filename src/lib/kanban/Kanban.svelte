@@ -182,6 +182,91 @@
     await column((b, scope) => b.kanbanDeleteStatus({ scope, statusId, withCards: true }));
   }
 
+  // Dependency arrows. Hovering a card draws every predecessor→successor edge in the
+  // chain it belongs to — not just the edges touching it — so one hover shows the whole
+  // ordering the card sits in. Suppressed mid-drag, where the pointer sweeps over cards
+  // it isn't asking about.
+  let hoveredId = $state<string | null>(null);
+  let boardEl = $state<HTMLElement | null>(null);
+  let arrows = $state<string[]>([]);
+  const arrowHead = $props.id(); // per-instance: several boards can be mounted at once
+
+  const chainEdges = $derived.by(() => {
+    if (!hoveredId || drag) return [];
+    const byId = new Map(board.cards.map((c) => [c.id, c]));
+    // The hovered card can go away under the pointer (deleted, or a board switch), and
+    // no pointerleave fires when its element is simply removed.
+    if (!byId.has(hoveredId)) return [];
+    // Walk predecessor edges in both directions to collect the connected chain…
+    const chain = new Set([hoveredId]);
+    const stack = [hoveredId];
+    while (stack.length) {
+      const cur = byId.get(stack.pop()!)!;
+      for (const n of [...cur.predecessors, ...cur.successors]) {
+        if (byId.has(n) && !chain.has(n)) {
+          chain.add(n);
+          stack.push(n);
+        }
+      }
+    }
+    // …then read the edges back off it, each one exactly once (from its successor).
+    const edges: { from: string; to: string }[] = [];
+    for (const id of chain) {
+      for (const p of byId.get(id)!.predecessors) if (chain.has(p)) edges.push({ from: p, to: id });
+    }
+    return edges;
+  });
+
+  type Box = { left: number; right: number; top: number; bottom: number };
+
+  // Cards that overlap horizontally are in the same column (columns never overlap), so
+  // they get a straight vertical line between the facing edges. Otherwise the arrow
+  // leaves the source's side and enters the target's facing side, with the control
+  // points half the horizontal gap out — far enough to meet each card square-on,
+  // never so far that the curve doubles back between close columns.
+  function arrowPath(a: Box, b: Box): string {
+    if (b.left < a.right && b.right > a.left) {
+      const x = (a.left + a.right) / 2;
+      return b.top >= a.bottom ? `M${x} ${a.bottom} L${x} ${b.top}` : `M${x} ${a.top} L${x} ${b.bottom}`;
+    }
+    const rightward = b.left >= a.right;
+    const [x1, x2] = rightward ? [a.right, b.left] : [a.left, b.right];
+    const [y1, y2] = [(a.top + a.bottom) / 2, (b.top + b.bottom) / 2];
+    const pull = (x2 - x1) / 2;
+    return `M${x1} ${y1} C${x1 + pull} ${y1} ${x2 - pull} ${y2} ${x2} ${y2}`;
+  }
+
+  // The overlay is pinned to the visible board area while the columns scroll under it,
+  // so the paths are remeasured on every scroll and resize as well as on hover.
+  function measureArrows(): void {
+    const host = boardEl;
+    if (!host || chainEdges.length === 0) {
+      arrows = [];
+      return;
+    }
+    const o = host.getBoundingClientRect();
+    const box = (id: string): Box | null => {
+      const el = host.querySelector(`[data-card-id="${id}"]`);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left - o.left,
+        right: r.right - o.left,
+        top: r.top - o.top,
+        bottom: r.bottom - o.top,
+      };
+    };
+    const out: string[] = [];
+    for (const e of chainEdges) {
+      const from = box(e.from);
+      const to = box(e.to);
+      if (from && to) out.push(arrowPath(from, to));
+    }
+    arrows = out;
+  }
+
+  $effect(measureArrows);
+
   // Card detail drawer.
   let selectedId = $state<string | null>(null);
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
@@ -295,7 +380,7 @@
   }
 </script>
 
-<svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
+<svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} onresize={measureArrows} />
 
 {#if !b}
   <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
@@ -321,8 +406,14 @@
       </div>
     {/if}
   <div class="flex min-h-0 flex-1">
-    <!-- Columns -->
-    <div class="flex min-w-0 flex-1 gap-3 overflow-x-auto p-3">
+    <!-- Columns, under a pinned overlay for the dependency arrows: the wrapper doesn't
+         scroll, so the arrows stay put while the board scrolls beneath them. -->
+    <div
+      class="relative min-h-0 min-w-0 flex-1"
+      bind:this={boardEl}
+      onscrollcapture={measureArrows}
+    >
+    <div class="flex h-full gap-3 overflow-x-auto p-3">
       {#each board.statuses as s, i (s.id)}
         <div
           class="flex w-64 shrink-0 flex-col rounded bg-base-200 ring-2 ring-transparent transition-colors"
@@ -375,7 +466,10 @@
                 class="cursor-grab touch-none select-none rounded border border-base-300 bg-base-100 p-2 text-left hover:border-primary"
                 class:border-primary={selectedId === c.id}
                 class:opacity-40={drag?.cardId === c.id}
+                data-card-id={c.id}
                 onpointerdown={(e) => onCardPointerDown(e, c.id, s.id)}
+                onpointerenter={() => (hoveredId = c.id)}
+                onpointerleave={() => { if (hoveredId === c.id) hoveredId = null; }}
               >
                 <div class="truncate text-sm">{c.title || "(untitled)"}</div>
                 {#if Object.keys(c.tags).length > 0}
@@ -400,6 +494,31 @@
         class="btn btn-ghost h-auto w-40 shrink-0 self-start justify-start border border-dashed border-base-300 py-2 text-xs font-normal opacity-70"
         onclick={addColumn}
       >+ Add column</button>
+    </div>
+
+      {#if arrows.length > 0}
+        <svg
+          class="pointer-events-none absolute inset-0 h-full w-full overflow-hidden text-primary"
+          aria-hidden="true"
+        >
+          <defs>
+            <marker
+              id={arrowHead}
+              viewBox="0 0 8 8"
+              refX="7"
+              refY="4"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path d="M0 0 L8 4 L0 8 z" fill="currentColor" />
+            </marker>
+          </defs>
+          {#each arrows as d, i (i)}
+            <path {d} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#{arrowHead})" />
+          {/each}
+        </svg>
+      {/if}
     </div>
 
     <!-- Detail drawer -->
