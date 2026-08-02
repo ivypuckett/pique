@@ -4,17 +4,15 @@
 // transcript, input, model, and streaming state. The backend agent starts on the first
 // pane's retain() and stops when the last one releases (i.e. the workspace closes).
 import { get, writable, type Writable } from "svelte/store";
-import { chatBindings, type ChatEvent, type CommandInfo, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
+import { chatBindings, type ChatEvent, type CommandInfo, type Item, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
 import { profileBindings, type ProfileInfo } from "../profiles/bindings.ts";
 import { scopeBindings } from "../scope/bindings.ts";
 import { patchScopeChat } from "../scope/store.ts";
 import { ROOT } from "../scope/paths.ts";
 
-export type Item =
-  | { role: "user"; text: string }
-  | { role: "assistant"; text: string }
-  | { role: "thinking"; text: string }
-  | { role: "tool"; id: string; name: string; args: string; result: string; isError: boolean; done: boolean };
+// Defined next to ChatEvent in chat/agent.ts: the backend rebuilds the same Items for a
+// resumed conversation, so the shape has to be one thing, not two.
+export type { Item };
 
 export interface ChatSession {
   items: Writable<Item[]>;
@@ -33,6 +31,7 @@ export interface ChatSession {
   pickModel(value: string): Promise<void>;
   pickLevel(value: ThinkingLevel): void;
   pickProfile(value: string): void;
+  newChat(): void;
   retain(): void;
   release(): void;
 }
@@ -101,8 +100,9 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
   }
 
   // `profileName` is undefined on the first start (let the backend apply the scope
-  // default) and an explicit name — possibly "" — on a restart from the picker.
-  function start(profileName?: string) {
+  // default) and an explicit name — possibly "" — on a restart. `fresh` asks the backend
+  // to begin a new conversation rather than resume the scope's saved one.
+  function start(profileName?: string, fresh?: boolean) {
     if (!b) {
       items.set([{ role: "assistant", text: "Chat unavailable — run the desktop app (bindings are absent in a browser tab)." }]);
       return;
@@ -111,11 +111,15 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
     const gen = ++generation;
     const current = () => alive && gen === generation;
     (async () => {
-      const started = await b.chatStart({ cwd, scope: workspaceId, profile: profileName });
+      const started = await b.chatStart({ cwd, scope: workspaceId, profile: profileName, fresh });
+      // What the resumed conversation already holds, read before the id is published so
+      // a start that loses the race cannot paint its transcript over the winner's.
+      const history = await b.chatHistory({ id: started.id });
       // Torn down or restarted while starting: stop this agent and bail without
       // publishing its id, so the newer start owns the session.
       if (!current()) { b.chatStop({ id: started.id }).catch(() => {}); return; }
       id = started.id;
+      items.set(history);
       ready.set(true);
       profiles.set(await profileBindings()?.profilesVisible({ scope }) ?? []);
       models.set(await b.chatListModels({ id }));
@@ -126,6 +130,20 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
         for (const ev of events) apply(ev);
       }
     })();
+  }
+
+  // Stop the live agent and start another on a new conversation. Neither the system
+  // prompt nor the session file can be swapped on a running pi session, so both callers
+  // — switching profile and starting a new chat — have to go through a restart, and both
+  // want a new conversation rather than the saved one resumed.
+  function restart(profileName: string) {
+    if (id) b?.chatStop({ id }).catch(() => {});
+    id = undefined;
+    alive = false;
+    items.set([]);
+    streaming.set(false);
+    ready.set(false);
+    start(profileName, true);
   }
 
   return {
@@ -166,19 +184,18 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
       patchScopeChat(scope, { defaultThinkingLevel: value });
     },
     // A profile cannot be applied to a live agent — pi fixes the system prompt at session
-    // creation — so this stops the old agent and starts a new one, which is why the
-    // transcript goes with it. The pick becomes the scope's default, as pickModel's does.
+    // creation — so this restarts, which is why the transcript goes with it. The pick
+    // becomes the scope's default, as pickModel's does.
     pickProfile(value: string) {
       if (value === get(profile)) return;
-      if (id) b?.chatStop({ id }).catch(() => {});
-      id = undefined;
-      alive = false;
-      items.set([]);
-      streaming.set(false);
-      ready.set(false);
       profile.set(value);
       patchScopeChat(scope, { defaultProfile: value });
-      start(value);
+      restart(value);
+    },
+    // Put the saved conversation behind us and begin another under the same profile. The
+    // old session file stays on disk; it is simply no longer the most recent one.
+    newChat() {
+      restart(get(profile));
     },
     retain() {
       if (refs++ === 0) start();

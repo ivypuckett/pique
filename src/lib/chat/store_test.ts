@@ -4,23 +4,31 @@
 // old one must not land in the new transcript.
 import { assertEquals } from "@std/assert";
 import { get } from "svelte/store";
-import type { ChatEvent } from "./bindings.ts";
+import type { ChatEvent, Item } from "./bindings.ts";
 import { chatSession } from "./store.ts";
 
 // A backend that hands out incrementing agent ids and lets a test push events to a
-// chosen agent, so "the old agent answered late" is expressible.
-function fakeBindings() {
-  const started: { id: string; profile?: string }[] = [];
+// chosen agent, so "the old agent answered late" is expressible. `resumed` stands in for
+// the saved conversation the real backend hands back: agents started with fresh:true get
+// none, matching SessionManager.create vs continueRecent.
+function fakeBindings(resumed: Item[] = []) {
+  const started: { id: string; profile?: string; fresh?: boolean }[] = [];
   const stopped: string[] = [];
   const queues = new Map<string, ChatEvent[]>();
+  const histories = new Map<string, Item[]>();
   let next = 1;
   const bindings = {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
       const id = `agent-${next++}`;
-      started.push({ id, profile: arg.profile });
+      started.push({ id, profile: arg.profile, fresh: arg.fresh });
       queues.set(id, []);
+      histories.set(id, arg.fresh ? [] : resumed);
       return Promise.resolve({ id });
+    },
+    // deno-lint-ignore no-explicit-any
+    chatHistory(arg: any) {
+      return Promise.resolve(histories.get(arg.id) ?? []);
     },
     // deno-lint-ignore no-explicit-any
     chatStop(arg: any) {
@@ -59,8 +67,11 @@ function fakeBindings() {
   };
 }
 
-async function withFakeBackend(fn: (f: ReturnType<typeof fakeBindings>) => Promise<void>) {
-  const f = fakeBindings();
+async function withFakeBackend(
+  fn: (f: ReturnType<typeof fakeBindings>) => Promise<void>,
+  resumed: Item[] = [],
+) {
+  const f = fakeBindings(resumed);
   const g = globalThis as unknown as { bindings?: unknown };
   const prev = g.bindings;
   g.bindings = f.bindings;
@@ -73,6 +84,68 @@ async function withFakeBackend(fn: (f: ReturnType<typeof fakeBindings>) => Promi
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 20));
+
+const SAVED: Item[] = [
+  { role: "user", text: "before the restart" },
+  { role: "assistant", text: "still here" },
+];
+
+Deno.test("a started session shows the conversation the backend resumed", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-resume-1");
+    s.retain();
+    await settle();
+
+    assertEquals(get(s.items), SAVED, "reopening picks the transcript back up");
+    assertEquals(f.started[0].fresh, undefined, "the first start resumes rather than resets");
+
+    // And the resumed transcript is what new events build on, not a separate one.
+    f.emit("agent-1", { kind: "text", delta: " and continuing" });
+    await settle();
+    assertEquals(get(s.items), [
+      { role: "user", text: "before the restart" },
+      { role: "assistant", text: "still here and continuing" },
+    ]);
+
+    s.release();
+  }, SAVED);
+});
+
+Deno.test("a new chat starts fresh and drops the resumed transcript", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-resume-2");
+    s.retain();
+    await settle();
+    assertEquals(get(s.items), SAVED);
+
+    s.newChat();
+    await settle();
+
+    assertEquals(get(s.items), [], "a new chat is an empty one");
+    assertEquals(f.stopped, ["agent-1"], "the old agent is stopped, not leaked");
+    assertEquals(f.started.map((x) => x.fresh), [undefined, true]);
+
+    s.release();
+  }, SAVED);
+});
+
+Deno.test("a new chat keeps the profile in use", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-resume-3");
+    s.retain();
+    await settle();
+
+    s.pickProfile("reviewer");
+    await settle();
+    s.newChat();
+    await settle();
+
+    assertEquals(f.started.map((x) => x.profile), [undefined, "reviewer", "reviewer"]);
+    assertEquals(get(s.profile), "reviewer");
+
+    s.release();
+  });
+});
 
 Deno.test("picking a profile restarts the agent and clears the transcript", async () => {
   await withFakeBackend(async (f) => {
@@ -90,6 +163,7 @@ Deno.test("picking a profile restarts the agent and clears the transcript", asyn
     assertEquals(get(s.items), [], "the transcript belongs to the agent that produced it");
     assertEquals(f.stopped, ["agent-1"], "the old agent is stopped, not leaked");
     assertEquals(f.started.map((x) => x.profile), [undefined, "reviewer"]);
+    assertEquals(f.started[1].fresh, true, "a switched profile gets a new conversation, not the saved one");
     assertEquals(get(s.profile), "reviewer");
 
     s.release();

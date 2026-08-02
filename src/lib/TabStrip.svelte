@@ -10,7 +10,9 @@
     onToggleExplorer?: () => void;
     onCollapse?: () => void;
   } = $props();
-  const kinds = Object.keys(registry);
+  // Chat lives in the center column, the file tree is the docked explorer addon (ctrl+e);
+  // neither is offered as a right-pane tab.
+  const kinds = Object.keys(registry).filter((k) => k !== "chat" && k !== "filetree");
 </script>
 
 <div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">

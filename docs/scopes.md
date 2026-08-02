@@ -42,8 +42,14 @@ Each scope owns one directory:
     extensions/  approved defined tools — pi auto-discovers these
     pending/     quarantined tools — pi never loads these
     settings.json  installed pi packages
+  sessions/      this scope's saved chat conversations, as pi session JSONL
   board.db       this scope's Kanban board
 ```
+
+`sessions/` sits beside `agent/` rather than inside it so pi does not also find these
+under its own default session path. A chat resumes the newest session recorded for its
+working directory, which is what makes a conversation survive closing pique; "New chat"
+starts another and leaves the old file in place.
 
 Anything genuinely app-wide stays in `~/.pique/settings.json` (theme, git scan depth).
 The layout tree stays in `~/.pique/layout.json`, which is also where each workspace's

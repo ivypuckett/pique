@@ -16,11 +16,19 @@
 
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
 
-  // Switching profile restarts the agent (pi fixes the system prompt at session creation),
-  // so the transcript goes with it — hence a confirm. Held here rather than in the store:
-  // until it is confirmed, nothing about the conversation has changed. The select shows
-  // the pending choice, so cancelling visibly puts it back.
-  let pendingProfile = $state<string | null>(null);
+  // Both of these leave the current conversation behind — switching profile because pi
+  // fixes the system prompt at session creation, a new chat because that is the point —
+  // so each is held here until confirmed. Held here rather than in the store: until it is
+  // confirmed, nothing about the conversation has changed. The profile select shows the
+  // pending choice, so cancelling visibly puts it back.
+  let pending = $state<{ kind: "profile"; profile: string } | { kind: "new" } | null>(null);
+
+  function confirmPending() {
+    const p = pending;
+    pending = null;
+    if (p?.kind === "profile") session.pickProfile(p.profile);
+    else if (p?.kind === "new") session.newChat();
+  }
 
   // `/` command menu (skills / prompt templates / extension commands). Loaded once
   // the agent is ready; session.prompt() expands/runs them, so this is pure compose UI.
@@ -110,27 +118,30 @@
     </form>
   </div>
 
-  {#if pendingProfile !== null}
+  {#if pending !== null}
     <div class="flex items-center gap-2 border-t border-base-300 bg-base-200 p-2 text-sm">
       <span class="flex-1">
-        Switching to <strong>{pendingProfile === "" ? "base" : pendingProfile}</strong>
-        starts a new conversation.
+        {#if pending.kind === "profile"}
+          Switching to <strong>{pending.profile === "" ? "base" : pending.profile}</strong>
+          starts a new conversation.
+        {:else}
+          Starting a new chat leaves this conversation behind.
+        {/if}
       </span>
-      <button
-        class="btn btn-sm btn-primary"
-        onclick={() => { session.pickProfile(pendingProfile!); pendingProfile = null; }}
-      >Switch</button>
-      <button class="btn btn-sm btn-ghost" onclick={() => (pendingProfile = null)}>Cancel</button>
+      <button class="btn btn-sm btn-primary" onclick={confirmPending}>
+        {pending.kind === "profile" ? "Switch" : "New chat"}
+      </button>
+      <button class="btn btn-sm btn-ghost" onclick={() => (pending = null)}>Cancel</button>
     </div>
   {/if}
 
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
     <select
       class="select select-bordered select-sm"
-      value={pendingProfile ?? $profile}
+      value={pending?.kind === "profile" ? pending.profile : $profile}
       onchange={(e) => {
         const value = (e.target as HTMLSelectElement).value;
-        pendingProfile = value === $profile ? null : value;
+        pending = value === $profile ? null : { kind: "profile", profile: value };
       }}
       disabled={!$ready || $streaming}
     >
@@ -148,8 +159,13 @@
     <select class="select select-bordered select-sm" value={$level} onchange={(e) => session.pickLevel((e.target as HTMLSelectElement).value as ThinkingLevel)} disabled={!$ready}>
       {#each levels as l}<option value={l}>think: {l}</option>{/each}
     </select>
+    <button
+      class="btn btn-sm btn-ghost ml-auto"
+      onclick={() => (pending = { kind: "new" })}
+      disabled={!$ready || $streaming}
+    >New chat</button>
     {#if $streaming}
-      <button class="btn btn-sm btn-error ml-auto" onclick={session.stop}>Stop</button>
+      <button class="btn btn-sm btn-error" onclick={session.stop}>Stop</button>
     {/if}
   </div>
 </div>

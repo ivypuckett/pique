@@ -80,8 +80,18 @@ win.bind("termKill", async (arg) => {
 win.bind("chatStart", async (arg) => {
   // `profile` is passed through as-is: undefined means "the scope's default" and ""
   // means "no profile", a distinction startAgent relies on.
-  const { cwd, scope, profile } = arg as { cwd?: string; scope?: string; profile?: string };
-  return { id: await chat.startAgent({ cwd, scope, profile }) };
+  const { cwd, scope, profile, fresh } = arg as {
+    cwd?: string;
+    scope?: string;
+    profile?: string;
+    fresh?: boolean;
+  };
+  return { id: await chat.startAgent({ cwd, scope, profile, fresh }) };
+});
+
+win.bind("chatHistory", async (arg) => {
+  const { id } = arg as { id: string };
+  return chat.historyOf(id);
 });
 
 win.bind("chatPrompt", async (arg) => {

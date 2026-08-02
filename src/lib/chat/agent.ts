@@ -9,6 +9,16 @@ export type ModelInfo = { provider: string; id: string; name: string; current: b
 // `name` is the token typed after `/`, so skills already carry their `skill:` prefix.
 export type CommandInfo = { name: string; description: string; source: "extension" | "prompt" | "skill" };
 
+// One rendered line of the transcript. The streaming path builds these from ChatEvents
+// (store.ts's `apply`) and a resumed conversation rebuilds them from pi's stored
+// messages (`historyOf`) — the two must agree, which is why the type lives here with
+// ChatEvent rather than in the frontend store.
+export type Item =
+  | { role: "user"; text: string }
+  | { role: "assistant"; text: string }
+  | { role: "thinking"; text: string }
+  | { role: "tool"; id: string; name: string; args: string; result: string; isError: boolean; done: boolean };
+
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "thinking"; delta: string }
@@ -60,7 +70,7 @@ import { inheritedExtensionFiles } from "../tools/service.ts";
 import { profileAuthoringTools } from "../profiles/agent-tools.ts";
 import { resolveBasePrompt, resolveProfile } from "../profiles/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
-import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
+import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir, scopeSessionsDir } from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -112,11 +122,12 @@ export async function ensureRuntime() {
   return runtime;
 }
 
-// Start a fresh agent in `scope` and return its id. The scope is the workspace the
-// Chat module lives in (root included); everything the agent can see — tools, model
-// defaults, working directory, Kanban board — is resolved against it.
+// Start an agent in `scope` and return its id. The scope is the workspace the Chat
+// module lives in (root included); everything the agent can see — tools, model
+// defaults, working directory, Kanban board — is resolved against it. By default it
+// picks the conversation back up where it was left; `fresh` starts a new one.
 export async function startAgent(
-  opts: { cwd?: string; scope?: ScopeId; profile?: string } = {},
+  opts: { cwd?: string; scope?: ScopeId; profile?: string; fresh?: boolean } = {},
 ): Promise<string> {
   const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
@@ -169,14 +180,22 @@ export async function startAgent(
     customTools,
     // pique's own pi dirs, separate from the user's `pi` CLI. Safe: auth +
     // models.json still come from ~/.pi/agent via the shared modelRuntime, and the
-    // in-memory sessionManager ignores agentDir.
+    // sessionManager below is given its dir explicitly rather than deriving it here.
     agentDir,
     resourceLoader,
     // The profile's allowlist, filtering builtins, extension tools and the customTools
     // above alike. undefined (no profile, or a profile with no `tools:` key) means no
     // allowlist; [] means no tools at all — do NOT coalesce the two.
     tools: profile?.tools,
-    sessionManager: SessionManager.inMemory(),
+    // The conversation is written to <scope>/sessions as pi JSONL, appended as it
+    // happens, so quitting mid-stream still leaves everything up to that point on disk.
+    // continueRecent reopens the newest session recorded for THIS cwd — passing an
+    // explicit sessionDir is what makes it filter by cwd rather than take the newest
+    // file outright — and pi replays its messages into the agent's context. `fresh`
+    // is the deliberate reset: a new file, an empty transcript, the old one kept.
+    sessionManager: opts.fresh
+      ? SessionManager.create(cwd, scopeSessionsDir(scope))
+      : SessionManager.continueRecent(cwd, scopeSessionsDir(scope)),
     modelRuntime,
   });
   const session = created.session;
@@ -189,6 +208,65 @@ export async function startAgent(
   const id = `chat-${nextId++}`;
   agents.set(id, { session, unsubscribe, queue });
   return id;
+}
+
+// User and toolResult content is either a bare string or a block array. Images have no
+// Item to live in, so only text blocks survive the projection.
+// deno-lint-ignore no-explicit-any
+function textOf(content: any): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((b) => b?.type === "text").map((b) => b.text).join("");
+}
+
+// The pure, JSON-safe projection of pi's stored messages into the transcript, the
+// counterpart of toFrontendEvent for a conversation that was resumed rather than
+// streamed. pi has already restored these messages into the agent, so this only
+// reshapes them into the Items the streaming path produces.
+//
+// Roles with no Item counterpart (bashExecution, custom, compaction and branch
+// summaries) are dropped: they are pi context, not chat bubbles.
+// deno-lint-ignore no-explicit-any
+export function toHistory(messages: any[]): Item[] {
+  const items: Item[] = [];
+  for (const message of messages) {
+    if (message.role === "user") {
+      items.push({ role: "user", text: textOf(message.content) });
+    } else if (message.role === "assistant") {
+      // deno-lint-ignore no-explicit-any
+      for (const block of (message.content ?? []) as any[]) {
+        if (block.type === "text") items.push({ role: "assistant", text: block.text });
+        else if (block.type === "thinking") items.push({ role: "thinking", text: block.thinking });
+        else if (block.type === "toolCall") {
+          items.push({
+            role: "tool",
+            id: block.id,
+            name: block.name,
+            args: preview(block.arguments),
+            result: "",
+            isError: false,
+            done: false,
+          });
+        }
+      }
+    } else if (message.role === "toolResult") {
+      // The call was pushed by the assistant message before it; a tool still running when
+      // the app closed simply has no result, and stays `done: false` the way it renders live.
+      const call = items.find((i) => i.role === "tool" && i.id === message.toolCallId);
+      if (call?.role === "tool") {
+        call.result = preview(textOf(message.content));
+        call.isError = Boolean(message.isError);
+        call.done = true;
+      }
+    }
+  }
+  return items;
+}
+
+// The transcript of a resumed conversation, for the frontend to render before any new
+// event arrives. An unknown id (agent already stopped) has no transcript.
+export function historyOf(id: string): Item[] {
+  return toHistory(agents.get(id)?.session.messages ?? []);
 }
 
 export function promptAgent(id: string, text: string): void {

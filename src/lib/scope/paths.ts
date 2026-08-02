@@ -5,6 +5,7 @@
 //
 //   config.json   scoped prefs (chat defaults, kanban statuses)
 //   agent/        this scope's pi agentDir — extensions/, pending/, settings.json
+//   sessions/     this scope's saved chat conversations, as pi session JSONL
 //   board.db      this scope's Kanban board
 //
 // Everything a scope inherits it inherits through `chain`, which is the ONLY place
@@ -52,6 +53,13 @@ export function scopeDir(id: ScopeId): string {
 // pi auto-discovers), pending/ (which it must not), and settings.json (packages).
 export function scopeAgentDir(id: ScopeId): string {
   return `${scopeDir(id)}/agent`;
+}
+
+// Where this scope's chat conversations persist, as pi session JSONL. Kept out of
+// agent/ because that dir is pi's agentDir and pi would then also find these under
+// its own default session path; here they stay pique's, one thread per cwd per scope.
+export function scopeSessionsDir(id: ScopeId): string {
+  return `${scopeDir(id)}/sessions`;
 }
 
 export function scopeConfigPath(id: ScopeId): string {
