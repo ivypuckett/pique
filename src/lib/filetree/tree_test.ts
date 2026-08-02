@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, sortEntries, splitName, updateAt } from "./tree.ts";
+import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, parentDir, sortEntries, splitName, updateAt } from "./tree.ts";
 import type { Entry } from "../fs.ts";
 
 const e = (name: string, isDir: boolean): Entry => ({
@@ -58,6 +58,11 @@ Deno.test("updateAt reaches nested children", () => {
   const dir: Node = { name: "dir", path: "/root/dir", isDir: true, isSymlink: false, expanded: true, children: [child] };
   const next = updateAt([dir], "/root/dir/a", (n) => ({ ...n, expanded: true }));
   assertEquals(next[0].children![0].expanded, true);
+});
+
+Deno.test("parentDir strips the last segment, bottoming out at root", () => {
+  assertEquals(parentDir("/root/a/b.ts"), "/root/a");
+  assertEquals(parentDir("/top"), "/");
 });
 
 Deno.test("dirtyDirsFrom collects every ancestor folder of each change", () => {

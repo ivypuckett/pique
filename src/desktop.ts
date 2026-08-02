@@ -243,6 +243,26 @@ win.bind("listDir", async (arg) => {
   return await fs.listDir(await moduleDir(path));
 });
 
+// File-tree edits. Same path convention as listDir: a parent of undefined means the
+// workspace default, an absolute path resolves to itself. Every failure (bad name, name
+// taken, permissions) throws through to the tree's error strip. removeEntry is permanent
+// and recursive — the frontend gates it behind a confirmation unless it's turned off.
+win.bind("createEntry", async (arg) => {
+  const { parent, name } = arg as { parent?: string; name: string };
+  return { path: await fs.createEntry(await moduleDir(parent), name) };
+});
+
+win.bind("renameEntry", async (arg) => {
+  const { path, name } = arg as { path: string; name: string };
+  return { path: await fs.renameEntry(path, name) };
+});
+
+win.bind("removeEntry", async (arg) => {
+  const { path } = arg as { path: string };
+  await fs.removeEntry(path);
+  return true;
+});
+
 win.bind("gitDiff", async (arg) => {
   const { cwd: override, staged, path } = arg as { cwd?: string; staged?: boolean; path?: string };
   return { diff: await git.gitDiff(await moduleDir(override), staged ?? false, path) };

@@ -513,6 +513,23 @@
         </div>
       </div>
 
+      <div class="mt-4">
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            class="checkbox checkbox-sm"
+            type="checkbox"
+            bind:checked={$settings.workspace.confirmDelete}
+          />
+          Confirm before deleting in the file tree
+        </label>
+        <div class="mt-0.5 text-xs opacity-70">
+          Deletes are permanent, and a folder takes everything under it. With this off,
+          <kbd class="kbd kbd-xs">d</kbd>
+          <kbd class="kbd kbd-xs">d</kbd>
+          removes the highlighted entry immediately.
+        </div>
+      </div>
+
       {/if}
 
       {#if section === "kanban"}

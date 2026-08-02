@@ -12,7 +12,9 @@ export interface Settings {
   // gitScanDepth: how many directory levels to descend looking for git repos when the
   // workspace root is not itself a repo, to highlight changed folders. Absent → the
   // resolveGitScanDepth default (see settings/file.ts).
-  workspace: { gitScanDepth?: number };
+  // confirmDelete: whether the file tree's `dd` asks before deleting. Read on the
+  // frontend only — the backend deletes whatever it is told to.
+  workspace: { gitScanDepth?: number; confirmDelete?: boolean };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,7 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: { theme: "catppuccin-frappe" },
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
-  workspace: { gitScanDepth: 3 },
+  workspace: { gitScanDepth: 3, confirmDelete: true },
 };
 
 interface ConfigBindings {

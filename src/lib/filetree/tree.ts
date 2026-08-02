@@ -66,6 +66,12 @@ export function dirtyDirsFrom(paths: string[]): Set<string> {
   return dirs;
 }
 
+// Directory containing `path` — where a sibling of that entry would be created.
+export function parentDir(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i <= 0 ? "/" : path.slice(0, i);
+}
+
 // Return a new tree with the node at `path` replaced by fn(node). Recurses into
 // loaded children; nodes off the path are returned unchanged (by reference).
 export function updateAt(nodes: Node[], path: string, fn: (n: Node) => Node): Node[] {
