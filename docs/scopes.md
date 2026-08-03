@@ -39,9 +39,9 @@ Each scope owns one directory:
 ~/.pique/scopes/<root|ws-N>/
   config.json    chat defaults, Kanban seed statuses
   agent/         this scope's pi agentDir
-    extensions/  approved defined tools — pi auto-discovers these
-    pending/     quarantined tools — pi never loads these
-    settings.json  installed pi packages
+    extensions/  enabled local extensions — pi auto-discovers these
+    pending/     awaiting review — pi never loads these (`.ts` modules, `.json` packages)
+    settings.json  enabled pi packages
   sessions/      this scope's saved chat conversations, as pi session JSONL
   board.db       this scope's Kanban board
 ```
@@ -131,20 +131,19 @@ last remaining column cannot be deleted (a board with zero columns would be sile
 re-seeded from the defaults on next open). Column edits are not written to the card log,
 which is card-scoped by schema.
 
-## The approval gate, per scope
+## The review gate, per scope
 
-Defined tools still work the way `defined-tools.md` describes: an agent's `define_tool`
-can only write into `pending/`, and approving is a rename into `extensions/`. What
-changed is that both dirs now belong to a scope. So:
+Extensions work the way [extensions.md](extensions.md) describes: nothing runs until it
+is in pi's own loading set for the scope, and an agent's `define_extension` can only
+write into `pending/`. What scoping adds is reach:
 
-- An agent in `ws-1` quarantines into `ws-1`, and approving grants the tool to `ws-1`
-  alone.
-- An agent in **root** quarantines into root, and approving grants the tool to
-  **every** workspace. `define_tool`'s description says so explicitly, so the agent
-  knows how far its tool will reach.
+- An agent in `ws-1` quarantines into `ws-1`, and enabling grants it to `ws-1` alone.
+- An agent in **root** quarantines into root, and enabling grants it to **every**
+  workspace. `define_extension`'s description says so explicitly, so the agent knows
+  how far its code will reach.
 
-Settings → Tools shows a scope's own tools (approvable, revocable) separately from the
-ones it inherits (read-only — they are managed where they live).
+Settings → Extensions shows a scope's own extensions (enablable, revocable) separately
+from the ones it inherits (read-only — they are managed where they live).
 
 ---
 
@@ -152,12 +151,12 @@ ones it inherits (read-only — they are managed where they live).
 
 ### 1. Inheriting installed packages
 
-A workspace agent gets root's loose `.ts` tools, but not root's installed npm
+A workspace agent gets root's local `.ts` extensions, but not root's installed npm
 packages. Wiring that means routing root's package sources through
 `additionalExtensionPaths`, which is dynamic `import()` of an npm package while
 `agentDir` is set — the exact operation a 2026-07-21 bisect blamed for a
 `RefCell already borrowed` panic in deno_core's `ModuleMap` under the desktop runtime.
-Loose `.ts` extensions were re-verified clean on 2026-07-27; npm packages were not.
+Local `.ts` extensions were re-verified clean on 2026-07-27; npm packages were not.
 Until that is re-tested under the webview binary, packages stay per-scope but
 un-inherited.
 

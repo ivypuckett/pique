@@ -40,7 +40,7 @@ skills and the cwd line are appended by pi either way.
 ## The allowlist
 
 `tools:` is passed to pi as `allowedToolNames`, which filters the registry itself — pi's
-builtins, installed extension tools, defined tools and pique's own compiled-in tools all
+builtins, tools from enabled extensions and pique's own compiled-in tools all
 alike. Three things follow, and all three matter:
 
 - **Omitted is not empty.** No `tools:` key means *no restriction* — the default tool set
@@ -51,7 +51,7 @@ alike. Three things follow, and all three matter:
 - **Allowing `bash` allows everything.** A genuinely read-only profile must exclude
   `bash`, `write` **and** `edit` together. Nothing detects this for you.
 
-Unlike the defined-tools approval gate — which [defined-tools.md](defined-tools.md) is
+Unlike the extension review gate — which [extensions.md](extensions.md) is
 explicit is *not* containment — this filter is enforced inside pi's tool registry, and an
 extension calling `setActiveTools` cannot re-enable what a profile excluded.
 
@@ -82,7 +82,7 @@ user reads the prompt in Settings → Profiles
 
 ## Scope
 
-Profiles are per-scope and inherited exactly like defined tools: a workspace sees root's
+Profiles are per-scope and inherited exactly like local extensions: a workspace sees root's
 profiles plus its own, and a local profile **shadows** a root profile of the same name.
 See [scopes.md](scopes.md). Approving in root makes a profile available everywhere.
 
@@ -107,7 +107,7 @@ does. A profile revoked or edited on disk keeps running in sessions already star
 ### 1. Editing profiles in the UI
 
 Settings → Profiles reviews, approves, rejects and deletes. Authoring means writing the
-file, the same gap `defined-tools.md` records for tools. An editor would want a tool
+file, the same gap `extensions.md` records for extensions. An editor would want a tool
 picker, and `session.getAllTools()` is the mechanism — it returns each tool's name and
 whether it came from a builtin, an extension or the SDK, but only from a live session.
 
@@ -129,4 +129,4 @@ prompt/tools pair has been lived with.
 ### 5. Rejected-profile memory
 
 Reject deletes the file. An agent can immediately re-define the same profile, and nothing
-records that a human already said no — the same gap as `defined-tools.md` deferred #7.
+records that a human already said no — the same gap as `extensions.md` deferred #7.

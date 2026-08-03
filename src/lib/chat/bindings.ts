@@ -2,9 +2,8 @@
 // win.bind handlers in src/desktop.ts — keep arg/return shapes in sync by hand
 // (separate module graphs, nothing cross-checks them at compile time).
 import type { ChatEvent, CommandInfo, Item, ModelInfo, ThinkingLevel } from "./agent.ts";
-import type { ExtInfo, ExtSearchResult } from "./extensions.ts";
 import type { ProviderInfo } from "./providers.ts";
-export type { ChatEvent, CommandInfo, ExtInfo, ExtSearchResult, Item, ModelInfo, ProviderInfo, ThinkingLevel };
+export type { ChatEvent, CommandInfo, Item, ModelInfo, ProviderInfo, ThinkingLevel };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
 // returns; every other call carries that id. `scope` is the workspace the module
@@ -29,22 +28,6 @@ export interface ChatBindings {
 export function chatBindings(): ChatBindings | null {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
   return b ? (b as ChatBindings) : null;
-}
-
-// Pi-extension (pi package) management, backed by the ext* handlers in desktop.ts.
-// Keyed by scope, not by chat id: packages install into one scope's agent dir, so
-// installing in root serves every workspace and installing in a workspace serves
-// only it. Search is scope-free (it queries npm).
-export interface ExtBindings {
-  extList(arg: { scope: string }): Promise<ExtInfo[]>;
-  extSearch(arg: { query: string }): Promise<ExtSearchResult[]>;
-  extInstall(arg: { scope: string; source: string }): Promise<unknown>;
-  extRemove(arg: { scope: string; source: string }): Promise<unknown>;
-}
-
-export function extBindings(): ExtBindings | null {
-  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
-  return b ? (b as ExtBindings) : null;
 }
 
 // Model-provider management, backed by the provider* handlers in desktop.ts.

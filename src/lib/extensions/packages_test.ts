@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { isValidSource, npmSearchUrl, toExtInfo, toSearchResult } from "./extensions.ts";
+import { isValidSource, npmSearchUrl, toExtInfo, toSearchResult } from "./packages.ts";
 
 Deno.test("isValidSource accepts pi source forms", () => {
   for (

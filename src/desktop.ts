@@ -18,13 +18,12 @@ const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 })
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
 let providers: typeof import("./lib/chat/providers.ts");
-let extensions: typeof import("./lib/chat/extensions.ts");
 let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
-let definedTools: typeof import("./lib/tools/service.ts");
+let extensions: typeof import("./lib/extensions/service.ts");
 let profiles: typeof import("./lib/profiles/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
@@ -170,31 +169,6 @@ win.bind("providerAddCustom", async (arg) => {
 win.bind("providerRemoveCustom", async (arg) => {
   const { id } = arg as { id: string };
   await providers.removeCustomProvider(id);
-  return true;
-});
-
-// Pi-extension management — one package set per scope, under that scope's agent dir.
-// installExtension fetches from npm/git and writes the scope's settings.json; the
-// frontend gates it behind a confirm.
-win.bind("extList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await extensions.listExtensions(scope);
-});
-
-win.bind("extSearch", async (arg) => {
-  const { query } = arg as { query: string };
-  return await extensions.searchExtensions(query);
-});
-
-win.bind("extInstall", async (arg) => {
-  const { scope, source } = arg as { scope: string; source: string };
-  await extensions.installExtension(scope, source);
-  return true;
-});
-
-win.bind("extRemove", async (arg) => {
-  const { scope, source } = arg as { scope: string; source: string };
-  await extensions.removeExtension(scope, source);
   return true;
 });
 
@@ -402,45 +376,66 @@ win.bind("kanbanSetConnections", async (arg) => {
   return true;
 });
 
-// Defined tools — user- and agent-authored pi extensions, per scope. Agents can only
-// write into their scope's quarantine dir (tools/agent-tools.ts); approving is what
-// moves a tool into the dir pi actually loads, so it goes through here. toolsList
-// returns the scope's own tools; toolsVisible adds the ones it inherits from root.
-win.bind("toolsList", async (arg) => {
+// Extensions — one concept covering both origins: loose `.ts` modules written by the
+// user or by an agent, and installed pi packages. An extension runs iff it is in pi's
+// own loading set for the scope (the extensions/ dir, or settings.json); it awaits
+// review iff there is a file for it in pending/. Agents can only write into their
+// scope's quarantine dir (extensions/agent-tools.ts), and extensionsFetch downloads a
+// package WITHOUT enabling it, so enabling is always the human step and goes through
+// here. extensionsList returns the scope's own; extensionsVisible adds what it
+// inherits from root (local modules only — packages are not inherited).
+win.bind("extensionsList", async (arg) => {
   const { scope } = arg as { scope: string };
-  return await definedTools.listTools(scope);
+  return await extensions.listExtensions(scope);
 });
 
-win.bind("toolsVisible", async (arg) => {
+win.bind("extensionsVisible", async (arg) => {
   const { scope } = arg as { scope: string };
-  return await definedTools.listVisibleTools(scope);
+  return await extensions.listVisibleExtensions(scope);
 });
 
-win.bind("toolsRead", async (arg) => {
-  const { scope, name, state } = arg as {
+win.bind("extensionsRead", async (arg) => {
+  const { scope, id, state } = arg as {
     scope: string;
-    name: string;
-    state: "pending" | "approved";
+    id: string;
+    state: "pending" | "enabled";
   };
-  return { source: await definedTools.readSource(scope, name, state) };
+  return await extensions.readExtension(scope, id, state);
 });
 
-win.bind("toolsApprove", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await definedTools.approveTool(scope, name);
+win.bind("extensionsEnable", async (arg) => {
+  const { scope, id } = arg as { scope: string; id: string };
+  await extensions.enableExtension(scope, id);
   return true;
 });
 
-win.bind("toolsReject", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await definedTools.rejectTool(scope, name);
+win.bind("extensionsRevoke", async (arg) => {
+  const { scope, id } = arg as { scope: string; id: string };
+  await extensions.revokeExtension(scope, id);
   return true;
 });
 
-win.bind("toolsRevoke", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await definedTools.revokeTool(scope, name);
+win.bind("extensionsRemove", async (arg) => {
+  const { scope, id, state } = arg as {
+    scope: string;
+    id: string;
+    state: "pending" | "enabled";
+  };
+  await extensions.removeExtension(scope, id, state);
   return true;
+});
+
+// Fetches the bytes into quarantine. Deliberately does NOT reach the loading set —
+// the user reviews the resolved entry files first, same as for a local module.
+win.bind("extensionsFetch", async (arg) => {
+  const { scope, source } = arg as { scope: string; source: string };
+  await extensions.fetchPackage(scope, source);
+  return true;
+});
+
+win.bind("extensionsSearch", async (arg) => {
+  const { query } = arg as { query: string };
+  return await extensions.searchExtensions(query);
 });
 
 // Profiles — a named base prompt plus a tool allowlist, per scope. Agents can only write
@@ -485,13 +480,12 @@ win.addEventListener("close", () => {
 term = await import("./lib/terminal/pty.ts");
 chat = await import("./lib/chat/agent.ts");
 providers = await import("./lib/chat/providers.ts");
-extensions = await import("./lib/chat/extensions.ts");
 settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
-definedTools = await import("./lib/tools/service.ts");
+extensions = await import("./lib/extensions/service.ts");
 profiles = await import("./lib/profiles/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into

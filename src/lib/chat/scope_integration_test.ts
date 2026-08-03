@@ -4,8 +4,8 @@
 // real startAgent path — the same one the desktop bindings call.
 import { assertEquals } from "@std/assert";
 import { activeToolNames, startAgent, stopAgent } from "./agent.ts";
-import { approveTool } from "../tools/service.ts";
-import { ensureToolDirs, pendingPath } from "../tools/paths.ts";
+import { enableLocal } from "../extensions/local.ts";
+import { ensureExtensionDirs, pendingPath } from "../extensions/paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -20,7 +20,7 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-// A real pi extension module — the same shape define_tool writes and a human
+// A real pi extension module — the same shape define_extension writes and a human
 // approves, so this exercises the loader rather than a stub.
 function extensionSource(name: string): string {
   return `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -41,9 +41,9 @@ export default function (pi: ExtensionAPI) {
 }
 
 async function defineAndApprove(scope: ScopeId, name: string): Promise<void> {
-  await ensureToolDirs(scope);
+  await ensureExtensionDirs(scope);
   await Deno.writeTextFile(pendingPath(scope, name), extensionSource(name));
-  await approveTool(scope, name);
+  await enableLocal(scope, name);
 }
 
 // Start an agent in `scope`, read its tools, and always tear it down.
@@ -92,7 +92,7 @@ Deno.test("sibling workspaces are isolated from each other", async () => {
 Deno.test("a quarantined tool never reaches an agent", async () => {
   await withTempHome(async () => {
     // Written to pending but never approved — the gate the whole design rests on.
-    await ensureToolDirs(ROOT);
+    await ensureExtensionDirs(ROOT);
     await Deno.writeTextFile(pendingPath(ROOT, "unapproved"), extensionSource("unapproved"));
 
     assertEquals((await toolsFor("ws-1")).includes("unapproved"), false);
@@ -104,7 +104,7 @@ Deno.test("pique's compiled-in tools are present in every scope", async () => {
   await withTempHome(async () => {
     for (const scope of [ROOT, "ws-1"]) {
       const tools = await toolsFor(scope);
-      assertEquals(tools.includes("define_tool"), true, `define_tool missing in ${scope}`);
+      assertEquals(tools.includes("define_extension"), true, `define_extension missing in ${scope}`);
       assertEquals(tools.includes("kanban_get_board"), true, `kanban tools missing in ${scope}`);
     }
   });

@@ -52,7 +52,7 @@ Deno.test("a profile's allowlist restricts the agent's tools", async () => {
     assertEquals(tools.includes("grep"), true);
     assertEquals(tools.includes("bash"), false, "an excluded builtin must be gone");
     assertEquals(tools.includes("write"), false);
-    assertEquals(tools.includes("define_tool"), false, "pique's own tools are filtered too");
+    assertEquals(tools.includes("define_extension"), false, "pique's own tools are filtered too");
     assertEquals(tools.includes("kanban_get_board"), false);
   });
 });
@@ -61,7 +61,7 @@ Deno.test("no profile leaves today's tool set untouched", async () => {
   await withTempHome(async () => {
     const tools = await withAgent({ scope: ROOT }, activeToolNames);
     assertEquals(tools.includes("bash"), true);
-    assertEquals(tools.includes("define_tool"), true);
+    assertEquals(tools.includes("define_extension"), true);
     assertEquals(tools.includes("kanban_get_board"), true);
   });
 });
@@ -71,7 +71,7 @@ Deno.test("a profile with no tools key does not restrict the tool set", async ()
     await writeProfile(ROOT, "chatty", "---\ndescription: d\n---\nBe brief.\n");
     const tools = await withAgent({ scope: ROOT, profile: "chatty" }, activeToolNames);
     assertEquals(tools.includes("bash"), true);
-    assertEquals(tools.includes("define_tool"), true);
+    assertEquals(tools.includes("define_extension"), true);
   });
 });
 

@@ -1,0 +1,32 @@
+// Frontend half of the extensions binding contract. The backend half is the
+// extensions* win.bind handlers in src/desktop.ts (delegating to service.ts) — keep
+// arg/return shapes in sync by hand (separate module graphs).
+import type { Extension, ExtensionSource, ExtState } from "./service.ts";
+import type { ExtSearchResult } from "./packages.ts";
+export type { Extension, ExtensionSource, ExtSearchResult, ExtState };
+
+// Every call names the scope it acts on: an extension belongs to one scope, and
+// enabling in root is what makes a local one visible to every workspace.
+// `extensionsList` is a scope's own extensions (the ones it can act on);
+// `extensionsVisible` adds what it inherits (local modules only — packages are not
+// inherited, see docs/extensions.md).
+export interface ExtensionBindings {
+  extensionsList(arg: { scope: string }): Promise<Extension[]>;
+  extensionsVisible(arg: { scope: string }): Promise<Extension[]>;
+  extensionsRead(
+    arg: { scope: string; id: string; state: ExtState },
+  ): Promise<ExtensionSource>;
+  extensionsEnable(arg: { scope: string; id: string }): Promise<unknown>;
+  extensionsRevoke(arg: { scope: string; id: string }): Promise<unknown>;
+  extensionsRemove(arg: { scope: string; id: string; state: ExtState }): Promise<unknown>;
+  // Fetches the bytes and quarantines them; it does NOT enable the package.
+  extensionsFetch(arg: { scope: string; source: string }): Promise<unknown>;
+  extensionsSearch(arg: { query: string }): Promise<ExtSearchResult[]>;
+}
+
+// Null in web-dev (deno task web), where there's no desktop backend — the Extensions
+// section then shows a desktop-only note, same as providers.
+export function extensionBindings(): ExtensionBindings | null {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  return b ? (b as ExtensionBindings) : null;
+}

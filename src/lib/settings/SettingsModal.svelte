@@ -1,19 +1,18 @@
 <script lang="ts">
   import { settings, settingsOpen, THEMES } from "./store.ts";
+  import { providerBindings, type ProviderInfo } from "../chat/bindings.ts";
   import {
-    extBindings,
-    type ExtInfo,
+    type Extension,
+    extensionBindings,
+    type ExtensionSource,
     type ExtSearchResult,
-    providerBindings,
-    type ProviderInfo,
-  } from "../chat/bindings.ts";
-  import { type DefinedTool, toolBindings } from "../tools/bindings.ts";
+  } from "../extensions/bindings.ts";
   import { profileBindings, type ProfileInfo } from "../profiles/bindings.ts";
   import { editing, editScope, updateScopeConfig } from "../scope/store.ts";
   import { ROOT } from "../scope/paths.ts";
   import { activeWorkspace } from "../store.ts";
 
-  // Which scope the scoped sections (Kanban, Extensions, Tools) act on. Root is the
+  // Which scope the scoped sections (Kanban, Extensions, Profiles) act on. Root is the
   // shared parent; the active workspace is the only other scope reachable from here,
   // because a workspace can never configure a sibling.
   const scopes = $derived(
@@ -29,16 +28,18 @@
   // the user actually edits it.
   const statuses = $derived($editing.config.kanban?.defaultStatuses ?? []);
 
-  // Pi-extension management. Null in web-dev (no bindings) → the section shows a
-  // desktop-only note. Extensions install into the selected scope's agent dir.
-  const ext = extBindings();
-  let installed = $state<ExtInfo[]>([]);
+  // Extensions — ONE list covering both origins: loose `.ts` modules written by the
+  // user or by an agent (define_extension), and installed pi packages. An extension
+  // runs iff it is in pi's own loading set; it awaits review iff there is a file for it
+  // in the scope's pending dir. Null in web-dev (no bindings) → desktop-only note.
+  const ext = extensionBindings();
+  let visible = $state<Extension[]>([]);
   let source = $state("");
   let busy = $state(false);
   let extError = $state("");
   let extNotice = $state("");
-  // Guards the install (extensions run arbitrary code): the source is only sent
-  // after the user confirms this inline warning panel.
+  // Guards the FETCH, not the enable: downloading an npm package runs its install
+  // scripts, which happens before any review is possible (see docs/extensions.md).
   let confirming = $state(false);
 
   // Model providers. Null in web-dev (no bindings) → the section shows a
@@ -128,25 +129,37 @@
     provBusy = false;
   }
 
-  // Browse: query pi packages via npm (see extensions.ts). A result's Install
-  // routes through the same `confirming` gate as the manual source input.
+  // Browse: query pi packages via npm (see packages.ts). A result's Add routes
+  // through the same `confirming` gate as the manual source input.
   let query = $state("");
   let results = $state<ExtSearchResult[]>([]);
   let searching = $state(false);
+
+  // The extension whose code is expanded, and what was read back. Reviewing before
+  // Enable is deliberately required for BOTH origins: the code is the artifact, and
+  // for a package that means the entry files pi resolved, not the source string.
+  let reviewing = $state<string | null>(null);
+  let reviewed = $state<ExtensionSource | null>(null);
+
+  // `visible` is everything reachable from the selected scope. Only the scope's OWN
+  // extensions can be acted on here; inherited ones are managed where they live.
+  const ownPending = $derived(visible.filter((e) => e.state === "pending" && e.scope === scope));
+  const ownEnabled = $derived(visible.filter((e) => e.state === "enabled" && e.scope === scope));
+  const inherited = $derived(visible.filter((e) => e.scope !== scope));
 
   async function search(): Promise<void> {
     if (!ext) return;
     searching = true;
     extError = "";
     try {
-      results = await ext.extSearch({ query: query.trim() });
+      results = await ext.extensionsSearch({ query: query.trim() });
     } catch (e) {
       extError = e instanceof Error ? e.message : String(e);
     }
     searching = false;
   }
 
-  function installResult(r: ExtSearchResult): void {
+  function addResult(r: ExtSearchResult): void {
     source = r.source;
     confirming = true;
   }
@@ -154,7 +167,7 @@
   async function refreshExts(): Promise<void> {
     if (!ext) return;
     try {
-      installed = await ext.extList({ scope });
+      visible = await ext.extensionsVisible({ scope });
     } catch (e) {
       extError = e instanceof Error ? e.message : String(e);
     }
@@ -167,13 +180,14 @@
     if ($settingsOpen) editScope($activeWorkspace.id);
   });
 
-  // Re-list whenever the modal opens OR the scope changes — both change what these
-  // lists should show. Clears any stale notice/error from the previous scope.
+  // Re-list whenever the modal opens OR the scope changes — both change what this
+  // list should show. Clears stale notices and collapses any open review.
   $effect(() => {
     if ($settingsOpen && ext && scope) {
       extError = "";
       extNotice = "";
       confirming = false;
+      reviewing = null;
       refreshExts();
     }
   });
@@ -187,117 +201,61 @@
     }
   });
 
-  async function confirmInstall(): Promise<void> {
+  // Fetch the bytes into quarantine. This does NOT enable the package — it lands in
+  // Awaiting review alongside agent-written modules, and the user reads its code first.
+  async function confirmFetch(): Promise<void> {
     confirming = false;
     if (!ext) return;
     busy = true;
     extError = "";
     extNotice = "";
     try {
-      await ext.extInstall({ scope, source: source.trim() });
+      await ext.extensionsFetch({ scope, source: source.trim() });
       source = "";
       await refreshExts();
-      extNotice = "Installed. Reopen your Chat modules to load it.";
+      extNotice = "Downloaded. Review its code below, then Enable it.";
     } catch (e) {
       extError = e instanceof Error ? e.message : String(e);
     }
     busy = false;
   }
 
-  async function removeExt(s: string): Promise<void> {
+  // Keyed by scope AND id: the same name can exist in root and in a workspace, and
+  // expanding one must not expand the other.
+  function extKey(e: Extension): string {
+    return `${e.scope}/${e.id}`;
+  }
+
+  async function toggleReview(e: Extension): Promise<void> {
     if (!ext) return;
+    if (reviewing === extKey(e)) {
+      reviewing = null;
+      return;
+    }
+    extError = "";
+    try {
+      reviewed = await ext.extensionsRead({ scope: e.scope, id: e.id, state: e.state });
+      reviewing = extKey(e);
+    } catch (err) {
+      extError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // The mutations share a shape: run, re-list, report. `notice` is what the user sees
+  // on success — each spells out when the change actually takes effect.
+  async function extAction(run: () => Promise<unknown>, notice: string): Promise<void> {
     busy = true;
     extError = "";
     extNotice = "";
     try {
-      await ext.extRemove({ scope, source: s });
+      await run();
+      reviewing = null;
       await refreshExts();
-      extNotice = "Removed. Reopen your Chat modules to apply.";
+      extNotice = notice;
     } catch (e) {
       extError = e instanceof Error ? e.message : String(e);
     }
     busy = false;
-  }
-
-  // Defined tools — pi extensions written by the user or by an agent (define_tool).
-  // Agent-written source sits in a quarantine dir that pi never loads; approving is
-  // what moves it into the auto-discovered dir (see tools/paths.ts). Null in
-  // web-dev, same desktop-only note as extensions/providers.
-  const tools = toolBindings();
-  let defined = $state<DefinedTool[]>([]);
-  let toolError = $state("");
-  let toolNotice = $state("");
-  let toolBusy = $state(false);
-  // The tool whose source is currently expanded for review, and its source text.
-  // Reviewing is deliberately required before Approve: the source IS the artifact.
-  let reviewing = $state<string | null>(null);
-  let reviewSource = $state("");
-
-  // `defined` is every tool visible from the selected scope — its own plus root's.
-  // They are split by owner, because only a scope's OWN tools can be approved or
-  // revoked here; inherited ones are managed where they live.
-  const ownPending = $derived(defined.filter((t) => t.state === "pending" && t.scope === scope));
-  const ownApproved = $derived(defined.filter((t) => t.state === "approved" && t.scope === scope));
-  const inheritedTools = $derived(defined.filter((t) => t.scope !== scope));
-
-  async function refreshTools(): Promise<void> {
-    if (!tools) return;
-    try {
-      defined = await tools.toolsVisible({ scope });
-    } catch (e) {
-      toolError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  // Re-list whenever the modal opens or the scope changes; collapse any open review.
-  $effect(() => {
-    if ($settingsOpen && tools && scope) {
-      toolError = "";
-      toolNotice = "";
-      reviewing = null;
-      refreshTools();
-    }
-  });
-
-  // Keyed by scope AND name: the same tool name can exist in root and in a workspace,
-  // and expanding one must not expand the other.
-  function toolKey(t: DefinedTool): string {
-    return `${t.scope}/${t.name}`;
-  }
-
-  async function review(t: DefinedTool): Promise<void> {
-    if (!tools) return;
-    if (reviewing === toolKey(t)) {
-      reviewing = null;
-      return;
-    }
-    toolError = "";
-    try {
-      reviewSource = (await tools.toolsRead({ scope: t.scope, name: t.name, state: t.state })).source;
-      reviewing = toolKey(t);
-    } catch (e) {
-      toolError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  // The three mutations share a shape: run, re-list, report. `notice` is what the
-  // user sees on success — each spells out when the change actually takes effect.
-  async function toolAction(
-    run: () => Promise<unknown>,
-    notice: string,
-  ): Promise<void> {
-    toolBusy = true;
-    toolError = "";
-    toolNotice = "";
-    try {
-      await run();
-      reviewing = null;
-      await refreshTools();
-      toolNotice = notice;
-    } catch (e) {
-      toolError = e instanceof Error ? e.message : String(e);
-    }
-    toolBusy = false;
   }
 
   // Profiles — a base prompt plus a tool allowlist, per scope (profiles/service.ts).
@@ -381,14 +339,13 @@
     { id: "kanban", label: "Kanban" },
     { id: "providers", label: "Providers" },
     { id: "extensions", label: "Extensions" },
-    { id: "tools", label: "Tools" },
     { id: "profiles", label: "Profiles" },
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 
   // Sections whose content belongs to a scope rather than the app. Appearance and
   // Workspace are app-wide; Providers are shared with the `pi` CLI machine-wide.
-  const SCOPED_SECTIONS: readonly string[] = ["kanban", "extensions", "tools", "profiles"];
+  const SCOPED_SECTIONS: readonly string[] = ["kanban", "extensions", "profiles"];
 
   // Default statuses seeded into a new board in the selected scope (kanban/board.ts).
   // Seed only — an existing board's columns are edited on the board (Kanban.svelte).
@@ -706,35 +663,186 @@
 
       {/if}
 
+      <!-- One review pane for both origins. A local module is always a single file; a
+           package is however many entry files pi resolved for it, which is what makes
+           this the same gate rather than a source string for one origin and code for
+           the other. -->
+      {#snippet reviewPane()}
+        {#if reviewed}
+          {#each reviewed.files as f (f.path)}
+            <div class="mt-2 truncate font-mono text-[0.65rem] opacity-60" title={f.path}>{f.path}</div>
+            <pre class="mt-1 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
+              >{f.text}</code></pre>
+          {/each}
+          {#if reviewed.files.length === 0}
+            <div class="mt-2 text-xs opacity-60">
+              No extension entry files — this package ships skills or prompts only.
+            </div>
+          {/if}
+          {#if reviewed.skills.length > 0}
+            <div class="mt-2 text-xs opacity-70">
+              Also ships {reviewed.skills.length}
+              skill{reviewed.skills.length === 1 ? "" : "s"} — not code, but their text reaches
+              the agent:
+            </div>
+            <ul class="mt-1 max-h-24 overflow-y-auto text-[0.65rem] opacity-60">
+              {#each reviewed.skills as sk (sk)}
+                <li class="truncate font-mono" title={sk}>{sk}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if reviewed.truncated}
+            <div class="mt-1 text-[0.65rem] text-warning">
+              Long file truncated for display — read it on disk before enabling.
+            </div>
+          {/if}
+        {/if}
+      {/snippet}
+
       {#if section === "extensions"}
       <div class="mb-3 text-xs uppercase tracking-wide text-primary">Extensions</div>
       {#if !ext}
         <div class="text-xs opacity-70">Available in the desktop app only.</div>
       {:else}
         <div class="mt-0.5 text-xs opacity-70">
-          Pi extensions add tools and commands to Chat. Installed into pique only —
-          separate from your <code>pi</code> CLI. Reopen Chat modules to load changes.
+          Extensions add tools and commands to Chat — either a pi package or a module
+          written by you or by an agent. Nothing runs until you read its code and enable
+          it here, and then only in Chat modules opened afterwards.
         </div>
 
-        {#if installed.length > 0}
-          <ul class="mt-3 max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
-            {#each installed as e (e.source)}
-              <li class="flex items-center justify-between gap-2 px-3 py-2">
-                <span class="truncate font-mono text-xs" title={e.path ?? e.source}>{e.source}</span>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs"
-                  disabled={busy}
-                  onclick={() => removeExt(e.source)}
-                >Remove</button>
+        <!-- Awaiting review: both origins, together. Enable stays disabled until the
+             code is expanded — approving without looking is the failure mode the whole
+             gate exists to prevent. -->
+        <div class="mt-4 mb-2 text-xs opacity-70">Awaiting review:</div>
+        {#if ownPending.length > 0}
+          <ul class="divide-y divide-base-300 rounded border border-warning/50">
+            {#each ownPending as e (extKey(e))}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="flex min-w-0 items-center gap-1.5">
+                    <span class="badge badge-ghost badge-xs shrink-0">{e.origin}</span>
+                    <span class="truncate font-mono text-xs" title={e.path ?? e.name}>{e.name}</span>
+                  </span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => toggleReview(e)}
+                    >{reviewing === extKey(e) ? "Hide" : "Review"}</button>
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      disabled={busy || reviewing !== extKey(e)}
+                      title={reviewing === extKey(e) ? "" : "Review the code first"}
+                      onclick={() =>
+                      extAction(
+                        () => ext.extensionsEnable({ scope, id: e.id }),
+                        `Enabled ${e.name}. Open a new Chat module to load it.`,
+                      )}
+                    >Enable</button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      disabled={busy}
+                      onclick={() =>
+                      extAction(
+                        () => ext.extensionsRemove({ scope, id: e.id, state: "pending" }),
+                        `Deleted ${e.name}.`,
+                      )}
+                    >Delete</button>
+                  </div>
+                </div>
+                {#if reviewing === extKey(e)}
+                  <div class="mt-2 text-xs opacity-80">
+                    This code runs with full system access once enabled. Read it before enabling.
+                    {#if inRoot && e.origin === "local"}Enabling here grants it to every workspace.{/if}
+                  </div>
+                  {@render reviewPane()}
+                {/if}
               </li>
             {/each}
           </ul>
         {:else}
-          <div class="mt-3 text-xs opacity-60">None installed.</div>
+          <div class="text-xs opacity-60">Nothing awaiting review.</div>
         {/if}
 
-        <div class="mt-4 mb-2 text-xs opacity-70">Browse the pi package catalog (via npm):</div>
+        <!-- Enabled: both origins mixed, distinguished by the badge rather than by
+             living in a separate section. Revoke returns to review; Delete removes. -->
+        <div class="mt-4 mb-2 text-xs opacity-70">Enabled:</div>
+        {#if ownEnabled.length > 0}
+          <ul class="max-h-48 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
+            {#each ownEnabled as e (extKey(e))}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="flex min-w-0 items-center gap-1.5">
+                    <span class="badge badge-ghost badge-xs shrink-0">{e.origin}</span>
+                    <span class="truncate font-mono text-xs" title={e.path ?? e.name}>{e.name}</span>
+                  </span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => toggleReview(e)}
+                    >{reviewing === extKey(e) ? "Hide" : "View"}</button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      disabled={busy}
+                      onclick={() =>
+                      extAction(
+                        () => ext.extensionsRevoke({ scope, id: e.id }),
+                        `Revoked ${e.name}. It is back in Awaiting review; reopen Chat modules to apply.`,
+                      )}
+                    >Revoke</button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      disabled={busy}
+                      onclick={() =>
+                      extAction(
+                        () => ext.extensionsRemove({ scope, id: e.id, state: "enabled" }),
+                        `Deleted ${e.name}. Reopen Chat modules to apply.`,
+                      )}
+                    >Delete</button>
+                  </div>
+                </div>
+                {#if reviewing === extKey(e)}
+                  {@render reviewPane()}
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="text-xs opacity-60">None enabled.</div>
+        {/if}
+
+        <!-- Inherited from root: visible to this workspace's agents, but enabled and
+             revoked in root, so they are read-only here. Packages are deliberately NOT
+             inherited, which is why this group says "modules" — see docs/extensions.md. -->
+        {#if inherited.length > 0}
+          <div class="mt-4 mb-2 text-xs opacity-70">
+            Inherited from Root <span class="opacity-60">— modules only; packages are per-scope</span>:
+          </div>
+          <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-dashed border-base-300">
+            {#each inherited as e (extKey(e))}
+              <li class="px-3 py-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-mono text-xs opacity-70">{e.name}</span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs shrink-0"
+                    onclick={() => toggleReview(e)}
+                  >{reviewing === extKey(e) ? "Hide" : "View"}</button>
+                </div>
+                {#if reviewing === extKey(e)}
+                  {@render reviewPane()}
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <div class="mt-5 mb-2 text-xs opacity-70">Browse the pi package catalog (via npm):</div>
         <div class="flex gap-2">
           <input
             class="input input-bordered input-sm flex-1"
@@ -766,8 +874,8 @@
                   type="button"
                   class="btn btn-ghost btn-xs shrink-0"
                   disabled={busy}
-                  onclick={() => installResult(r)}
-                >Install</button>
+                  onclick={() => addResult(r)}
+                >Add</button>
               </li>
             {/each}
           </ul>
@@ -775,13 +883,14 @@
 
         {#if confirming}
           <div class="mt-3 rounded border border-warning/50 bg-warning/10 p-3">
-            <div class="text-sm font-medium text-warning">Install this extension?</div>
+            <div class="text-sm font-medium text-warning">Download this package?</div>
             <div class="mt-1 break-all font-mono text-xs">{source.trim()}</div>
             <div class="mt-1.5 text-xs opacity-80">
-              Extensions run with full system access. Only install sources you trust.
+              It will be fetched into quarantine for review, not enabled. Downloading an
+              npm package runs its install scripts, so only fetch sources you trust.
             </div>
             <div class="mt-2 flex gap-2">
-              <button type="button" class="btn btn-warning btn-sm" onclick={confirmInstall}>Install</button>
+              <button type="button" class="btn btn-warning btn-sm" onclick={confirmFetch}>Download</button>
               <button type="button" class="btn btn-ghost btn-sm" onclick={() => (confirming = false)}>Cancel</button>
             </div>
           </div>
@@ -799,144 +908,12 @@
               class="btn btn-sm"
               disabled={busy || source.trim() === ""}
               onclick={() => (confirming = true)}
-            >Install</button>
+            >Add</button>
           </div>
         {/if}
 
         {#if extNotice}<div class="mt-2 text-xs text-success">{extNotice}</div>{/if}
         {#if extError}<div class="mt-2 break-all text-xs text-error">{extError}</div>{/if}
-      {/if}
-      {/if}
-
-      {#if section === "tools"}
-      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Tools</div>
-      {#if !tools}
-        <div class="text-xs opacity-70">Available in the desktop app only.</div>
-      {:else}
-        <div class="mt-0.5 text-xs opacity-70">
-          Tools defined by you or by an agent. An agent-written tool cannot run until you
-          review its code and approve it here, and then only in Chat modules opened
-          afterwards.
-        </div>
-
-        <div class="mt-4 mb-2 text-xs opacity-70">Awaiting review:</div>
-        {#if ownPending.length > 0}
-          <ul class="divide-y divide-base-300 rounded border border-warning/50">
-            {#each ownPending as t (toolKey(t))}
-              <li class="px-3 py-2">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="truncate font-mono text-xs">{t.name}</span>
-                  <div class="flex shrink-0 gap-1">
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      onclick={() => review(t)}
-                    >{reviewing === toolKey(t) ? "Hide" : "Review"}</button>
-                    <button
-                      type="button"
-                      class="btn btn-warning btn-xs"
-                      disabled={toolBusy || reviewing !== toolKey(t)}
-                      title={reviewing === toolKey(t) ? "" : "Review the source first"}
-                      onclick={() =>
-                      toolAction(
-                        () => tools.toolsApprove({ scope, name: t.name }),
-                        `Approved ${t.name}. Open a new Chat module to load it.`,
-                      )}
-                    >Approve</button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      disabled={toolBusy}
-                      onclick={() =>
-                      toolAction(
-                        () => tools.toolsReject({ scope, name: t.name }),
-                        `Rejected ${t.name}.`,
-                      )}
-                    >Reject</button>
-                  </div>
-                </div>
-                {#if reviewing === toolKey(t)}
-                  <div class="mt-2 text-xs opacity-80">
-                    This code runs with full system access once approved. Read it before approving.
-                    {#if inRoot}Approving here grants it to every workspace.{/if}
-                  </div>
-                  <pre class="mt-1.5 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
-                    >{reviewSource}</code></pre>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <div class="text-xs opacity-60">Nothing awaiting review.</div>
-        {/if}
-
-        <div class="mt-4 mb-2 text-xs opacity-70">Approved:</div>
-        {#if ownApproved.length > 0}
-          <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
-            {#each ownApproved as t (toolKey(t))}
-              <li class="px-3 py-2">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="truncate font-mono text-xs">{t.name}</span>
-                  <div class="flex shrink-0 gap-1">
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      onclick={() => review(t)}
-                    >{reviewing === toolKey(t) ? "Hide" : "View"}</button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      disabled={toolBusy}
-                      onclick={() =>
-                      toolAction(
-                        () => tools.toolsRevoke({ scope, name: t.name }),
-                        `Revoked ${t.name}. Reopen Chat modules to apply.`,
-                      )}
-                    >Revoke</button>
-                  </div>
-                </div>
-                {#if reviewing === toolKey(t)}
-                  <pre class="mt-2 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
-                    >{reviewSource}</code></pre>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <div class="text-xs opacity-60">None approved.</div>
-        {/if}
-
-        <!-- Inherited from root: visible to this workspace's agents, but approved and
-             revoked in root, so they are read-only here. -->
-        {#if inheritedTools.length > 0}
-          <div class="mt-4 mb-2 text-xs opacity-70">Inherited from Root:</div>
-          <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-base-300 border-dashed">
-            {#each inheritedTools as t (toolKey(t))}
-              <li class="px-3 py-2">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="truncate font-mono text-xs opacity-70">{t.name}</span>
-                  <div class="flex shrink-0 items-center gap-2">
-                    {#if t.state === "pending"}
-                      <span class="text-[0.65rem] opacity-60">pending in Root</span>
-                    {/if}
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      onclick={() => review(t)}
-                    >{reviewing === toolKey(t) ? "Hide" : "View"}</button>
-                  </div>
-                </div>
-                {#if reviewing === toolKey(t)}
-                  <pre class="mt-2 max-h-56 overflow-auto rounded bg-base-300 p-2 text-[0.65rem] leading-relaxed"><code
-                    >{reviewSource}</code></pre>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {/if}
-
-        {#if toolNotice}<div class="mt-2 text-xs text-success">{toolNotice}</div>{/if}
-        {#if toolError}<div class="mt-2 break-all text-xs text-error">{toolError}</div>{/if}
       {/if}
       {/if}
 

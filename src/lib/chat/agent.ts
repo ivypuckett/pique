@@ -65,8 +65,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
-import { toolAuthoringTools } from "../tools/agent-tools.ts";
-import { inheritedExtensionFiles } from "../tools/service.ts";
+import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
+import { inheritedExtensionFiles } from "../extensions/local.ts";
 import { profileAuthoringTools } from "../profiles/agent-tools.ts";
 import { resolveBasePrompt, resolveProfile } from "../profiles/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
@@ -144,20 +144,21 @@ export async function startAgent(
   // profile, the same way an unavailable model falls back to the const above.
   const profileName = opts.profile ?? defaultProfile;
   const profile = profileName ? await resolveProfile(scope, profileName) : null;
-  // Tools compiled into pique, all bound to this scope: define_tool and define_profile
-  // quarantine into it, and the Kanban tools address its board. Tools the user has
-  // *defined and approved* don't appear here — they load as extensions, below.
+  // Tools compiled into pique, all bound to this scope: define_extension and
+  // define_profile quarantine into it, and the Kanban tools address its board. Tools
+  // from extensions the user has *enabled* don't appear here — those load below.
   const customTools = [
-    ...toolAuthoringTools(scope),
+    ...extensionAuthoringTools(scope),
     ...profileAuthoringTools(scope),
     ...kanbanTools(scope),
   ];
 
   // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
-  // scope's own dir is the agentDir (its approved tools and its installed packages),
-  // and every tool it inherits from an ancestor is passed as an explicit extra path.
-  // additionalExtensionPaths takes FILES — handing it a directory fails with "Cannot
-  // find module" and the inherited tools silently never load.
+  // scope's own dir is the agentDir (its enabled local extensions and its enabled
+  // packages), and every local extension it inherits from an ancestor is passed as an
+  // explicit extra path. additionalExtensionPaths takes FILES — handing it a directory
+  // fails with "Cannot find module" and the inherited extensions silently never load.
+  // Packages are not inherited; see docs/extensions.md.
   await ensureScopeDirs(scope);
   const agentDir = scopeAgentDir(scope);
   const resourceLoader = new DefaultResourceLoader({
@@ -340,8 +341,9 @@ export function setThinkingLevel(id: string, level: ThinkingLevel): void {
 }
 
 // Names of the tools this agent can actually call: pi's builtins, pique's compiled-in
-// tools, and every defined tool that reached it — its scope's own plus the ones it
-// inherits. The assembled result of the scope chain, readable after the fact.
+// tools, and every tool registered by an enabled extension that reached it — its
+// scope's own plus the ones it inherits. The assembled result of the scope chain,
+// readable after the fact.
 export function activeToolNames(id: string): string[] {
   return agents.get(id)?.session.getActiveToolNames() ?? [];
 }
