@@ -47,7 +47,7 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
       name: "kanban_get_board",
       label: "Get Kanban board",
       description: "Return the current board: its statuses (columns) and all cards with their " +
-        "ids, titles, statuses, tags, artifacts, predecessors, successors, parent, and children." +
+        "ids, titles, statuses, tags, artifacts, subtasks, predecessors, and successors." +
         where,
       parameters: Type.Object({ ...scopeParam }),
       async execute(_id, p) {
@@ -101,13 +101,19 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_set_metadata",
       label: "Edit Kanban card metadata",
-      description: "Update a card's title, description, and/or tags. Only provided fields change." +
-        where,
+      description:
+        "Update a card's title, description, tags, and/or subtasks. Only provided fields " +
+        "change; subtasks replace the card's whole list, so send it back in full with the " +
+        "edits applied." + where,
       parameters: Type.Object({
         card_id: Type.String(),
         title: Type.Optional(Type.String()),
         description: Type.Optional(Type.String()),
         tags: Type.Optional(Type.Record(Type.String(), Type.String())),
+        subtasks: Type.Optional(Type.Array(
+          Type.Object({ text: Type.String(), done: Type.Boolean() }),
+          { description: "The card's steps, in order. Subtasks are not cards and have no ids." },
+        )),
         ...scopeParam,
       }),
       async execute(_id, p) {
@@ -116,6 +122,7 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
           title: p.title,
           description: p.description,
           tags: p.tags,
+          subtasks: p.subtasks,
           actor: "agent",
         });
         return text("ok");
@@ -125,14 +132,13 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_set_connections",
       label: "Edit Kanban card connections",
-      description: "Update a card's connections: artifacts (external links), predecessors and " +
-        "successors (other card ids), and parent. Only provided fields change." + where,
+      description: "Update a card's connections: artifacts (external links), and predecessors " +
+        "and successors (other card ids). Only provided fields change." + where,
       parameters: Type.Object({
         card_id: Type.String(),
         artifacts: Type.Optional(Type.Array(Type.String())),
         predecessors: Type.Optional(Type.Array(Type.String())),
         successors: Type.Optional(Type.Array(Type.String())),
-        parent_id: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         ...scopeParam,
       }),
       async execute(_id, p) {
@@ -141,7 +147,6 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
           artifacts: p.artifacts,
           predecessors: p.predecessors,
           successors: p.successors,
-          parentId: p.parent_id,
           actor: "agent",
         });
         return text("ok");

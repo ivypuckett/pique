@@ -317,20 +317,35 @@
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
   let titleInput = $state<HTMLInputElement | null>(null);
 
-  // A card can't be parented under itself or any of its descendants (that would make
-  // a cycle), so those are excluded from the parent dropdown; the backend rejects it
-  // too, as the authority. Derived from the current parent edges.
-  const invalidParents = $derived.by(() => {
-    const out = new Set<string>();
-    if (!selected) return out;
-    const stack = [selected.id];
-    while (stack.length) {
-      const cur = stack.pop()!;
-      out.add(cur);
-      for (const c of board.cards) if (c.parentId === cur && !out.has(c.id)) stack.push(c.id);
-    }
-    return out;
-  });
+  // Subtasks: a card's own checklist, not cards of their own. Every edit rewrites the
+  // whole list through setMetadata (the board has no per-subtask operation), so all
+  // four of these end the same way.
+  function addSubtask(text: string): void {
+    if (!selected) return;
+    const t = text.trim();
+    if (t === "") return;
+    selected.subtasks = [...selected.subtasks, { text: t, done: false }];
+    saveMetadata();
+  }
+  function toggleSubtask(i: number): void {
+    if (!selected) return;
+    selected.subtasks = selected.subtasks.map((s, n) => n === i ? { ...s, done: !s.done } : s);
+    saveMetadata();
+  }
+  function removeSubtask(i: number): void {
+    if (!selected) return;
+    selected.subtasks = selected.subtasks.filter((_, n) => n !== i);
+    saveMetadata();
+  }
+  // Committed on blur. An unchanged text saves nothing at all — leaving the row's
+  // input in place, so a click heading for the ✕ next to it still lands.
+  function renameSubtask(i: number, text: string): void {
+    if (!selected) return;
+    const t = text.trim();
+    if (t === selected.subtasks[i].text) return;
+    selected.subtasks = selected.subtasks.map((s, n) => n === i ? { ...s, text: t } : s);
+    saveMetadata();
+  }
 
   // Cards eligible to add as a predecessor: not this card, not already a predecessor,
   // and not a successor (that would be an immediate cycle).
@@ -360,6 +375,7 @@
         title: selected.title,
         description: selected.description,
         tags: selected.tags,
+        subtasks: selected.subtasks,
       });
       await refresh();
     } catch (e) {
@@ -375,7 +391,6 @@
         cardId: selected.id,
         artifacts: selected.artifacts,
         predecessors: selected.predecessors,
-        parentId: selected.parentId,
       });
       await refresh();
     } catch (e) {
@@ -523,8 +538,15 @@
                 onpointerleave={() => { if (hoveredId === c.id) hoveredId = null; }}
               >
                 <div class="truncate text-sm">{c.title || "(untitled)"}</div>
-                {#if Object.keys(c.tags).length > 0}
-                  <div class="mt-1 flex flex-wrap gap-1">
+                <!-- Subtask progress leads the tag row: it is the card's own state, where
+                     the tags are labels put on it. Outlined, so the two don't read alike. -->
+                {#if c.subtasks.length > 0 || Object.keys(c.tags).length > 0}
+                  <div class="mt-1 flex flex-wrap items-center gap-1">
+                    {#if c.subtasks.length > 0}
+                      <span class="badge badge-outline badge-xs">
+                        ✓ {c.subtasks.filter((t) => t.done).length}/{c.subtasks.length}
+                      </span>
+                    {/if}
                     {#each Object.entries(c.tags) as [k, v] (k)}
                       <span class="badge badge-ghost badge-xs">{k}: {v}</span>
                     {/each}
@@ -593,6 +615,62 @@
           <textarea id="k-desc" class="textarea textarea-bordered textarea-sm" rows="4" bind:value={selected.description} onblur={saveMetadata}></textarea>
         </div>
 
+        <!-- Subtasks: the card's checklist. Rows are edited in place — tick, retype, or
+             remove — and the field at the bottom appends on Enter. -->
+        <div class="flex flex-col gap-1">
+          <div class="text-xs opacity-70">
+            Subtasks
+            {#if selected.subtasks.length > 0}
+              <span class="opacity-60">· {selected.subtasks.filter((t) => t.done).length}/{selected.subtasks.length}</span>
+            {/if}
+          </div>
+          {#each selected.subtasks as t, i (i)}
+            <div class="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-xs shrink-0"
+                aria-label="Done: {t.text}"
+                checked={t.done}
+                onchange={() => toggleSubtask(i)}
+              />
+              <input
+                class="input input-bordered input-xs min-w-0 flex-1"
+                class:line-through={t.done}
+                class:opacity-50={t.done}
+                aria-label="Subtask {i + 1}"
+                value={t.text}
+                onblur={(e) => {
+                  // A blank row is not a subtask. Put the text back on the input itself:
+                  // re-rendering from the board wouldn't, since the value Svelte holds
+                  // for it never changed.
+                  if (e.currentTarget.value.trim() === "") e.currentTarget.value = t.text;
+                  else renameSubtask(i, e.currentTarget.value);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") { e.currentTarget.value = t.text; e.currentTarget.blur(); }
+                }}
+              />
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-xs shrink-0"
+                aria-label="Remove subtask {t.text}"
+                onclick={() => removeSubtask(i)}
+              >✕</button>
+            </div>
+          {/each}
+          <input
+            class="input input-bordered input-xs"
+            aria-label="Add subtask"
+            placeholder="+ Add subtask…"
+            onkeydown={(e) => {
+              if (e.key !== "Enter") return;
+              addSubtask(e.currentTarget.value);
+              e.currentTarget.value = "";
+            }}
+          />
+        </div>
+
         <div class="flex flex-col gap-1">
           <label class="text-xs opacity-70" for="k-tags">Tags (<code>key: value</code> per line)</label>
           <textarea id="k-tags" class="textarea textarea-bordered textarea-sm font-mono" rows="3" bind:value={tagsText} onblur={() => { commitTags(); saveMetadata(); }}></textarea>
@@ -602,20 +680,6 @@
           <label class="text-xs opacity-70" for="k-artifacts">Artifacts (one per line)</label>
           <textarea id="k-artifacts" class="textarea textarea-bordered textarea-sm font-mono" rows="2" bind:value={artifactsText} onblur={() => { commitArtifacts(); saveConnections(); }}></textarea>
         </div>
-
-        <div class="flex flex-col gap-1">
-          <label class="text-xs opacity-70" for="k-parent">Parent</label>
-          <select id="k-parent" class="select select-bordered select-sm" bind:value={selected.parentId} onchange={saveConnections}>
-            <option value={null}>— none —</option>
-            {#each board.cards.filter((c) => !invalidParents.has(c.id)) as c (c.id)}
-              <option value={c.id}>{c.title || "(untitled)"}</option>
-            {/each}
-          </select>
-        </div>
-
-        {#if selected.children.length > 0}
-          <div class="text-xs opacity-70">Children: {selected.children.map((id) => cardTitle.get(id)).join(", ")}</div>
-        {/if}
 
         <div>
           <div class="text-xs opacity-70">Predecessors</div>

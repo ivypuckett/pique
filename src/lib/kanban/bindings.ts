@@ -1,8 +1,8 @@
 // Frontend half of the kanban binding contract. The backend half is the kanban*
 // win.bind handlers in src/desktop.ts (delegating to kanban/service.ts) — keep
 // arg/return shapes in sync by hand (separate module graphs).
-import type { Board, LogRow } from "./board.ts";
-export type { Board, CardRow, LogRow, StatusRow } from "./board.ts";
+import type { Board, LogRow, Subtask } from "./board.ts";
+export type { Board, CardRow, LogRow, StatusRow, Subtask } from "./board.ts";
 
 // Every call is keyed by scope — each scope has its own board DB. A workspace can
 // pass its own id or "root" to work the shared board it inherits; there is no way to
@@ -32,6 +32,7 @@ export interface KanbanBindings {
       title?: string;
       description?: string;
       tags?: Record<string, string>;
+      subtasks?: Subtask[];
     },
   ): Promise<unknown>;
   kanbanSetConnections(
@@ -41,7 +42,6 @@ export interface KanbanBindings {
       artifacts?: string[];
       predecessors?: string[];
       successors?: string[];
-      parentId?: string | null;
     },
   ): Promise<unknown>;
 }

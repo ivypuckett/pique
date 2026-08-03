@@ -11,6 +11,14 @@ export type StatusRow = {
   position: number;
 }
 
+// A step within a card. Subtasks are card content, not cards of their own: they
+// have no id, no status and no place on the board, and are addressed only by
+// their index in the card's list.
+export type Subtask = {
+  text: string;
+  done: boolean;
+}
+
 export type CardRow = {
   id: string;
   statusId: string;
@@ -20,10 +28,9 @@ export type CardRow = {
   tags: Record<string, string>;
   artifacts: string[];
   predecessors: string[];
-  parentId: string | null;
+  subtasks: Subtask[];
   // Derived on read, never stored:
   successors: string[]; // cards that list this card as a predecessor
-  children: string[]; // cards whose parent_id is this card
 }
 
 export type Board = {
@@ -72,6 +79,7 @@ export interface BoardHandle {
     title?: string;
     description?: string;
     tags?: Record<string, string>;
+    subtasks?: Subtask[];
     actor: Actor;
   }): void;
   setConnections(arg: {
@@ -79,7 +87,6 @@ export interface BoardHandle {
     artifacts?: string[];
     predecessors?: string[];
     successors?: string[];
-    parentId?: string | null;
     actor: Actor;
   }): void;
   close(): void;
@@ -94,21 +101,17 @@ interface RawCard {
   tags: string;
   artifacts: string;
   predecessors: string;
-  parent_id: string | null;
+  subtasks: string;
 }
 
 function hydrate(rows: RawCard[]): CardRow[] {
-  // Build predecessor edges once, then invert for successors and gather children.
+  // Build predecessor edges once, then invert for successors.
   const preds = new Map<string, string[]>();
   for (const r of rows) preds.set(r.id, JSON.parse(r.predecessors));
   const successors = new Map<string, string[]>();
-  const children = new Map<string, string[]>();
   for (const r of rows) {
     for (const p of preds.get(r.id)!) {
       (successors.get(p) ?? successors.set(p, []).get(p)!).push(r.id);
-    }
-    if (r.parent_id) {
-      (children.get(r.parent_id) ?? children.set(r.parent_id, []).get(r.parent_id)!).push(r.id);
     }
   }
   return rows.map((r) => ({
@@ -120,9 +123,8 @@ function hydrate(rows: RawCard[]): CardRow[] {
     tags: JSON.parse(r.tags),
     artifacts: JSON.parse(r.artifacts),
     predecessors: preds.get(r.id)!,
-    parentId: r.parent_id,
+    subtasks: JSON.parse(r.subtasks),
     successors: successors.get(r.id) ?? [],
-    children: children.get(r.id) ?? [],
   }));
 }
 
@@ -160,11 +162,10 @@ export function openBoard(
     ids.forEach((id, i) => upd.run(i, id));
   };
 
-  // Delete a card and every edge pointing at it, so no card is left parented under or
-  // waiting on something that no longer exists.
+  // Delete a card and every edge pointing at it, so no card is left waiting on
+  // something that no longer exists.
   const removeCard = (cardId: string): void => {
     db.prepare("DELETE FROM cards WHERE id = ?").run(cardId);
-    db.prepare("UPDATE cards SET parent_id = NULL WHERE parent_id = ?").run(cardId);
     // Prune the deleted id from every card's predecessor list.
     const rows = db.prepare("SELECT id, predecessors FROM cards").all() as unknown as {
       id: string;
@@ -175,6 +176,23 @@ export function openBoard(
       const preds = JSON.parse(r.predecessors) as string[];
       if (preds.includes(cardId)) upd.run(JSON.stringify(preds.filter((p) => p !== cardId)), r.id);
     }
+  };
+
+  // Subtasks arrive from the pi tools as whatever the model emitted: the typebox schema
+  // on the tool only describes the shape to the model, nothing validates against it on
+  // the way in. An entry with no text would be stored as-is and render as a blank row,
+  // so it is refused here; the message reaches the agent as a tool error it can correct.
+  // A missing `done` is the one thing worth defaulting rather than rejecting.
+  const cleanSubtasks = (subtasks: Subtask[]): Subtask[] => {
+    if (!Array.isArray(subtasks)) throw new Error("subtasks must be an array");
+    return subtasks.map((s, i) => {
+      if (typeof s !== "object" || s === null || typeof s.text !== "string") {
+        throw new Error(`subtask ${i} must be an object with a text string`);
+      }
+      const text = s.text.trim();
+      if (text === "") throw new Error(`subtask ${i} cannot be empty`);
+      return { text, done: s.done === true };
+    });
   };
 
   const cleanName = (name: string): string => {
@@ -302,7 +320,10 @@ export function openBoard(
       log(cardId, "set_status", { statusId: prev.status_id }, { statusId }, reason, actor);
     },
 
-    setMetadata({ cardId, title, description, tags, actor }) {
+    setMetadata({ cardId, title, description, tags, subtasks, actor }) {
+      // Checked before any write, so a rejected list can't leave a half-applied edit
+      // behind (title and description are written further down).
+      const clean = subtasks === undefined ? undefined : cleanSubtasks(subtasks);
       const prev = getRaw(cardId);
       const from: Record<string, unknown> = {};
       const to: Record<string, unknown> = {};
@@ -321,23 +342,20 @@ export function openBoard(
         from.tags = JSON.parse(prev.tags);
         to.tags = tags;
       }
+      // The whole list is rewritten every time — there is no per-subtask operation, so
+      // ticking one box and reordering the list are the same write.
+      if (clean !== undefined) {
+        db.prepare("UPDATE cards SET subtasks = ? WHERE id = ?").run(
+          JSON.stringify(clean),
+          cardId,
+        );
+        from.subtasks = JSON.parse(prev.subtasks);
+        to.subtasks = clean;
+      }
       log(cardId, "set_metadata", from, to, null, actor);
     },
 
-    setConnections({ cardId, artifacts, predecessors, successors, parentId, actor }) {
-      // Reject a parent that would make the card its own ancestor (self-parent or a
-      // cycle). Checked before any write so a rejected edit leaves the card untouched.
-      if (parentId !== undefined && parentId !== null) {
-        if (parentId === cardId) throw new Error("a card cannot be its own parent");
-        const seen = new Set<string>();
-        let cur: string | null = parentId;
-        while (cur) {
-          if (cur === cardId) throw new Error("cannot set parent: would create a cycle");
-          if (seen.has(cur)) break; // guard against a pre-existing cycle in the data
-          seen.add(cur);
-          cur = (getRaw(cur)?.parent_id) ?? null;
-        }
-      }
+    setConnections({ cardId, artifacts, predecessors, successors, actor }) {
       const prev = getRaw(cardId);
       if (artifacts !== undefined) {
         db.prepare("UPDATE cards SET artifacts = ? WHERE id = ?").run(
@@ -351,9 +369,6 @@ export function openBoard(
           cardId,
         );
       }
-      if (parentId !== undefined) {
-        db.prepare("UPDATE cards SET parent_id = ? WHERE id = ?").run(parentId, cardId);
-      }
       // A successor of A is written as "A is a predecessor of that card", so the two
       // directions can never disagree.
       if (successors !== undefined) {
@@ -366,8 +381,8 @@ export function openBoard(
       log(
         cardId,
         "set_connections",
-        { artifacts: JSON.parse(prev.artifacts), predecessors: JSON.parse(prev.predecessors), parentId: prev.parent_id },
-        { artifacts, predecessors, successors, parentId },
+        { artifacts: JSON.parse(prev.artifacts), predecessors: JSON.parse(prev.predecessors) },
+        { artifacts, predecessors, successors },
         null,
         actor,
       );

@@ -365,32 +365,38 @@ win.bind("kanbanSetStatus", async (arg) => {
 });
 
 win.bind("kanbanSetMetadata", async (arg) => {
-  const { scope, cardId, title, description, tags } = arg as {
+  const { scope, cardId, title, description, tags, subtasks } = arg as {
     scope: string;
     cardId: string;
     title?: string;
     description?: string;
     tags?: Record<string, string>;
+    subtasks?: { text: string; done: boolean }[];
   };
-  (await kanban.board(scope)).setMetadata({ cardId, title, description, tags, actor: "human" });
+  (await kanban.board(scope)).setMetadata({
+    cardId,
+    title,
+    description,
+    tags,
+    subtasks,
+    actor: "human",
+  });
   return true;
 });
 
 win.bind("kanbanSetConnections", async (arg) => {
-  const { scope, cardId, artifacts, predecessors, successors, parentId } = arg as {
+  const { scope, cardId, artifacts, predecessors, successors } = arg as {
     scope: string;
     cardId: string;
     artifacts?: string[];
     predecessors?: string[];
     successors?: string[];
-    parentId?: string | null;
   };
   (await kanban.board(scope)).setConnections({
     cardId,
     artifacts,
     predecessors,
     successors,
-    parentId,
     actor: "human",
   });
   return true;

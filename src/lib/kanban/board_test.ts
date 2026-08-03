@@ -101,14 +101,61 @@ Deno.test("setConnections with successors writes the inverse predecessor edge", 
   b.close();
 });
 
-Deno.test("setConnections updates artifacts and parent", () => {
+Deno.test("setConnections updates artifacts", () => {
   const { b, status } = fresh();
-  const parent = b.createCard({ statusId: status("Todo"), actor: "human" });
-  const child = b.createCard({ statusId: status("Todo"), actor: "human" });
-  b.setConnections({ cardId: child, parentId: parent, artifacts: ["https://x"], actor: "human" });
-  assertEquals(card(b, child).parentId, parent);
-  assertEquals(card(b, child).artifacts, ["https://x"]);
-  assertEquals(card(b, parent).children, [child]);
+  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
+  b.setConnections({ cardId: a, artifacts: ["https://x"], actor: "human" });
+  assertEquals(card(b, a).artifacts, ["https://x"]);
+  b.close();
+});
+
+Deno.test("a card's subtasks default to empty and round-trip through setMetadata", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
+  assertEquals(card(b, a).subtasks, []);
+  b.setMetadata({
+    cardId: a,
+    subtasks: [{ text: "write it", done: true }, { text: "ship it", done: false }],
+    actor: "human",
+  });
+  assertEquals(card(b, a).subtasks, [
+    { text: "write it", done: true },
+    { text: "ship it", done: false },
+  ]);
+  b.close();
+});
+
+// Nothing validates a pi tool's arguments before they reach the board, so these are the
+// shapes a model can actually hand it.
+Deno.test("setMetadata defaults a subtask's missing done to false", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
+  b.setMetadata({ cardId: a, subtasks: [{ text: "no flag" } as never], actor: "human" });
+  assertEquals(card(b, a).subtasks, [{ text: "no flag", done: false }]);
+  b.close();
+});
+
+Deno.test("setMetadata rejects malformed subtasks without half-applying the edit", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), title: "before", actor: "human" });
+  for (const bad of [["a plain string"], [{ done: true }], [{ text: "  " }], "nope"]) {
+    assertThrows(() =>
+      b.setMetadata({ cardId: a, title: "after", subtasks: bad as never, actor: "human" })
+    );
+  }
+  // The title in the same call was refused along with the subtasks.
+  assertEquals(card(b, a).title, "before");
+  assertEquals(card(b, a).subtasks, []);
+  b.close();
+});
+
+Deno.test("setMetadata replaces the whole subtask list and leaves other fields alone", () => {
+  const { b, status } = fresh();
+  const a = b.createCard({ statusId: status("Todo"), title: "t", actor: "human" });
+  b.setMetadata({ cardId: a, subtasks: [{ text: "one", done: false }], actor: "human" });
+  b.setMetadata({ cardId: a, subtasks: [{ text: "two", done: true }], actor: "human" });
+  assertEquals(card(b, a).subtasks, [{ text: "two", done: true }]);
+  assertEquals(card(b, a).title, "t");
   b.close();
 });
 
@@ -210,9 +257,7 @@ Deno.test("deleteStatus refuses a column that still has cards", () => {
 Deno.test("deleteStatus with withCards deletes the column's cards and prunes their edges", () => {
   const { b, status } = fresh();
   const doomed = b.createCard({ statusId: status("Todo"), title: "x", actor: "human" });
-  const child = b.createCard({ statusId: status("Done"), title: "child", actor: "human" });
   const after = b.createCard({ statusId: status("Done"), title: "after", actor: "human" });
-  b.setConnections({ cardId: child, parentId: doomed, actor: "human" });
   b.setConnections({ cardId: after, predecessors: [doomed], actor: "human" });
 
   b.deleteStatus({ statusId: status("Todo"), withCards: true });
@@ -221,7 +266,6 @@ Deno.test("deleteStatus with withCards deletes the column's cards and prunes the
   assertEquals(statuses.map((s) => s.name), ["Backlog", "In Progress", "Done"]);
   assertEquals(statuses.map((s) => s.position), [0, 1, 2]);
   assertEquals(b.getBoard().cards.map((c) => c.id).includes(doomed), false);
-  assertEquals(card(b, child).parentId, null);
   assertEquals(card(b, after).predecessors, []);
   b.close();
 });
@@ -247,24 +291,6 @@ Deno.test("deleteStatus refuses the last remaining column", () => {
     Error,
     "a board needs at least one column",
   );
-  b.close();
-});
-
-Deno.test("setConnections rejects self-parenting", () => {
-  const { b, status } = fresh();
-  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
-  assertThrows(() => b.setConnections({ cardId: a, parentId: a, actor: "human" }));
-  b.close();
-});
-
-Deno.test("setConnections rejects a parent cycle", () => {
-  const { b, status } = fresh();
-  const a = b.createCard({ statusId: status("Todo"), actor: "human" });
-  const bId = b.createCard({ statusId: status("Todo"), actor: "human" });
-  b.setConnections({ cardId: bId, parentId: a, actor: "human" }); // b's parent = a
-  // Making a's parent = b would form a 2-cycle (a↔b); reject it.
-  assertThrows(() => b.setConnections({ cardId: a, parentId: bId, actor: "human" }));
-  assertEquals(card(b, a).parentId, null); // unchanged after the rejected write
   b.close();
 });
 
@@ -303,15 +329,12 @@ Deno.test("moveCard clamps an out-of-range position and leaves other columns alo
   b.close();
 });
 
-Deno.test("deleteCard nulls children's parent and prunes predecessor refs", () => {
+Deno.test("deleteCard prunes predecessor refs to it", () => {
   const { b, status } = fresh();
-  const parent = b.createCard({ statusId: status("Todo"), actor: "human" });
-  const child = b.createCard({ statusId: status("Todo"), actor: "human" });
+  const gone = b.createCard({ statusId: status("Todo"), actor: "human" });
   const dep = b.createCard({ statusId: status("Todo"), actor: "human" });
-  b.setConnections({ cardId: child, parentId: parent, actor: "human" });
-  b.setConnections({ cardId: dep, predecessors: [parent], actor: "human" });
-  b.deleteCard(parent);
-  assertEquals(card(b, child).parentId, null);
+  b.setConnections({ cardId: dep, predecessors: [gone], actor: "human" });
+  b.deleteCard(gone);
   assertEquals(card(b, dep).predecessors, []);
   b.close();
 });

@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { kanbanTools } from "./agent-tools.ts";
 import { board, closeAllBoards } from "./service.ts";
 import { ROOT, scopeBoardPath } from "../scope/paths.ts";
@@ -70,6 +70,58 @@ Deno.test("agent tools drive the real board and log actor=agent", async () => {
     const log = b.getLogs(id).find((l) => l.action === "set_status")!;
     assertEquals(log.actor, "agent");
     assertEquals(log.reason, "agent finished it");
+  });
+});
+
+Deno.test("an agent writes and reads back a card's subtasks", async () => {
+  await withTempHome(async () => {
+    const tools = kanbanTools("ws-sub");
+    const todo = (await statuses(tools)).find((s) => s.name === "Todo")!;
+    const { id } = (await run(byName(tools, "kanban_create_card"), {
+      status_id: todo.id,
+      title: "Has steps",
+    })) as { id: string };
+
+    await run(byName(tools, "kanban_set_metadata"), {
+      card_id: id,
+      subtasks: [{ text: "write it", done: true }, { text: "ship it", done: false }],
+    });
+
+    // Read it back the way an agent would — off kanban_get_board, not the board handle.
+    const seen = ((await run(byName(tools, "kanban_get_board"), {})) as {
+      cards: { id: string; subtasks: { text: string; done: boolean }[] }[];
+    }).cards.find((c) => c.id === id)!;
+    assertEquals(seen.subtasks, [
+      { text: "write it", done: true },
+      { text: "ship it", done: false },
+    ]);
+
+    // Ticking one means sending the whole list back, as the tool description says.
+    await run(byName(tools, "kanban_set_metadata"), {
+      card_id: id,
+      subtasks: [{ text: "write it", done: true }, { text: "ship it", done: true }],
+    });
+    const b = await board("ws-sub");
+    assertEquals(b.getBoard().cards.find((c) => c.id === id)!.subtasks.every((s) => s.done), true);
+    assertEquals(b.getLogs(id).find((l) => l.action === "set_metadata")!.actor, "agent");
+  });
+});
+
+Deno.test("a malformed subtask list from an agent is refused, not stored", async () => {
+  await withTempHome(async () => {
+    const tools = kanbanTools("ws-bad");
+    const todo = (await statuses(tools)).find((s) => s.name === "Todo")!;
+    const { id } = (await run(byName(tools, "kanban_create_card"), {
+      status_id: todo.id,
+      title: "Has steps",
+    })) as { id: string };
+
+    // The likeliest model mistake: bare strings instead of {text, done} objects. The
+    // throw reaches the agent as a tool error, so it can retry with the right shape.
+    await assertRejects(() =>
+      run(byName(tools, "kanban_set_metadata"), { card_id: id, subtasks: ["do the thing"] })
+    );
+    assertEquals((await board("ws-bad")).getBoard().cards[0].subtasks, []);
   });
 });
 

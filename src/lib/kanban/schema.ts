@@ -1,8 +1,8 @@
 // DDL for a board DB — exactly three tables (statuses, cards, logs). Relational
 // fields that would otherwise be edge tables live as JSON columns on `cards`:
 // tags (kvp object), artifacts (array), predecessors (array, canonical edge
-// store), and parent_id (self-ref). Successors and children are derived on read,
-// never stored, so the two directions can't drift.
+// store), and subtasks (array of {text, done}). Successors are derived on read
+// from predecessors, never stored, so the two directions can't drift.
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS statuses (
   id       TEXT PRIMARY KEY,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS cards (
   tags         TEXT NOT NULL DEFAULT '{}',
   artifacts    TEXT NOT NULL DEFAULT '[]',
   predecessors TEXT NOT NULL DEFAULT '[]',
-  parent_id    TEXT
+  subtasks     TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS logs (
