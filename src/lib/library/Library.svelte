@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ROOT } from "../scope/paths.ts";
   import Extensions from "../extensions/Extensions.svelte";
+  import Prompts from "../prompts/Prompts.svelte";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
     $props();
@@ -75,11 +76,14 @@
     >↻</button>
   </div>
 
-  <div class="min-h-0 flex-1 overflow-y-auto p-4">
-    {#if section === "extensions"}
-      <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
-    {:else}
-      <div class="text-xs opacity-60">Prompts — scope {scope}, refresh {refreshKey}, root {scopeIsRoot}</div>
-    {/if}
+  <!-- Both sections stay mounted and the inactive one is hidden, the way Column.svelte
+       hides inactive module tabs. Tearing one down on every sub-tab switch would discard
+       an in-progress prompt draft — the modal never had that problem, because both
+       sections lived in one long-lived script. -->
+  <div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "extensions"}>
+    <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
+  </div>
+  <div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "prompts"}>
+    <Prompts {scope} inRoot={scopeIsRoot} {refreshKey} />
   </div>
 </div>
