@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { type Board, type CardRow, type KanbanBindings, kanbanBindings } from "./bindings.ts";
   import { ROOT } from "../scope/paths.ts";
+  import ConfirmDialog from "../ConfirmDialog.svelte";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
     $props();
@@ -678,22 +679,16 @@
   {/if}
 
   <!-- Delete-a-non-empty-column confirmation -->
-  <div class="modal" class:modal-open={pendingDelete !== null} role="dialog" aria-modal="true">
-    <div class="modal-box max-w-sm">
-      {#if pendingDelete}
-        <div class="text-sm">
-          Delete <span class="font-medium">{pendingDelete.name}</span>
-          and its {pendingDelete.count}
-          {pendingDelete.count === 1 ? "card" : "cards"}?
-        </div>
-        <div class="mt-1 text-xs opacity-60">This can't be undone.</div>
-      {/if}
-      <div class="mt-3 flex justify-end gap-2">
-        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (pendingDelete = null)}>Cancel</button>
-        <button type="button" class="btn btn-error btn-sm" onclick={confirmDeleteColumn}>Delete</button>
-      </div>
-    </div>
-  </div>
+  <ConfirmDialog
+    open={pendingDelete !== null}
+    label="Delete"
+    onconfirm={confirmDeleteColumn}
+    oncancel={() => (pendingDelete = null)}
+  >
+    Delete <span class="font-medium">{pendingDelete!.name}</span>
+    and its {pendingDelete!.count}
+    {pendingDelete!.count === 1 ? "card" : "cards"}?
+  </ConfirmDialog>
 
   <!-- Reason-required move modal -->
   <div class="modal" class:modal-open={pending !== null} role="dialog" aria-modal="true">
