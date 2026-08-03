@@ -345,6 +345,14 @@ win.bind("kanbanDeleteCard", async (arg) => {
   return true;
 });
 
+// Reordering within a column. Unlike kanbanSetStatus this needs no reason: the card
+// stays where it is, only its place in the column changes.
+win.bind("kanbanMoveCard", async (arg) => {
+  const { scope, cardId, position } = arg as { scope: string; cardId: string; position: number };
+  (await kanban.board(scope)).moveCard({ cardId, position });
+  return true;
+});
+
 win.bind("kanbanSetStatus", async (arg) => {
   const { scope, cardId, statusId, reason } = arg as {
     scope: string;

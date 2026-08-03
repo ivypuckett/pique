@@ -63,6 +63,9 @@ export interface BoardHandle {
     actor: Actor;
   }): string;
   deleteCard(cardId: string): void;
+  // Reorder a card within the column it is already in. Ordering is a view concern, so
+  // this is not logged — same as the column edits above, and unlike setStatus.
+  moveCard(arg: { cardId: string; position: number }): void;
   setStatus(arg: { cardId: string; statusId: string; reason: string; actor: Actor }): void;
   setMetadata(arg: {
     cardId: string;
@@ -270,6 +273,22 @@ export function openBoard(
 
     deleteCard(cardId) {
       removeCard(cardId);
+    },
+
+    moveCard({ cardId, position }) {
+      const card = getRaw(cardId);
+      if (!card) return;
+      const ids = (db.prepare(
+        "SELECT id FROM cards WHERE status_id = ? ORDER BY position",
+      ).all(card.status_id) as unknown as { id: string }[]).map((r) => r.id);
+      const from = ids.indexOf(cardId);
+      const to = Math.max(0, Math.min(position, ids.length - 1));
+      ids.splice(from, 1);
+      ids.splice(to, 0, cardId);
+      // Card positions are per-column and only ever appended to (nextPosition), so they
+      // can carry gaps; rewriting the whole column here leaves a dense 0..n-1 ordering.
+      const upd = db.prepare("UPDATE cards SET position = ? WHERE id = ?");
+      ids.forEach((id, i) => upd.run(i, id));
     },
 
     setStatus({ cardId, statusId, reason, actor }) {

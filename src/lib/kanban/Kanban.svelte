@@ -49,7 +49,8 @@
   // which WebKitGTK (the desktop webview) doesn't support. A press that moves past a
   // small threshold becomes a drag; a press that doesn't is a click (card select).
   // Dropping over a different column opens the reason modal (the board op requires a
-  // reason), and confirming there commits the move.
+  // reason), and confirming there commits the move. Dropping inside the card's own
+  // column reorders it there, which is only an ordering change and needs no reason.
   let pending = $state<{ cardId: string; statusId: string } | null>(null);
   let reason = $state("");
 
@@ -58,11 +59,32 @@
   let drag = $state<{ cardId: string; fromStatus: string } | null>(null);
   let dragPos = $state({ x: 0, y: 0 });
   let overStatus = $state<string | null>(null);
+  // Where the card would land in its own column: `index` into the rendered list (the
+  // dragged card included), `y` the insertion line's offset inside the card list.
+  let dropAt = $state<{ index: number; y: number } | null>(null);
   const DRAG_THRESHOLD = 5; // px before a press counts as a drag
 
   function onCardPointerDown(e: PointerEvent, cardId: string, fromStatus: string): void {
     if (e.button !== 0) return; // left button only
     press = { cardId, fromStatus, x: e.clientX, y: e.clientY };
+  }
+
+  // The insertion point for pointer position `y` in a column's card list: the gap the
+  // pointer is nearest, found by counting the cards whose midpoint it has passed. The
+  // line is measured against the list's scrolled content, not the viewport, and drawn
+  // absolutely — inserting a real element would shift the cards it is measured from.
+  function insertionAt(list: HTMLElement, y: number): { index: number; y: number } {
+    const rects = [...list.querySelectorAll("[data-card-id]")].map((el) =>
+      el.getBoundingClientRect()
+    );
+    const index = rects.filter((r) => (r.top + r.bottom) / 2 < y).length;
+    const top = list.getBoundingClientRect().top - list.scrollTop;
+    const edge = index < rects.length
+      ? rects[index].top - 4
+      : (rects[rects.length - 1]?.bottom ?? top) + 4;
+    // Cards sit flush with the top of the list, so the gap the first one would take is
+    // negative — clamp it, or the line lands outside the scroll box and is clipped away.
+    return { index, y: Math.max(0, edge - top) };
   }
 
   function onPointerMove(e: PointerEvent): void {
@@ -72,26 +94,48 @@
       drag = { cardId: press.cardId, fromStatus: press.fromStatus };
     }
     dragPos = { x: e.clientX, y: e.clientY };
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    overStatus = el?.closest("[data-status-id]")?.getAttribute("data-status-id") ?? null;
+    const col = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-status-id]");
+    overStatus = col?.getAttribute("data-status-id") ?? null;
+    const list = overStatus === drag.fromStatus
+      ? col?.querySelector("[data-cards]") as HTMLElement | null
+      : null;
+    dropAt = list ? insertionAt(list, e.clientY) : null;
   }
 
   function onPointerUp(): void {
     const d = drag;
     const target = overStatus;
+    const at = dropAt;
     const clickedCard = !drag && press ? press.cardId : null;
     press = null;
     drag = null;
     overStatus = null;
+    dropAt = null;
     if (d) {
       if (target && target !== d.fromStatus) {
         reason = "";
         pending = { cardId: d.cardId, statusId: target };
+      } else if (at) {
+        reorder(d.cardId, d.fromStatus, at.index);
       }
       return;
     }
     // A press that never became a drag is a plain click → select the card.
     if (clickedCard) selectedId = clickedCard;
+  }
+
+  // `index` is an insertion point in the list as rendered; once the card is lifted out,
+  // every gap below it shifts up one — so a downward move lands one earlier.
+  async function reorder(cardId: string, statusId: string, index: number): Promise<void> {
+    const from = cardsIn(statusId).findIndex((c) => c.id === cardId);
+    const position = index > from ? index - 1 : index;
+    if (!b || !scope || from === -1 || position === from) return;
+    try {
+      await b.kanbanMoveCard({ scope, cardId, position });
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
   }
 
   async function confirmMove(): Promise<void> {
@@ -459,7 +503,13 @@
               >✕</button>
             </div>
           </div>
-          <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+          <div class="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" data-cards>
+            {#if dropAt && drag?.fromStatus === s.id}
+              <div
+                class="pointer-events-none absolute inset-x-2 h-0.5 rounded bg-primary"
+                style="top: {dropAt.y}px"
+              ></div>
+            {/if}
             {#each cardsIn(s.id) as c (c.id)}
               <button
                 type="button"

@@ -268,6 +268,41 @@ Deno.test("setConnections rejects a parent cycle", () => {
   b.close();
 });
 
+// Titles of one column's cards, in board order.
+function column(b: BoardHandle, statusId: string): string[] {
+  return b.getBoard().cards
+    .filter((c) => c.statusId === statusId)
+    .sort((x, y) => x.position - y.position)
+    .map((c) => c.title);
+}
+
+Deno.test("moveCard splices a card to an absolute index within its column", () => {
+  const { b, status } = fresh();
+  for (const title of ["a", "b", "c"]) {
+    b.createCard({ statusId: status("Todo"), title, actor: "human" });
+  }
+  const c = b.getBoard().cards.find((x) => x.title === "c")!.id;
+  b.moveCard({ cardId: c, position: 0 });
+  assertEquals(column(b, status("Todo")), ["c", "a", "b"]);
+  assertEquals(b.getBoard().cards.map((x) => x.position).sort(), [0, 1, 2]);
+  b.close();
+});
+
+Deno.test("moveCard clamps an out-of-range position and leaves other columns alone", () => {
+  const { b, status } = fresh();
+  for (const title of ["a", "b"]) {
+    b.createCard({ statusId: status("Todo"), title, actor: "human" });
+  }
+  b.createCard({ statusId: status("Done"), title: "z", actor: "human" });
+  const a = b.getBoard().cards.find((x) => x.title === "a")!.id;
+  b.moveCard({ cardId: a, position: 99 });
+  assertEquals(column(b, status("Todo")), ["b", "a"]);
+  b.moveCard({ cardId: a, position: -5 });
+  assertEquals(column(b, status("Todo")), ["a", "b"]);
+  assertEquals(column(b, status("Done")), ["z"]);
+  b.close();
+});
+
 Deno.test("deleteCard nulls children's parent and prunes predecessor refs", () => {
   const { b, status } = fresh();
   const parent = b.createCard({ statusId: status("Todo"), actor: "human" });
