@@ -127,18 +127,34 @@ visible immediately through the same `SettingsManager`, but the file lands short
 after. Do not enable and then read `settings.json` expecting to see it. Chat sessions
 start much later, so this does not affect loading.
 
-### 5. The npm-package boot panic
+### 5. The npm-package boot panic — did not reproduce
 
 A bisect on 2026-07-21 attributed a boot panic — `RefCell already borrowed` in
 deno_core's `ModuleMap` — to pi dynamically importing an **installed npm package**
 extension when `agentDir` is set, under the **desktop** runtime, with `npm:pi-crew`
 configured.
 
-Re-checked on 2026-07-27 against Deno 2.9.3: a **local `.ts` extension** in
-`<agentDir>/extensions/` loads cleanly, verified by driving `createAgentSession`
-directly and reading back `getActiveTools()`. Not re-tested: npm-package extensions, and
-either path under the desktop webview binary rather than plain `deno run`. If the panic
-resurfaces, the recorded workaround was to remove the package.
+Re-tested on 2026-08-03 through the enable path this feature introduces, and it did not
+reproduce:
+
+| Case | Result |
+| --- | --- |
+| local `.ts` extension, `deno run` (2026-07-27) | loads clean |
+| `npm:pi-crew` enabled → `startAgent`, `deno run` | no panic |
+| local-path package enabled → `startAgent`, `deno run` | no panic; its tool reaches the agent |
+| `npm:pi-crew` enabled → desktop binary boot under Xvfb | boots clean, ran 120s, no `RefCell` in the log |
+
+Still not covered: starting a Chat agent *inside* the desktop binary with a package
+enabled. Boot is clean and `startAgent` is clean under `deno run`, so the remaining gap
+is the intersection of the two. Treat the panic as dormant rather than fixed — nothing
+was changed to address it, and the original report was against an older Deno.
+
+### 6. An enabled package may add no tools, and that is normal
+
+Many pi packages ship **skills and commands** rather than tools — `npm:pi-crew` is one:
+it resolves a single extension entry plus a dozen `SKILL.md` files, and enabling it adds
+zero entries to `getActiveToolNames()`. This looks identical to a broken install. The
+review pane lists the skills a package ships partly so this is visible before enabling.
 
 ---
 
