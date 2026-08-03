@@ -1,4 +1,4 @@
-// Scoped preferences: chat defaults and Kanban seed statuses, stored per scope at
+// Scoped preferences: chat defaults, stored per scope at
 // ~/.pique/scopes/<id>/config.json and resolved along the inheritance chain.
 //
 // A workspace's config is layered ON TOP of root's, key by key, so a workspace can
@@ -14,7 +14,7 @@ function isPlainObject(v: Json): v is { [k: string]: Json } {
 
 // Layer `override` onto `base`. Plain objects merge key-by-key so a scope can set one
 // field of a section without restating the others; arrays and scalars replace outright
-// (a workspace's status list is its own list, not root's plus its own).
+// (a workspace's list is its own list, not root's plus its own).
 export function mergeConfig(base: Json, override: Json): Json {
   if (override === null || override === undefined) return base;
   if (!isPlainObject(base) || !isPlainObject(override)) return override;
@@ -47,7 +47,7 @@ export async function writeScopeConfig(
 }
 
 // The config an agent or module in `id` actually sees: root's, overlaid with its own.
-// This is what resolveChatDefaults and resolveKanbanDefaults are fed.
+// This is what resolveChatDefaults is fed.
 export async function resolveScopeConfig(id: ScopeId): Promise<Json> {
   let out: Json = null;
   for (const scope of chain(id)) {

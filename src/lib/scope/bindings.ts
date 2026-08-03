@@ -14,9 +14,6 @@ export interface ScopeConfig {
     defaultModel?: string;
     defaultThinkingLevel?: ThinkingLevel;
   };
-  // Statuses a fresh board in this scope is seeded with (see kanban/board.ts). Ids
-  // are assigned at seed time, so only names are configured here.
-  kanban?: { defaultStatuses?: { name: string }[] };
 }
 
 export interface ScopeBindings {

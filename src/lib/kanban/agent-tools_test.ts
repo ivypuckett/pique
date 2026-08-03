@@ -2,7 +2,6 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { kanbanTools } from "./agent-tools.ts";
 import { board, closeAllBoards } from "./service.ts";
 import { ROOT, scopeBoardPath } from "../scope/paths.ts";
-import { writeScopeConfig } from "../scope/config.ts";
 
 // Point HOME at a throwaway dir so the service writes boards under a temp tree.
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -10,10 +9,6 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir();
   Deno.env.set("HOME", dir);
   try {
-    // Root's config seeds every board in the tree, since scopes inherit it.
-    await writeScopeConfig(ROOT, {
-      kanban: { defaultStatuses: [{ name: "Todo" }, { name: "Done" }] },
-    });
     await fn();
   } finally {
     closeAllBoards();
@@ -221,23 +216,17 @@ Deno.test("a root agent stays on root's board whatever scope it passes", async (
   });
 });
 
-Deno.test("a workspace overrides root's seed statuses with its own", async () => {
+Deno.test("every scope's board is seeded with the same default columns", async () => {
   await withTempHome(async () => {
-    await writeScopeConfig("ws-1", {
-      kanban: { defaultStatuses: [{ name: "Only" }] },
-    });
-    assertEquals((await board("ws-1")).getBoard().statuses.map((s) => s.name), [
-      "Only",
-    ]);
-    // Root, and any workspace that overrides nothing, keep root's list.
-    assertEquals((await board(ROOT)).getBoard().statuses.map((s) => s.name), [
-      "Todo",
-      "Done",
-    ]);
-    assertEquals((await board("ws-2")).getBoard().statuses.map((s) => s.name), [
-      "Todo",
-      "Done",
-    ]);
+    const names = ["Backlog", "Todo", "In Progress", "Done"];
+    assertEquals(
+      (await board(ROOT)).getBoard().statuses.map((s) => s.name),
+      names,
+    );
+    assertEquals(
+      (await board("ws-1")).getBoard().statuses.map((s) => s.name),
+      names,
+    );
   });
 });
 

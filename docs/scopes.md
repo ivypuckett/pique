@@ -38,7 +38,7 @@ Each scope owns one directory:
 
 ```
 ~/.pique/scopes/<root|ws-N>/
-  config.json    chat defaults, Kanban seed statuses
+  config.json    chat defaults
   agent/         this scope's pi agentDir
     extensions/  enabled local extensions — pi auto-discovers these
     pending/     awaiting review — pi never loads these (`.ts` modules, `.json` packages)
@@ -74,7 +74,6 @@ because the old paths were the only copy of the user's boards.
 | **Prompt templates** | `agentDir` + `additionalPromptTemplatePaths` | union, nearest name wins                              |
 | **Packages**         | `agentDir` only                              | **not inherited** (see Deferred #1)                   |
 | **Chat defaults**    | `resolveScopeConfig`                         | per key — override one field, inherit the rest        |
-| **Kanban statuses**  | `resolveScopeConfig`                         | whole list replaces                                   |
 | **cwd**              | `resolveModuleDir`                           | workspace's, else root's, else `$HOME`                |
 | **Kanban board**     | explicit `scope` argument                    | no merge — two boards, one addressable from the other |
 
@@ -138,12 +137,14 @@ two-button switcher.
 This preserves the visibility rule exactly — a workspace can name root's board,
 and nothing can name a workspace's board from outside it.
 
-A board owns its own columns. `kanban.defaultStatuses` in a scope's config seeds
-a board that does not exist yet — which in practice means before that scope's
-Kanban module has ever been opened — and after that the columns are added,
-renamed, reordered and deleted on the board itself. Those edits take the same
-`scope` argument as every other Kanban call, so a workspace can restructure the
-shared root board and nothing can reach a workspace's board from outside it.
+A board owns its own columns. Every new board is seeded with the same four —
+Backlog, Todo, In Progress, Done (`kanban/service.ts`) — and from then on the
+columns are added, renamed, reordered and deleted on the board itself. There is
+no config for this: a seed list was configurable per scope once, but it only
+affected boards that did not exist yet, so editing it did nothing visible to
+anyone who already had a board. Those edits take the same `scope` argument as
+every other Kanban call, so a workspace can restructure the shared root board
+and nothing can reach a workspace's board from outside it.
 
 Two refusals keep the data honest: a column that still holds cards cannot be
 deleted (move them first — an implicit move would need a `set_status` reason
@@ -211,7 +212,5 @@ re-defining it in root, or moving the file by hand.
 
 ### 6. Showing inherited values in place
 
-A workspace's Kanban section says "inheriting root's statuses" but does not show
-what they are, and the chat model picker shows the resolved value without
-indicating whether it came from root or the workspace. Honest, but less
-informative than it could be.
+The chat model picker shows the resolved value without indicating whether it
+came from root or the workspace. Honest, but less informative than it could be.

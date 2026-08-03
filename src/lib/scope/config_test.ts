@@ -32,13 +32,13 @@ Deno.test("mergeConfig layers plain objects key by key", () => {
 Deno.test("mergeConfig replaces arrays and scalars outright", () => {
   assertEquals(
     mergeConfig(
-      { kanban: { defaultStatuses: [{ name: "A" }, { name: "B" }] } },
+      { section: { list: [{ name: "A" }, { name: "B" }] } },
       {
-        kanban: { defaultStatuses: [{ name: "C" }] },
+        section: { list: [{ name: "C" }] },
       },
     ),
-    // A scope's status list is its own list, not root's with extras appended.
-    { kanban: { defaultStatuses: [{ name: "C" }] } },
+    // A scope's list is its own list, not root's with extras appended.
+    { section: { list: [{ name: "C" }] } },
   );
   assertEquals(mergeConfig({ a: 1 }, { a: 2 }), { a: 2 });
 });

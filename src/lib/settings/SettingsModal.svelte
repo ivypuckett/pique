@@ -9,11 +9,11 @@
   } from "../extensions/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
   import { refreshChatCommands } from "../chat/store.ts";
-  import { editing, editScope, updateScopeConfig } from "../scope/store.ts";
+  import { editing, editScope } from "../scope/store.ts";
   import { ROOT } from "../scope/paths.ts";
   import { activeWorkspace } from "../store.ts";
 
-  // Which scope the scoped sections (Kanban, Extensions, Prompts) act on. Root is the
+  // Which scope the scoped sections (Extensions, Prompts) act on. Root is the
   // shared parent; the active workspace is the only other scope reachable from here,
   // because a workspace can never configure a sibling.
   const scopes = $derived(
@@ -23,11 +23,6 @@
   );
   const scope = $derived($editing.scope);
   const inRoot = $derived(scope === ROOT);
-
-  // Statuses of the scope being edited, falling back to root's compiled-in list only
-  // for display — an unset value means "inherit", so the list is only written when
-  // the user actually edits it.
-  const statuses = $derived($editing.config.kanban?.defaultStatuses ?? []);
 
   // Extensions — ONE list covering both origins: loose `.ts` modules written by the
   // user or by an agent (define_extension), and installed pi packages. An extension
@@ -375,7 +370,6 @@
   const SECTIONS = [
     { id: "appearance", label: "Appearance" },
     { id: "workspace", label: "Workspace" },
-    { id: "kanban", label: "Kanban" },
     { id: "providers", label: "Providers" },
     { id: "extensions", label: "Extensions" },
     { id: "prompts", label: "Prompts" },
@@ -384,30 +378,7 @@
 
   // Sections whose content belongs to a scope rather than the app. Appearance and
   // Workspace are app-wide; Providers are shared with the `pi` CLI machine-wide.
-  const SCOPED_SECTIONS: readonly string[] = ["kanban", "extensions", "prompts"];
-
-  // Default statuses seeded into a new board in the selected scope (kanban/board.ts).
-  // Seed only — an existing board's columns are edited on the board (Kanban.svelte).
-  // Every edit writes the whole list, which is also what stops the scope inheriting root's.
-  function setStatuses(next: { name: string }[]): void {
-    updateScopeConfig((c) => ({ ...c, kanban: { ...c.kanban, defaultStatuses: next } }));
-  }
-  function addStatus(): void {
-    setStatuses([...statuses, { name: "New status" }]);
-  }
-  function removeStatus(i: number): void {
-    setStatuses(statuses.filter((_, j) => j !== i));
-  }
-  function renameStatus(i: number, name: string): void {
-    setStatuses(statuses.map((s, j) => (j === i ? { name } : s)));
-  }
-  function moveStatus(i: number, dir: -1 | 1): void {
-    const next = [...statuses];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    setStatuses(next);
-  }
+  const SCOPED_SECTIONS: readonly string[] = ["extensions", "prompts"];
 </script>
 
 <svelte:window onkeydown={$settingsOpen ? onWindowKeydown : undefined} />
@@ -438,7 +409,7 @@
         </ul>
       </nav>
       <div class="min-w-0 flex-1 overflow-y-auto p-5">
-      <!-- Scope selector: Kanban, Extensions and Tools are per-scope and inherited,
+      <!-- Scope selector: Extensions and Prompts are per-scope and inherited,
            so they need to say which scope they are showing. The other sections are
            app-level and ignore it. -->
       {#if SCOPED_SECTIONS.includes(section) && scopes.length > 1}
@@ -525,57 +496,6 @@
           removes the highlighted entry immediately.
         </div>
       </div>
-
-      {/if}
-
-      {#if section === "kanban"}
-      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Kanban</div>
-      <div class="text-sm">Default statuses</div>
-      <div class="mt-0.5 text-xs opacity-70">
-        The columns a board in this scope starts with, in order. A scope's board is created
-        the first time its Kanban module opens; after that, edit its columns on the board
-        itself.
-      </div>
-      {#if statuses.length === 0}
-        <div class="mt-3 rounded bg-base-200 px-3 py-2 text-xs opacity-70">
-          {inRoot
-            ? "Using the built-in defaults: Backlog, Todo, In Progress, Done."
-            : "Inheriting root's statuses. Adding one here overrides them for this workspace."}
-        </div>
-      {/if}
-      <ul class="mt-3 flex flex-col gap-2">
-        {#each statuses as status, i (i)}
-          <li class="flex items-center gap-2">
-            <input
-              class="input input-bordered input-sm flex-1"
-              aria-label={`Status ${i + 1} name`}
-              value={status.name}
-              oninput={(e) => renameStatus(i, e.currentTarget.value)}
-            />
-            <button
-              type="button"
-              class="btn btn-square btn-ghost btn-sm"
-              aria-label="Move up"
-              disabled={i === 0}
-              onclick={() => moveStatus(i, -1)}
-            >↑</button>
-            <button
-              type="button"
-              class="btn btn-square btn-ghost btn-sm"
-              aria-label="Move down"
-              disabled={i === statuses.length - 1}
-              onclick={() => moveStatus(i, 1)}
-            >↓</button>
-            <button
-              type="button"
-              class="btn btn-square btn-ghost btn-sm"
-              aria-label="Remove status"
-              onclick={() => removeStatus(i)}
-            >✕</button>
-          </li>
-        {/each}
-      </ul>
-      <button type="button" class="btn btn-sm mt-3" onclick={addStatus}>Add status</button>
 
       {/if}
 

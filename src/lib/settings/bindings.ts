@@ -1,9 +1,9 @@
 // Frontend half of the config binding contract. The backend half is the config*
 // win.bind handlers in src/desktop.ts, which delegate to settings/file.ts —
 // keep arg/return shapes in sync by hand (separate module graphs).
-// App-level user prefs — the ones that are NOT per-scope. Chat defaults and Kanban
-// seed statuses used to live here; they are now per-scope and inherited, so they sit
-// in ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
+// App-level user prefs — the ones that are NOT per-scope. Chat defaults used to live
+// here; they are now per-scope and inherited, so they sit in
+// ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
 // working directory moved too: it is the root workspace's cwd, in the layout tree.
 // The layout tree persists separately under the "layout" config (see ../store.ts).
 export interface Settings {

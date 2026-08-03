@@ -200,9 +200,9 @@ win.bind("configWrite", async (arg) => {
   return true;
 });
 
-// Scoped config — chat defaults and Kanban seed statuses, per scope. Read returns a
-// scope's OWN values (what the settings UI edits); Resolve returns them layered onto
-// root's (what an agent there actually sees).
+// Scoped config — chat defaults, per scope. Read returns a scope's OWN values (what
+// the settings UI edits); Resolve returns them layered onto root's (what an agent
+// there actually sees).
 win.bind("scopeConfigRead", async (arg) => {
   const { scope } = arg as { scope: string };
   return await scopeConfig.readScopeConfig(scope);
@@ -274,7 +274,7 @@ win.bind("gitChanges", async (arg) => {
 });
 
 // Kanban: each scope has its own board DB; the service caches an open handle per
-// scope, seeding a fresh board from that scope's resolved kanban.defaultStatuses.
+// scope, seeding a fresh board with the default columns.
 // The frontend passes the scope it wants — its own workspace, or "root" to work the
 // shared board. All mutations on this path are the human UI, so actor is "human".
 win.bind("kanbanGetBoard", async (arg) => {
