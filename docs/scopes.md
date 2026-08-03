@@ -156,13 +156,13 @@ packages. Wiring that means routing root's package sources through
 `additionalExtensionPaths`, which is dynamic `import()` of an npm package while
 `agentDir` is set — the exact operation a 2026-07-21 bisect blamed for a
 `RefCell already borrowed` panic in deno_core's `ModuleMap` under the desktop runtime.
-Local `.ts` extensions were re-verified clean on 2026-07-27, and on 2026-08-03 an
-enabled `npm:pi-crew` neither panicked at `startAgent` under `deno run` nor at desktop
-boot under Xvfb (see [extensions.md](extensions.md) Known broken #5). That removes the
-evidence for the panic but not the reason for caution: `additionalExtensionPaths` is a
-*different* code path from `settings.json` packages, and it is the one the bisect
-blamed. Packages stay per-scope and un-inherited until someone tests that specific
-combination.
+
+That panic was an upstream deno_core bug, fixed in Deno 2.9.4 (see
+[extensions.md](extensions.md) Known broken #5), so it is no longer a reason to defer
+this. What remains is only that `additionalExtensionPaths` is a *different* code path
+from `settings.json` packages and has never been exercised here. Packages stay
+per-scope and un-inherited until someone wires it and tests it — now an ordinary piece
+of unbuilt work rather than a blocked one.
 
 ### 2. Live reload into running sessions
 

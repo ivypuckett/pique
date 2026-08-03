@@ -17,8 +17,9 @@
 //   delete   remove(source)                bytes go
 //
 // Unlike local extensions, packages are NOT inherited from root: pulling root's
-// packages down additionalExtensionPaths is the operation implicated in the boot panic
-// recorded in docs/scopes.md, so it is deliberately not wired up.
+// packages down additionalExtensionPaths is untested here. It was also the operation
+// implicated in the old boot panic, but that was an upstream deno_core bug fixed in
+// Deno 2.9.4 (docs/extensions.md Known broken #5) — see docs/scopes.md Deferred #1.
 
 import { resolve } from "node:path";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";

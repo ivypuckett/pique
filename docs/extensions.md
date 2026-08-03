@@ -127,27 +127,30 @@ visible immediately through the same `SettingsManager`, but the file lands short
 after. Do not enable and then read `settings.json` expecting to see it. Chat sessions
 start much later, so this does not affect loading.
 
-### 5. The npm-package boot panic — did not reproduce
+### 5. The npm-package boot panic — fixed upstream, needs Deno ≥ 2.9.4
 
 A bisect on 2026-07-21 attributed a boot panic — `RefCell already borrowed` in
 deno_core's `ModuleMap` — to pi dynamically importing an **installed npm package**
 extension when `agentDir` is set, under the **desktop** runtime, with `npm:pi-crew`
 configured.
 
-Re-tested on 2026-08-03 through the enable path this feature introduces, and it did not
-reproduce:
+It was an upstream deno_core bug, not a pique one: the synthetic-ESM cache-hit path held
+an immutable `ModuleMapData` borrow across `module.evaluate()`, and a dynamic import
+started during that evaluation needs a mutable borrow of the same map. Fixed by
+[denoland/deno#36258](https://github.com/denoland/deno/pull/36258) (merged 2026-07-22,
+fixes [#36216](https://github.com/denoland/deno/issues/36216)), released in **Deno
+2.9.4**. Nothing in pique worked around it and nothing needs to — the requirement is
+just the Deno floor.
 
-| Case | Result |
-| --- | --- |
-| local `.ts` extension, `deno run` (2026-07-27) | loads clean |
-| `npm:pi-crew` enabled → `startAgent`, `deno run` | no panic |
-| local-path package enabled → `startAgent`, `deno run` | no panic; its tool reaches the agent |
-| `npm:pi-crew` enabled → desktop binary boot under Xvfb | boots clean, ran 120s, no `RefCell` in the log |
+Earlier re-tests on 2026-07-27 and 2026-08-03 found it not reproducing, but those ran on
+2.9.3, which does *not* carry the fix; they recorded the panic as dormant, not absent.
+The table they produced has been dropped as misleading for that reason.
 
-Still not covered: starting a Chat agent *inside* the desktop binary with a package
-enabled. Boot is clean and `startAgent` is clean under `deno run`, so the remaining gap
-is the intersection of the two. Treat the panic as dormant rather than fixed — nothing
-was changed to address it, and the original report was against an older Deno.
+If you need to confirm the fix is in a given Deno, check the source at the tag rather
+than `git compare` — the commit reports as "diverged" from both v2.9.3 and v2.9.4
+because releases are cut from a branch and this one was cherry-picked under a different
+SHA. `grep 'let cached_handle = {' libs/core/modules/map.rs` at the tag is the real
+test: absent in v2.9.3, present in v2.9.4.
 
 ### 6. An enabled package may add no tools, and that is normal
 
