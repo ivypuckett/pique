@@ -84,7 +84,7 @@ prompt editor than the modal has today.
 
 | File                                    | Change | Responsibility                                                                                                                             |
 | --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib/library/Library.svelte`        | New    | Shell: sub-tab state, scope derivation and root/workspace toggle, refresh trigger, desktop-only fallback                                   |
+| `src/lib/library/Library.svelte`        | New    | Shell: sub-tab state, scope derivation and root/workspace toggle, refresh trigger                                                          |
 | `src/lib/extensions/Extensions.svelte`  | New    | The Extensions section, lifted from the modal; props `{ scope, inRoot, refreshKey }`                                                       |
 | `src/lib/prompts/Prompts.svelte`        | New    | The Prompts section, lifted from the modal; props `{ scope, inRoot, refreshKey }`                                                          |
 | `src/lib/modules/registry.ts`           | Modify | Register `library`                                                                                                                         |
