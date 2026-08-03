@@ -21,6 +21,7 @@ export interface ChatBindings {
   chatStop(arg: { id: string }): Promise<unknown>;
   chatListModels(arg: { id: string }): Promise<ModelInfo[]>;
   chatListCommands(arg: { id: string }): Promise<CommandInfo[]>;
+  chatReloadPrompts(arg: { id: string }): Promise<unknown>;
   chatSetModel(arg: { id: string; provider: string; model: string }): Promise<unknown>;
   chatSetThinking(arg: { id: string; level: ThinkingLevel }): Promise<unknown>;
 }

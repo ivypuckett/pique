@@ -25,6 +25,7 @@ let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let profiles: typeof import("./lib/profiles/service.ts");
+let prompts: typeof import("./lib/prompts/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
@@ -124,6 +125,14 @@ win.bind("chatListModels", async (arg) => {
 win.bind("chatListCommands", async (arg) => {
   const { id } = arg as { id: string };
   return chat.listCommands(id);
+});
+
+// Re-read prompt templates from disk into a running agent, so a template saved or
+// approved in Settings can be invoked without restarting the conversation.
+win.bind("chatReloadPrompts", async (arg) => {
+  const { id } = arg as { id: string };
+  await chat.reloadPrompts(id);
+  return true;
 });
 
 win.bind("chatSetModel", async (arg) => {
@@ -470,6 +479,46 @@ win.bind("profilesRevoke", async (arg) => {
   return true;
 });
 
+// Prompt templates — reusable messages invoked as `/name` in a Chat module, per scope.
+// A human editing one here writes straight to live; agents can only write into the
+// scope's quarantine dir (prompts/agent-tools.ts), so promptsApprove is what makes an
+// agent-written template invocable. promptsList returns the scope's own templates; what a
+// Chat module can actually invoke (its own plus root's) comes from pi via chatListCommands.
+win.bind("promptsList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await prompts.listPrompts(scope);
+});
+
+win.bind("promptsSave", async (arg) => {
+  const { scope, name, description, argumentHint, body } = arg as {
+    scope: string;
+    name: string;
+    description: string;
+    argumentHint?: string;
+    body: string;
+  };
+  await prompts.savePrompt(scope, name, { description, argumentHint, body });
+  return true;
+});
+
+win.bind("promptsApprove", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await prompts.approvePrompt(scope, name);
+  return true;
+});
+
+win.bind("promptsReject", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await prompts.rejectPrompt(scope, name);
+  return true;
+});
+
+win.bind("promptsDelete", async (arg) => {
+  const { scope, name, state } = arg as { scope: string; name: string; state: "live" | "pending" };
+  await prompts.deletePrompt(scope, name, state);
+  return true;
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -487,6 +536,7 @@ git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 extensions = await import("./lib/extensions/service.ts");
 profiles = await import("./lib/profiles/service.ts");
+prompts = await import("./lib/prompts/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.

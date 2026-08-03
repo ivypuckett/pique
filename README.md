@@ -29,6 +29,7 @@ Notes:
 
 - System Prompt: A markdown file which gets injected into every context window before the conversation starts. There is a default system prompt at ~/.pique/SYSTEM.md. Absence of this file removes the system prompt entirely. There is also a system prompt available per workspace in ~/.pique/workspace/SYSTEM.md
 - Profile: A markdown file with frontmatter which allowlists tools, extensions, and skills and adds onto the system prompt. Essentially [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates), but with allowlists and settings attached.
+- Prompt Template: A markdown file you send as a message by typing `/name` in a chat, with `$1`/`$@` arguments substituted in. Plain [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates), per workspace and inherited from the default one — see [docs/prompts.md](docs/prompts.md).
 - Extension: https://pi.dev/docs/latest/extensions
 - Skill: https://pi.dev/docs/latest/skills
 

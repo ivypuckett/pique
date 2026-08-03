@@ -41,6 +41,8 @@ Each scope owns one directory:
   agent/         this scope's pi agentDir
     extensions/  enabled local extensions — pi auto-discovers these
     pending/     awaiting review — pi never loads these (`.ts` modules, `.json` packages)
+    prompts/     live prompt templates — pi auto-discovers these too
+      pending/   agent-written, awaiting review — pi's scan does not recurse
     settings.json  enabled pi packages
   sessions/      this scope's saved chat conversations, as pi session JSONL
   board.db       this scope's Kanban board
@@ -106,6 +108,17 @@ The optional base prompt is a scope's `agent/SYSTEM.md`. That is pi's own filena
 only ever discovers the single `agentDir` it was handed — so root's would be invisible to a
 workspace. `profiles/service.ts:resolveBasePrompt` walks the chain nearest-first and passes
 the winner to pi explicitly, which is what makes it inherit at all.
+
+### Prompt templates
+
+Templates — see [prompts.md](prompts.md) — inherit the same way profiles do, but the option
+that carries them, `additionalPromptTemplatePaths`, takes **directories**, so ancestors'
+whole `prompts/` dirs are handed over rather than globbed into files. Note that this is the
+opposite of the extension gotcha above; the two options do not agree, and nothing warns you.
+
+pi collapses a name collision itself, first path wins. The scope's own `agentDir` is
+searched before the extra paths, so a local template shadows root's — the same rule as
+profiles, reached by a different mechanism.
 
 ### The Kanban board
 

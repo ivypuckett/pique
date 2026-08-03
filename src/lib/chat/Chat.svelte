@@ -145,7 +145,9 @@
               class="flex w-full items-baseline gap-2 px-2 py-1 text-left text-sm {i === menuIndex ? 'bg-base-300' : ''}"
               onmousedown={(e) => { e.preventDefault(); selectCommand(c); }}
             >
-              <span class="font-mono whitespace-nowrap">/{c.name}</span>
+              <span class="font-mono whitespace-nowrap">
+                /{c.name}{#if c.argumentHint}<span class="opacity-50"> {c.argumentHint}</span>{/if}
+              </span>
               <span class="truncate opacity-60">{c.description}</span>
               <span class="ml-auto whitespace-nowrap text-xs opacity-40">{c.source}</span>
             </button>

@@ -7,7 +7,14 @@ export type ModelInfo = { provider: string; id: string; name: string; current: b
 // JSON-safe projection of pi's SlashCommandInfo for the chat `/` menu. Mirrors the
 // three sources pi's TUI lists (extension commands, prompt templates, skills); the
 // `name` is the token typed after `/`, so skills already carry their `skill:` prefix.
-export type CommandInfo = { name: string; description: string; source: "extension" | "prompt" | "skill" };
+// `argumentHint` is what a prompt template's `argument-hint` frontmatter declares — the
+// only one of the three sources that has one.
+export type CommandInfo = {
+  name: string;
+  description: string;
+  source: "extension" | "prompt" | "skill";
+  argumentHint?: string;
+};
 
 // One rendered line of the transcript. The streaming path builds these from ChatEvents
 // (store.ts's `apply`) and a resumed conversation rebuilds them from pi's stored
@@ -69,6 +76,8 @@ import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
 import { inheritedExtensionFiles } from "../extensions/local.ts";
 import { profileAuthoringTools } from "../profiles/agent-tools.ts";
 import { resolveBasePrompt, resolveProfile } from "../profiles/service.ts";
+import { promptAuthoringTools } from "../prompts/agent-tools.ts";
+import { inheritedPromptDirs } from "../prompts/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
 import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir, scopeSessionsDir } from "../scope/paths.ts";
 
@@ -108,6 +117,10 @@ interface Agent {
   session: Session;
   unsubscribe: () => void;
   queue: ChatEvent[];
+  // Held so prompt templates can be re-read without restarting the conversation
+  // (reloadPrompts, below). Everything else the loader carries is fixed at session start.
+  // deno-lint-ignore no-explicit-any
+  resourceLoader: any;
 }
 const agents = new Map<string, Agent>();
 let nextId = 1;
@@ -150,6 +163,7 @@ export async function startAgent(
   const customTools = [
     ...extensionAuthoringTools(scope),
     ...profileAuthoringTools(scope),
+    ...promptAuthoringTools(scope),
     ...kanbanTools(scope),
   ];
 
@@ -165,6 +179,11 @@ export async function startAgent(
     cwd,
     agentDir,
     additionalExtensionPaths: await inheritedExtensionFiles(scope),
+    // Prompt templates inherit the same way, but the option takes DIRECTORIES here (it is
+    // additionalExtensionPaths that insists on files), so ancestors' whole prompts/ dirs
+    // are handed over. pi loads its own agentDir's dir first and its expander takes the
+    // first match, so a workspace template shadows a root one of the same name.
+    additionalPromptTemplatePaths: inheritedPromptDirs(scope),
     // The two prompt layers (docs/profiles.md). The base is the nearest SYSTEM.md on the
     // scope chain — undefined when there is none, which is what leaves pi's own preamble
     // in place. The profile's body is appended to whichever base won.
@@ -207,7 +226,7 @@ export async function startAgent(
   });
   session.setThinkingLevel(thinking);
   const id = `chat-${nextId++}`;
-  agents.set(id, { session, unsubscribe, queue });
+  agents.set(id, { session, unsubscribe, queue, resourceLoader });
   return id;
 }
 
@@ -355,6 +374,14 @@ export function systemPromptOf(id: string): string {
   return agents.get(id)?.session.systemPrompt ?? "";
 }
 
+// Re-read the resource loader so prompt templates saved or approved in Settings become
+// invocable in a conversation that is already running. Unlike a profile — which pi bakes
+// into the system prompt at session creation — templates are read from the loader on every
+// prompt(), so refreshing the loader is enough and the transcript survives.
+export async function reloadPrompts(id: string): Promise<void> {
+  await agents.get(id)?.resourceLoader.reload();
+}
+
 // The `/` menu list: the same three sources pi's TUI concatenates in getCommands —
 // extension commands, file-based prompt templates, and skills (prefixed `skill:`).
 // pi's own builtins (/model, /settings, …) are TUI actions pique covers in its own
@@ -369,11 +396,16 @@ export function listCommands(id: string): CommandInfo[] {
     description: c.description ?? "",
     source: "extension",
   }));
+  // A template inherited from root and one defined in this workspace can share a name;
+  // pi's loader collapses that itself, first path wins, so this list holds no twins. The
+  // load order chat/agent.ts sets up is what makes the workspace's the survivor
+  // (prompts/integration_test.ts).
   // deno-lint-ignore no-explicit-any
   const prompts: CommandInfo[] = session.promptTemplates.map((t: any) => ({
     name: t.name,
     description: t.description ?? "",
     source: "prompt",
+    argumentHint: t.argumentHint,
   }));
   // deno-lint-ignore no-explicit-any
   const skills: CommandInfo[] = session.resourceLoader.getSkills().skills.map((s: any) => ({
