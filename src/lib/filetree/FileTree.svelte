@@ -3,6 +3,7 @@
   import { fileTreeBindings } from "./bindings.ts";
   import { dirtyDirsFrom, flatten, type Node, nodeFromEntry, parentDir, sortEntries, splitName, updateAt } from "./tree.ts";
   import { openDiff, openEditor } from "../store.ts";
+  import ConfirmDialog from "../ConfirmDialog.svelte";
   import { dChordHints, gChordHints, shortcuts } from "./shortcuts.ts";
   import { settings } from "../settings/store.ts";
 
@@ -399,36 +400,17 @@
   {/if}
 
   <!-- Delete confirmation. Skipped entirely when workspace.confirmDelete is off. -->
-  <div
-    class="modal"
-    class:modal-open={pendingDelete !== null}
-    role="dialog"
-    aria-modal="true"
-    tabindex="-1"
-    onkeydown={(e) => {
-      if (e.key !== "Escape") return;
+  <ConfirmDialog
+    open={pendingDelete !== null}
+    label="Delete"
+    onconfirm={() => removeNode(pendingDelete!)}
+    oncancel={() => {
       pendingDelete = null;
       treeEl?.focus();
-      e.preventDefault();
     }}
   >
-    <div class="modal-box max-w-sm">
-      {#if pendingDelete}
-        <div class="text-sm">
-          Delete <span class="font-medium">{pendingDelete.name}</span>{pendingDelete.isDir && !pendingDelete.isSymlink ? " and everything inside it?" : "?"}
-        </div>
-        <div class="mt-1 text-xs opacity-60">This can't be undone.</div>
-        <div class="mt-3 flex justify-end gap-2">
-          <button type="button" class="btn btn-ghost btn-sm" onclick={() => { pendingDelete = null; treeEl?.focus(); }}>
-            Cancel
-          </button>
-          <button type="button" class="btn btn-error btn-sm" use:takeFocus onclick={() => removeNode(pendingDelete!)}>
-            Delete
-          </button>
-        </div>
-      {/if}
-    </div>
-  </div>
+    Delete <span class="font-medium">{pendingDelete!.name}</span>{pendingDelete!.isDir && !pendingDelete!.isSymlink ? " and everything inside it?" : "?"}
+  </ConfirmDialog>
 
   {#if showHelp}
     <div

@@ -6,10 +6,14 @@
   import Session from "./lib/Session.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import SettingsModal from "./lib/settings/SettingsModal.svelte";
+  import ConfirmDialog from "./lib/ConfirmDialog.svelte";
   import { settingsOpen } from "./lib/settings/store.ts";
+  import { ROOT } from "./lib/scope/paths.ts";
+  import type { WorkspaceState } from "./lib/workspace.ts";
   import {
     activeId,
     activeView,
+    activeWorkspace,
     addView,
     addWorkspace,
     closeView,
@@ -71,6 +75,28 @@
     }
   }
 
+  // ctrl+j w: closing a workspace unmounts it — its views, tabs and running modules go
+  // with it, and nothing brings them back — so it asks first. Root is never closable
+  // (store's closeWorkspace no-ops on it), so it never prompts. The armed chord is
+  // dropped on open: while the dialog is up every key belongs to it, not the mode.
+  let pendingClose = $state<WorkspaceState | null>(null);
+
+  function askCloseWorkspace() {
+    const w = get(activeWorkspace);
+    if (w.id === ROOT) return;
+    clearChord();
+    pendingClose = w;
+  }
+
+  // The confirm button held focus, so once the dialog goes away hand focus back to the
+  // shown workspace's active tab rather than letting it fall to the body.
+  async function dismissClose(close: boolean) {
+    pendingClose = null;
+    if (close) closeWorkspace();
+    await tick();
+    focusActiveTab();
+  }
+
   // ctrl+e: cycle the explorer. Hidden (or the pane collapsed) → reveal and focus it;
   // visible but unfocused → focus it; visible and focused → hide it and hand focus to the tab.
   async function toggleFileTree() {
@@ -96,6 +122,10 @@
     const MODS = new Set(["Control", "Meta", "Shift", "Alt"]);
 
     function onKeydown(e: KeyboardEvent) {
+      // The close confirmation is modal: nothing is armed or shortcut-bound while it's
+      // up, so its own keys (escape, enter, tab) reach it untouched.
+      if (pendingClose) return;
+
       const mod = isMac ? e.metaKey : e.ctrlKey;
 
       // A prefix pressed while a mode is armed switches modes rather than counting as an
@@ -124,7 +154,7 @@
           switch (e.code) {
             case "KeyN": addWorkspace(); break;
             case "KeyO": openWorkspaceFromPicker(); break;
-            case "KeyW": closeWorkspace(); break;
+            case "KeyW": askCloseWorkspace(); break;
             case "KeyK": focusAdjacentWorkspace(-1); break;
             case "KeyJ": focusAdjacentWorkspace(1); break;
             default: handled = false;
@@ -180,4 +210,13 @@
     <StatusBar {chordMode} />
   </main>
   <SettingsModal />
+  <ConfirmDialog
+    open={pendingClose !== null}
+    label="Close"
+    note="Its views, tabs and running modules close with it."
+    onconfirm={() => dismissClose(true)}
+    oncancel={() => dismissClose(false)}
+  >
+    Close <span class="font-medium">{pendingClose!.title}</span>?
+  </ConfirmDialog>
 </div>
