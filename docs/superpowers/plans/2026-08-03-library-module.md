@@ -455,6 +455,9 @@ Create `src/lib/prompts/Prompts.svelte`:
 <script lang="ts">
   import { promptBindings, type PromptInfo } from "./bindings.ts";
   import { refreshChatCommands } from "../chat/store.ts";
+  // The copied `refreshPrompts()` reads root's list directly (modal line 285), so this
+  // section needs ROOT even though the Extensions one did not.
+  import { ROOT } from "../scope/paths.ts";
 
   // Same three props as the Extensions section: the scope the module points at, whether
   // that scope is root, and the shell's refresh counter.
@@ -489,22 +492,38 @@ block, in order, keeping their comments:
 | `274-289` | the `pendingPrompts` / `livePrompts` / `inheritedPrompts` deriveds and `refreshPrompts()` |
 | `301-353` | `promptKey()`, `promptAction()`, `editPrompt()`, `newPrompt()`, `saveDraft()`             |
 
-Then add this effect in place of the modal's lines `291-299`:
+Then add **two** effects in place of the modal's single one at lines `291-299`:
 
 ```ts
+// Re-list when the scope changes or the shell asks for a refresh — both change what
+// this list should show.
 $effect(() => {
-  refreshKey;
+  void refreshKey;
   if (prompts && scope) {
     promptError = "";
     promptNotice = "";
     openPrompt = null;
-    draft = null;
     refreshPrompts();
   }
 });
+
+// A draft belongs to the scope it was started in — saving it after a switch would
+// write it into the wrong one. Refresh must NOT discard it: that button sits directly
+// above the editor, and a draft is unsaved user input.
+$effect(() => {
+  void scope;
+  draft = null;
+});
 ```
 
-As in Task 2, the bare `refreshKey;` is a deliberate dependency read.
+`void refreshKey;` and `void scope;` are deliberate dependency reads — Svelte 5
+tracks them so each effect re-runs when its own trigger changes. `void` marks
+them as intentionally discarded expressions. Do not delete them as dead code.
+
+The split matters: the modal cleared `draft` alongside everything else because
+that clear could only fire on modal-open or a scope switch. The module puts a
+one-click Refresh in a toolbar directly above the edit form, so folding the two
+together would silently discard a half-typed template.
 
 - [ ] **Step 3: Copy the markup**
 
@@ -530,13 +549,26 @@ In `src/lib/library/Library.svelte`, add the import:
 import Prompts from "../prompts/Prompts.svelte";
 ```
 
-and replace the prompts placeholder branch:
+Then **restructure the body so both sections stay mounted**, replacing the whole
+`{#if section === "extensions"} … {:else} … {/if}` body block with:
 
 ```svelte
-{:else}
+<!-- Both sections stay mounted and the inactive one is hidden, the way Column.svelte
+     hides inactive module tabs. Tearing one down on every sub-tab switch would discard
+     an in-progress prompt draft — the modal never had that problem, because both
+     sections lived in one long-lived script. -->
+<div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "extensions"}>
+  <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
+</div>
+<div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "prompts"}>
   <Prompts {scope} inRoot={scopeIsRoot} {refreshKey} />
-{/if}
+</div>
 ```
+
+This replaces the single wrapper
+`<div class="min-h-0 flex-1 overflow-y-auto p-4">` that Task 1 created — each
+section now carries its own scroll container, so switching sub-tabs preserves
+each one's scroll position as well as its state.
 
 - [ ] **Step 5: Verify**
 
@@ -708,6 +740,80 @@ deno fmt
 ```bash
 git add src/lib/settings/SettingsModal.svelte src/lib/scope/store.ts
 git commit -m "Drop Extensions and Prompts from the settings modal"
+```
+
+---
+
+## Task 4b: Cosmetic cleanup of the moved sections
+
+Deliberately deferred until Task 4, because until the originals are deleted the
+moved files must stay byte-comparable against them — that comparison is what
+made the Task 2 and 3 reviews cheap and trustworthy. Now that the originals are
+gone, clean up. **This task changes no behaviour.**
+
+**Files:**
+
+- Modify: `src/lib/extensions/Extensions.svelte`
+- Modify: `src/lib/prompts/Prompts.svelte`
+- Modify: `src/lib/library/Library.svelte`
+
+- [ ] **Step 1: Rename the `inRoot` prop to `scopeIsRoot`**
+
+`Library.svelte` carefully distinguishes `isRootWorkspace` (this module is in
+the root workspace) from `scopeIsRoot` (the scope being _viewed_ is root), then
+passes the latter under the name `inRoot` — which is what `Kanban.svelte:14`
+uses for the _former_. The prop name currently means the opposite of what the
+same name means one file over.
+
+In both section components, rename the prop in the `$props()` destructure, its
+type, and every use in the markup. In `Library.svelte`, both call sites collapse
+to `{scopeIsRoot}`.
+
+- [ ] **Step 2: Normalise the markup indentation**
+
+Both components carry the modal's original 6-space base indentation, because
+they were copied out of a doubly-nested block. Every other module in this repo
+starts its markup at column 0 (`Kanban.svelte:446`, `Chat.svelte:112`,
+`GitDiff.svelte:69`).
+
+Re-indent the markup in both files to start at column 0, preserving relative
+nesting. `deno fmt` will **not** do this for you — it reports these files as
+already formatted. Do **not** add `--unstable-component` to the repo's fmt
+config to force it; that would rewrite every `.svelte` file in the tree, far
+outside this plan's blast radius.
+
+- [ ] **Step 3: Verify nothing but whitespace and the rename changed**
+
+Run:
+
+```bash
+git diff -w --stat
+```
+
+Expected: the only non-whitespace differences are the `inRoot` → `scopeIsRoot`
+renames. Anything else means a line was lost or altered during re-indentation.
+
+Run:
+
+```bash
+deno task build
+```
+
+Expected: clean.
+
+Run:
+
+```bash
+deno task test
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/extensions/Extensions.svelte src/lib/prompts/Prompts.svelte src/lib/library/Library.svelte
+git commit -m "Tidy the moved sections: prop name and indentation"
 ```
 
 ---

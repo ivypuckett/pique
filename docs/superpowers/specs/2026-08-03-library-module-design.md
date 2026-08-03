@@ -202,3 +202,18 @@ that.
 4. **Live reload into running sessions.** Unchanged: enabling an extension still
    only affects Chat modules opened afterwards.
    [extensions.md](../../extensions.md) deferred #5.
+5. **Stale-response guards on the section lists.** `refreshExts()` and
+   `refreshPrompts()` are fired and not awaited, so two fast scope switches can
+   land out of order and leave the previous scope's list on screen; the same
+   applies to the success notice `extAction` writes after its mutation. This is
+   pre-existing behaviour carried over under decision 8, but the module makes it
+   more reachable — the modal's scope strip was behind a modal open, while the
+   shell's toggle is one click in an always-visible toolbar. The next Refresh
+   corrects it. Fix is a captured-scope comparison before each assignment.
+6. **The review-to-enable window is now unbounded.** `reviewing` / `reviewed`
+   clear only on scope change, refresh, or a mutation, so a Library tab left
+   open all day lets a user review code in the morning and press Enable in the
+   afternoon on a file an agent rewrote in between. The mechanism is unchanged —
+   the modal never unmounted either (`App.svelte:212` renders it
+   unconditionally) — but a persistent tab invites the pattern in a way a modal
+   did not. Re-reading on Enable is more machinery than decision 8 permits here.
