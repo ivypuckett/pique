@@ -12,7 +12,9 @@ export interface FileTreeBindings {
   // Edits behind the tree's a / r / dd keys. They reject on a bad name, a taken name,
   // or a permission error, and the tree shows the thrown message in its error strip.
   // `parent` undefined means the module's own working directory (as with listDir).
-  createEntry(arg: { parent?: string; name: string }): Promise<{ path: string }>;
+  createEntry(
+    arg: { parent?: string; name: string },
+  ): Promise<{ path: string }>;
   renameEntry(arg: { path: string; name: string }): Promise<{ path: string }>;
   removeEntry(arg: { path: string }): Promise<unknown>;
 }

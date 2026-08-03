@@ -35,11 +35,20 @@ Deno.test("define_prompt quarantines the template and never writes a live one", 
       argumentHint: "<focus>",
     });
 
-    assertEquals((await listPrompts("ws-1")).map((p) => ({ name: p.name, state: p.state })), [
-      { name: "review-staged", state: "pending" },
-    ]);
+    assertEquals(
+      (await listPrompts("ws-1")).map((p) => ({
+        name: p.name,
+        state: p.state,
+      })),
+      [
+        { name: "review-staged", state: "pending" },
+      ],
+    );
     // The gate: nothing reached the dir pi loads from, so `/review-staged` does not exist.
-    assertEquals([...Deno.readDirSync(promptsDir("ws-1"))].filter((e) => e.isFile).length, 0);
+    assertEquals(
+      [...Deno.readDirSync(promptsDir("ws-1"))].filter((e) => e.isFile).length,
+      0,
+    );
     assertEquals(await listVisiblePrompts("ws-1"), []);
     assertStringIncludes(res.content[0].text, "not invocable yet");
   });

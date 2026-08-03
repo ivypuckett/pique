@@ -6,7 +6,7 @@
 // its own file. App-level prefs that aren't per-scope (theme, git scan depth) stay
 // in ~/.pique/settings.json — see settings/file.ts. Runs Deno-side only.
 import type { Json } from "../settings/file.ts";
-import { chain, type ScopeId, scopeConfigPath, scopeDir } from "./paths.ts";
+import { chain, scopeConfigPath, scopeDir, type ScopeId } from "./paths.ts";
 
 function isPlainObject(v: Json): v is { [k: string]: Json } {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -35,15 +35,23 @@ export async function readScopeConfig(id: ScopeId): Promise<Json> {
   }
 }
 
-export async function writeScopeConfig(id: ScopeId, data: unknown): Promise<void> {
+export async function writeScopeConfig(
+  id: ScopeId,
+  data: unknown,
+): Promise<void> {
   await Deno.mkdir(scopeDir(id), { recursive: true });
-  await Deno.writeTextFile(scopeConfigPath(id), JSON.stringify(data, null, 2) + "\n");
+  await Deno.writeTextFile(
+    scopeConfigPath(id),
+    JSON.stringify(data, null, 2) + "\n",
+  );
 }
 
 // The config an agent or module in `id` actually sees: root's, overlaid with its own.
 // This is what resolveChatDefaults and resolveKanbanDefaults are fed.
 export async function resolveScopeConfig(id: ScopeId): Promise<Json> {
   let out: Json = null;
-  for (const scope of chain(id)) out = mergeConfig(out, await readScopeConfig(scope));
+  for (const scope of chain(id)) {
+    out = mergeConfig(out, await readScopeConfig(scope));
+  }
   return out;
 }

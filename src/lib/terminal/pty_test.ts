@@ -1,4 +1,9 @@
-import { assertEquals, assertMatch, assertStringIncludes, assertThrows } from "@std/assert";
+import {
+  assertEquals,
+  assertMatch,
+  assertStringIncludes,
+  assertThrows,
+} from "@std/assert";
 import {
   killAllSessions,
   killSession,
@@ -73,9 +78,17 @@ Deno.test("killAllSessions closes every session", () => {
 });
 
 Deno.test("unknown id throws a typed error for write/read/resize", () => {
-  assertThrows(() => writeSession("nope", "x"), Error, "unknown terminal session");
+  assertThrows(
+    () => writeSession("nope", "x"),
+    Error,
+    "unknown terminal session",
+  );
   assertThrows(() => readSession("nope"), Error, "unknown terminal session");
-  assertThrows(() => resizeSession("nope", 80, 24), Error, "unknown terminal session");
+  assertThrows(
+    () => resizeSession("nope", 80, 24),
+    Error,
+    "unknown terminal session",
+  );
 });
 
 Deno.test("startSession spawns the shell in the given cwd", async () => {
@@ -92,7 +105,11 @@ Deno.test("startSession spawns the shell in the given cwd", async () => {
 });
 
 Deno.test("startSession with argv runs that command, not the shell", async () => {
-  const id = startSession({ cols: 80, rows: 24, argv: ["sh", "-c", "echo argv-ok"] });
+  const id = startSession({
+    cols: 80,
+    rows: 24,
+    argv: ["sh", "-c", "echo argv-ok"],
+  });
   const out = await drain(id, 800);
   killSession(id);
   assertMatch(out, /argv-ok/);
@@ -102,7 +119,11 @@ Deno.test("startSession resolves the $EDITOR sentinel from the environment", asy
   const prev = Deno.env.get("EDITOR");
   Deno.env.set("EDITOR", "sh");
   try {
-    const id = startSession({ cols: 80, rows: 24, argv: ["$EDITOR", "-c", "echo editor-ok"] });
+    const id = startSession({
+      cols: 80,
+      rows: 24,
+      argv: ["$EDITOR", "-c", "echo editor-ok"],
+    });
     const out = await drain(id, 800);
     killSession(id);
     assertMatch(out, /editor-ok/);

@@ -22,7 +22,10 @@ Deno.test("a template with no frontmatter is prompt text alone, not an error", (
 // list and the `/` menu read the same file through different parsers, so this reproduces
 // pi's rule exactly rather than approximating it.
 Deno.test("a missing description falls back to the first line, truncated at 60", () => {
-  assertEquals(parsePrompt("a", "\n\nfirst line\nsecond line").description, "first line");
+  assertEquals(
+    parsePrompt("a", "\n\nfirst line\nsecond line").description,
+    "first line",
+  );
   const long = "x".repeat(75);
   assertEquals(parsePrompt("b", long).description, "x".repeat(60) + "...");
 });
@@ -59,6 +62,12 @@ Deno.test("a description containing --- or a newline stays in the frontmatter", 
 // An empty hint must be omitted rather than written as "", or the `/` menu renders a
 // stray gap after the name.
 Deno.test("an absent hint or rationale is left out of the file", () => {
-  assertEquals(promptFile({ description: "d", body: "b" }).includes("argument-hint"), false);
-  assertEquals(promptFile({ description: "d", body: "b" }).includes("rationale"), false);
+  assertEquals(
+    promptFile({ description: "d", body: "b" }).includes("argument-hint"),
+    false,
+  );
+  assertEquals(
+    promptFile({ description: "d", body: "b" }).includes("rationale"),
+    false,
+  );
 });

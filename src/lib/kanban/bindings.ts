@@ -11,17 +11,30 @@ export type { Board, CardRow, LogRow, StatusRow, Subtask } from "./board.ts";
 export interface KanbanBindings {
   kanbanGetBoard(arg: { scope: string }): Promise<Board>;
   kanbanGetLogs(arg: { scope: string; cardId?: string }): Promise<LogRow[]>;
-  kanbanAddStatus(arg: { scope: string; name: string }): Promise<{ id: string }>;
-  kanbanRenameStatus(arg: { scope: string; statusId: string; name: string }): Promise<unknown>;
-  kanbanMoveStatus(arg: { scope: string; statusId: string; position: number }): Promise<unknown>;
+  kanbanAddStatus(
+    arg: { scope: string; name: string },
+  ): Promise<{ id: string }>;
+  kanbanRenameStatus(
+    arg: { scope: string; statusId: string; name: string },
+  ): Promise<unknown>;
+  kanbanMoveStatus(
+    arg: { scope: string; statusId: string; position: number },
+  ): Promise<unknown>;
   kanbanDeleteStatus(
     arg: { scope: string; statusId: string; withCards?: boolean },
   ): Promise<unknown>;
   kanbanCreateCard(
-    arg: { scope: string; statusId: string; title?: string; description?: string },
+    arg: {
+      scope: string;
+      statusId: string;
+      title?: string;
+      description?: string;
+    },
   ): Promise<{ id: string }>;
   kanbanDeleteCard(arg: { scope: string; cardId: string }): Promise<unknown>;
-  kanbanMoveCard(arg: { scope: string; cardId: string; position: number }): Promise<unknown>;
+  kanbanMoveCard(
+    arg: { scope: string; cardId: string; position: number },
+  ): Promise<unknown>;
   kanbanSetStatus(
     arg: { scope: string; cardId: string; statusId: string; reason: string },
   ): Promise<unknown>;

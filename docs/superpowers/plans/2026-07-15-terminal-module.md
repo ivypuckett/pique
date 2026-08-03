@@ -1,12 +1,25 @@
 # Terminal Module Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a working interactive terminal as the first real harness module — xterm.js in the webview, a real PTY in the Deno backend, wired by `deno desktop` bindings.
+**Goal:** Add a working interactive terminal as the first real harness module —
+xterm.js in the webview, a real PTY in the Deno backend, wired by `deno desktop`
+bindings.
 
-**Architecture:** A new custom `deno desktop` backend entry (`src/desktop.ts`) replaces Vite auto-detection. It adopts the startup window, registers session-keyed terminal bindings (`termStart/Write/Read/Resize/Kill`), and serves the static Vite `dist/` build. The PTY lives in a backend session registry (`pty.ts`, unit-tested headless with a real shell). A `Terminal.svelte` module renders xterm.js, streams keystrokes to the backend, and long-polls `termRead` for output.
+**Architecture:** A new custom `deno desktop` backend entry (`src/desktop.ts`)
+replaces Vite auto-detection. It adopts the startup window, registers
+session-keyed terminal bindings (`termStart/Write/Read/Resize/Kill`), and serves
+the static Vite `dist/` build. The PTY lives in a backend session registry
+(`pty.ts`, unit-tested headless with a real shell). A `Terminal.svelte` module
+renders xterm.js, streams keystrokes to the backend, and long-polls `termRead`
+for output.
 
-**Tech Stack:** Deno 2.9, `deno desktop` (webview), Svelte 5 (runes), Vite, `@sigma/pty-ffi` (JSR, Rust portable-pty via FFI), `@xterm/xterm` + `@xterm/addon-fit`, `@std/http` file-server.
+**Tech Stack:** Deno 2.9, `deno desktop` (webview), Svelte 5 (runes), Vite,
+`@sigma/pty-ffi` (JSR, Rust portable-pty via FFI), `@xterm/xterm` +
+`@xterm/addon-fit`, `@std/http` file-server.
 
 **Spec:** `docs/superpowers/specs/2026-07-15-terminal-module-design.md`
 
@@ -32,23 +45,25 @@ src/
 
 ### Critical constraint (do not deviate)
 
-`deno desktop` bindings only attach if `src/desktop.ts` creates the `Deno.BrowserWindow`
-as its **first statement, before any import that pulls in `@sigma/pty-ffi`**. A static
-import of the PTY delays the constructor past deno desktop's auto-navigation of the
-startup window, so calls fail silently with `"No callback bound"`. Therefore
-`desktop.ts` **dynamically imports** the PTY registry and the file-server after creating
-the window, and **never calls `win.navigate()`** (deno desktop auto-navigates the
-adopted window to its served address). This was established by a spike; see the spec's
-"Decisions on record".
+`deno desktop` bindings only attach if `src/desktop.ts` creates the
+`Deno.BrowserWindow` as its **first statement, before any import that pulls in
+`@sigma/pty-ffi`**. A static import of the PTY delays the constructor past deno
+desktop's auto-navigation of the startup window, so calls fail silently with
+`"No callback bound"`. Therefore `desktop.ts` **dynamically imports** the PTY
+registry and the file-server after creating the window, and **never calls
+`win.navigate()`** (deno desktop auto-navigates the adopted window to its served
+address). This was established by a spike; see the spec's "Decisions on record".
 
 ---
 
 ## Task 1: Backend PTY session registry (`pty.ts`)
 
-The tested foundation: spawn/track/read/resize/kill PTY sessions. Testable headless with
-a real shell (FFI works under plain `deno test`, verified by the spike).
+The tested foundation: spawn/track/read/resize/kill PTY sessions. Testable
+headless with a real shell (FFI works under plain `deno test`, verified by the
+spike).
 
 **Files:**
+
 - Modify: `deno.json` (add deps + `-A` on the test task)
 - Create: `src/lib/terminal/pty.ts`
 - Test: `src/lib/terminal/pty_test.ts`
@@ -58,16 +73,16 @@ a real shell (FFI works under plain `deno test`, verified by the spike).
 In `deno.json`, add these four entries to `imports` (keep all existing entries):
 
 ```json
-    "@sigma/pty-ffi": "jsr:@sigma/pty-ffi@^0.42",
-    "@xterm/xterm": "npm:@xterm/xterm@^6",
-    "@xterm/addon-fit": "npm:@xterm/addon-fit@^0.11",
-    "@std/http": "jsr:@std/http@^1"
+"@sigma/pty-ffi": "jsr:@sigma/pty-ffi@^0.42",
+"@xterm/xterm": "npm:@xterm/xterm@^6",
+"@xterm/addon-fit": "npm:@xterm/addon-fit@^0.11",
+"@std/http": "jsr:@std/http@^1"
 ```
 
 And change the `test` task so FFI-backed tests can load the native lib:
 
 ```json
-    "test": "deno test -A src/"
+"test": "deno test -A src/"
 ```
 
 - [ ] **Step 2: Write the failing test** — `src/lib/terminal/pty_test.ts`
@@ -129,16 +144,24 @@ Deno.test("killSession removes the session and is idempotent", () => {
 });
 
 Deno.test("unknown id throws a typed error for write/read/resize", () => {
-  assertThrows(() => writeSession("nope", "x"), Error, "unknown terminal session");
+  assertThrows(
+    () => writeSession("nope", "x"),
+    Error,
+    "unknown terminal session",
+  );
   assertThrows(() => readSession("nope"), Error, "unknown terminal session");
-  assertThrows(() => resizeSession("nope", 80, 24), Error, "unknown terminal session");
+  assertThrows(
+    () => resizeSession("nope", 80, 24),
+    Error,
+    "unknown terminal session",
+  );
 });
 ```
 
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `deno test -A src/lib/terminal/pty_test.ts`
-Expected: FAIL — `Module not found` / cannot resolve `./pty.ts`.
+Run: `deno test -A src/lib/terminal/pty_test.ts` Expected: FAIL —
+`Module not found` / cannot resolve `./pty.ts`.
 
 - [ ] **Step 4: Implement `src/lib/terminal/pty.ts`**
 
@@ -203,8 +226,8 @@ export function killSession(id: string): void {
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `deno test -A src/lib/terminal/pty_test.ts`
-Expected: PASS — 5 tests ok. (First run may download the native lib from GitHub releases.)
+Run: `deno test -A src/lib/terminal/pty_test.ts` Expected: PASS — 5 tests ok.
+(First run may download the native lib from GitHub releases.)
 
 - [ ] **Step 6: Commit**
 
@@ -217,13 +240,15 @@ git commit -m "feat(terminal): backend PTY session registry"
 
 ## Task 2: Backend entry (`desktop.ts`) + task wiring
 
-Replace Vite auto-detection with a custom backend that adopts the window, registers the
-terminal bindings, and serves the built frontend. Verification is a manual launch (this
-is glue over the already-tested `pty.ts`).
+Replace Vite auto-detection with a custom backend that adopts the window,
+registers the terminal bindings, and serves the built frontend. Verification is
+a manual launch (this is glue over the already-tested `pty.ts`).
 
 **Files:**
+
 - Create: `src/desktop.ts`
-- Modify: `deno.json` (dev task → build frontend, compile `src/desktop.ts`, run it)
+- Modify: `deno.json` (dev task → build frontend, compile `src/desktop.ts`, run
+  it)
 
 - [ ] **Step 1: Create `src/desktop.ts`**
 
@@ -236,7 +261,11 @@ is glue over the already-tested `pty.ts`).
 // dynamically below, and we never call win.navigate() (deno desktop auto-navigates
 // the adopted window to the address Deno.serve binds to).
 
-const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 });
+const win = new Deno.BrowserWindow({
+  title: "pique",
+  width: 1200,
+  height: 800,
+});
 
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const term = await import("./lib/terminal/pty.ts");
@@ -284,30 +313,32 @@ Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
 
 - [ ] **Step 2: Point the dev task at the new entry in `deno.json`**
 
-Replace the `dev` task value with (this keeps the existing `unset …` WebKit fix and the
-`&& ./pique/pique` run; it adds `-A` so the compiled binary has FFI/env/net/read, and
-`--include dist` so the built frontend is embedded in the binary):
+Replace the `dev` task value with (this keeps the existing `unset …` WebKit fix
+and the `&& ./pique/pique` run; it adds `-A` so the compiled binary has
+FFI/env/net/read, and `--include dist` so the built frontend is embedded in the
+binary):
 
 ```json
-    "dev": "unset LD_LIBRARY_PATH LD_PRELOAD GTK_PATH GTK_EXE_PREFIX GTK_IM_MODULE_FILE GDK_PIXBUF_MODULE_FILE GDK_PIXBUF_MODULEDIR GIO_MODULE_DIR GSETTINGS_SCHEMA_DIR GCONV_PATH LOCPATH GTK_RC_FILES GTK2_RC_FILES && deno run -A npm:vite build && deno desktop -A --include dist --output pique src/desktop.ts && ./pique/pique",
+"dev": "unset LD_LIBRARY_PATH LD_PRELOAD GTK_PATH GTK_EXE_PREFIX GTK_IM_MODULE_FILE GDK_PIXBUF_MODULE_FILE GDK_PIXBUF_MODULEDIR GIO_MODULE_DIR GSETTINGS_SCHEMA_DIR GCONV_PATH LOCPATH GTK_RC_FILES GTK2_RC_FILES && deno run -A npm:vite build && deno desktop -A --include dist --output pique src/desktop.ts && ./pique/pique",
 ```
 
 - [ ] **Step 3: Type-check the backend entry**
 
-Run: `deno check src/desktop.ts`
-Expected: no errors. (If a `win.bind` handler return type is rejected, the handler must
-be `async` and return a JSON-serializable value — the code above already satisfies this.)
+Run: `deno check src/desktop.ts` Expected: no errors. (If a `win.bind` handler
+return type is rejected, the handler must be `async` and return a
+JSON-serializable value — the code above already satisfies this.)
 
 - [ ] **Step 4: Launch and verify the real app renders via the custom backend**
 
-Run: `deno task dev`
-Expected: the pique window opens showing the existing 3-column layout (served by
-`desktop.ts` out of the embedded `dist/`, not auto-detect). The center pane still shows
-the placeholder for now. Close the window to exit.
+Run: `deno task dev` Expected: the pique window opens showing the existing
+3-column layout (served by `desktop.ts` out of the embedded `dist/`, not
+auto-detect). The center pane still shows the placeholder for now. Close the
+window to exit.
 
-> If the window is blank, `serveDir` is not finding the embedded `dist/`. Confirm
-> `--include dist` is present and that `vite build` produced `dist/index.html` before the
-> `deno desktop` step. Do not proceed until the layout renders.
+> If the window is blank, `serveDir` is not finding the embedded `dist/`.
+> Confirm `--include dist` is present and that `vite build` produced
+> `dist/index.html` before the `deno desktop` step. Do not proceed until the
+> layout renders.
 
 - [ ] **Step 5: Commit**
 
@@ -320,10 +351,12 @@ git commit -m "feat(terminal): custom deno desktop backend with terminal binding
 
 ## Task 3: Frontend bindings wrapper (`bindings.ts`)
 
-A typed accessor over the `globalThis.bindings` bridge that returns `null` outside the
-desktop window (e.g. the browser `web` task), so the module can degrade gracefully.
+A typed accessor over the `globalThis.bindings` bridge that returns `null`
+outside the desktop window (e.g. the browser `web` task), so the module can
+degrade gracefully.
 
 **Files:**
+
 - Create: `src/lib/terminal/bindings.ts`
 - Test: `src/lib/terminal/bindings_test.ts`
 
@@ -341,8 +374,8 @@ Deno.test("terminalBindings returns null when the bridge is absent (browser/test
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `deno test -A src/lib/terminal/bindings_test.ts`
-Expected: FAIL — cannot resolve `./bindings.ts`.
+Run: `deno test -A src/lib/terminal/bindings_test.ts` Expected: FAIL — cannot
+resolve `./bindings.ts`.
 
 - [ ] **Step 3: Implement `src/lib/terminal/bindings.ts`**
 
@@ -366,8 +399,8 @@ export function terminalBindings(): TerminalBindings | null {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `deno test -A src/lib/terminal/bindings_test.ts`
-Expected: PASS — 1 test ok.
+Run: `deno test -A src/lib/terminal/bindings_test.ts` Expected: PASS — 1 test
+ok.
 
 - [ ] **Step 5: Commit**
 
@@ -380,10 +413,12 @@ git commit -m "feat(terminal): typed frontend bindings wrapper"
 
 ## Task 4: Terminal module component + registration
 
-Render xterm.js, stream keystrokes out, long-poll output in, forward resize, tear down
-on unmount. Then register it and make the center slot a terminal so it shows on launch.
+Render xterm.js, stream keystrokes out, long-poll output in, forward resize,
+tear down on unmount. Then register it and make the center slot a terminal so it
+shows on launch.
 
 **Files:**
+
 - Create: `src/lib/terminal/Terminal.svelte`
 - Modify: `src/lib/modules/registry.ts`
 - Modify: `src/lib/layout.ts:44` (center row kind + title)
@@ -470,13 +505,13 @@ export const registry: Record<string, Component<{ title: string }>> = {
 At `src/lib/layout.ts:44`, change the center row from:
 
 ```ts
-      rows: [{ id: "center-1", title: "Center", kind: "placeholder" }],
+rows: [{ id: "center-1", title: "Center", kind: "placeholder" }],
 ```
 
 to:
 
 ```ts
-      rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
+rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
 ```
 
 - [ ] **Step 4: Bump the layout storage key** — `src/lib/store.ts`
@@ -493,20 +528,22 @@ to:
 const KEY = "pique.layout.v2";
 ```
 
-(A cached `v1` layout would otherwise still show the old placeholder center. Bumping the
-key discards the stale saved layout so the new terminal default takes effect.)
+(A cached `v1` layout would otherwise still show the old placeholder center.
+Bumping the key discards the stale saved layout so the new terminal default
+takes effect.)
 
 - [ ] **Step 5: Verify existing unit tests still pass**
 
-Run: `deno test -A src/`
-Expected: PASS — the Task 1/3 terminal tests plus all existing `layout_test.ts` tests.
-(`layout_test.ts` asserts the center has one row, not its `kind`, so it is unaffected.)
+Run: `deno test -A src/` Expected: PASS — the Task 1/3 terminal tests plus all
+existing `layout_test.ts` tests. (`layout_test.ts` asserts the center has one
+row, not its `kind`, so it is unaffected.)
 
-- [ ] **Step 6: Build the frontend to fetch xterm into node_modules and check it bundles**
+- [ ] **Step 6: Build the frontend to fetch xterm into node_modules and check it
+      bundles**
 
-Run: `deno run -A npm:vite build`
-Expected: build succeeds; `dist/` is produced with the xterm assets bundled (no
-unresolved-import errors for `@xterm/xterm` or its CSS).
+Run: `deno run -A npm:vite build` Expected: build succeeds; `dist/` is produced
+with the xterm assets bundled (no unresolved-import errors for `@xterm/xterm` or
+its CSS).
 
 - [ ] **Step 7: Commit**
 
@@ -528,35 +565,37 @@ Run: `deno task dev`
 
 - [ ] **Step 2: Live shell (criteria 1–2)**
 
-Confirm the center pane shows a shell prompt. Type `ls -la` and `echo $TERM` → output
-renders; `echo $TERM` prints `xterm-256color`; colors from `ls` are visible.
+Confirm the center pane shows a shell prompt. Type `ls -la` and `echo $TERM` →
+output renders; `echo $TERM` prints `xterm-256color`; colors from `ls` are
+visible.
 
 - [ ] **Step 3: Full-screen app + reflow (criteria 3–4)**
 
-Run `vim` (or `top`) in the terminal → it draws its full-screen UI correctly. Drag the
-column splitter to resize the pane → the app reflows to the new size. Run `stty size` →
-rows/cols match the resized pane. Quit the app (`:q!` / `q`).
+Run `vim` (or `top`) in the terminal → it draws its full-screen UI correctly.
+Drag the column splitter to resize the pane → the app reflows to the new size.
+Run `stty size` → rows/cols match the resized pane. Quit the app (`:q!` / `q`).
 
 - [ ] **Step 4: No orphaned shells on close (criterion 5)**
 
 In a separate OS terminal, count the PTY-spawned shells before and after:
 
-Run (before closing pique): `pgrep -a -f "$SHELL" | wc -l`
-Then close the pique window.
-Run (after): `pgrep -a -f "$SHELL" | wc -l`
-Expected: the count drops by one — the terminal's shell process is gone. (`Terminal.svelte`
-teardown calls `termKill` on unmount, and the backend exits on window `close`, closing any
-surviving PTY.) A non-decreasing count means a leaked shell — fix teardown in Task 4.
+Run (before closing pique): `pgrep -a -f "$SHELL" | wc -l` Then close the pique
+window. Run (after): `pgrep -a -f "$SHELL" | wc -l` Expected: the count drops by
+one — the terminal's shell process is gone. (`Terminal.svelte` teardown calls
+`termKill` on unmount, and the backend exits on window `close`, closing any
+surviving PTY.) A non-decreasing count means a leaked shell — fix teardown in
+Task 4.
 
 - [ ] **Step 5: Clean shell exit (criterion 6)**
 
-Launch again, type `exit` in the terminal → the pane shows a dim `[session ended]` and
-does not error or respawn.
+Launch again, type `exit` in the terminal → the pane shows a dim
+`[session ended]` and does not error or respawn.
 
 - [ ] **Step 6: Final commit (docs/status)**
 
-Update the spec status line `docs/superpowers/specs/2026-07-15-terminal-module-design.md`
-from `Approved, pending implementation plan` to `Implemented`.
+Update the spec status line
+`docs/superpowers/specs/2026-07-15-terminal-module-design.md` from
+`Approved, pending implementation plan` to `Implemented`.
 
 ```bash
 git add docs/superpowers/specs/2026-07-15-terminal-module-design.md
@@ -567,11 +606,11 @@ git commit -m "docs(terminal): mark spec implemented"
 
 ## Notes on deferred / out-of-scope items
 
-- **Multiple concurrent terminals:** the binding API is already session-keyed; a second
-  terminal is `termStart` again with another id. No code here blocks it.
-- **ModuleFrame padding:** the terminal renders inset by the frame's `p-3` body padding.
-  Acceptable for this milestone; a padding-less body variant is deferred polish and would
-  touch shared `ModuleFrame.svelte`.
-- **HMR:** out of scope — the dev loop is build-then-run. The `web` task still gives
-  fast browser iteration for non-terminal UI (terminal shows its "unavailable" notice
-  there).
+- **Multiple concurrent terminals:** the binding API is already session-keyed; a
+  second terminal is `termStart` again with another id. No code here blocks it.
+- **ModuleFrame padding:** the terminal renders inset by the frame's `p-3` body
+  padding. Acceptable for this milestone; a padding-less body variant is
+  deferred polish and would touch shared `ModuleFrame.svelte`.
+- **HMR:** out of scope — the dev loop is build-then-run. The `web` task still
+  gives fast browser iteration for non-terminal UI (terminal shows its
+  "unavailable" notice there).

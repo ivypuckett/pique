@@ -8,14 +8,22 @@
 // cannot name a workspace's — so the parameter is omitted there entirely rather than
 // offered and rejected. Runs Deno-side only.
 import { Type } from "typebox";
-import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { type BoardRef, board, resolveBoardScope } from "./service.ts";
+import {
+  defineTool,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
+import { board, type BoardRef, resolveBoardScope } from "./service.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
-function text(value: any): { content: { type: "text"; text: string }[]; details: null } {
+function text(
+  value: any,
+): { content: { type: "text"; text: string }[]; details: null } {
   return {
-    content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
+    content: [{
+      type: "text",
+      text: typeof value === "string" ? value : JSON.stringify(value),
+    }],
     details: null,
   };
 }
@@ -46,7 +54,8 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_get_board",
       label: "Get Kanban board",
-      description: "Return the current board: its statuses (columns) and all cards with their " +
+      description:
+        "Return the current board: its statuses (columns) and all cards with their " +
         "ids, titles, statuses, tags, artifacts, subtasks, predecessors, and successors." +
         where,
       parameters: Type.Object({ ...scopeParam }),
@@ -58,7 +67,8 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_set_status",
       label: "Move a Kanban card",
-      description: "Move a card to a different status. A change reason is required and is " +
+      description:
+        "Move a card to a different status. A change reason is required and is " +
         "recorded in the board log." + where,
       parameters: Type.Object({
         card_id: Type.String(),
@@ -80,7 +90,9 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_create_card",
       label: "Create a Kanban card",
-      description: "Create a new card in the given status. Returns the new card id." + where,
+      description:
+        "Create a new card in the given status. Returns the new card id." +
+        where,
       parameters: Type.Object({
         status_id: Type.String(),
         title: Type.Optional(Type.String()),
@@ -112,7 +124,10 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
         tags: Type.Optional(Type.Record(Type.String(), Type.String())),
         subtasks: Type.Optional(Type.Array(
           Type.Object({ text: Type.String(), done: Type.Boolean() }),
-          { description: "The card's steps, in order. Subtasks are not cards and have no ids." },
+          {
+            description:
+              "The card's steps, in order. Subtasks are not cards and have no ids.",
+          },
         )),
         ...scopeParam,
       }),
@@ -132,7 +147,8 @@ export function kanbanTools(scope: ScopeId): ToolDefinition[] {
     defineTool({
       name: "kanban_set_connections",
       label: "Edit Kanban card connections",
-      description: "Update a card's connections: artifacts (external links), and predecessors " +
+      description:
+        "Update a card's connections: artifacts (external links), and predecessors " +
         "and successors (other card ids). Only provided fields change." + where,
       parameters: Type.Object({
         card_id: Type.String(),

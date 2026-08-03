@@ -31,7 +31,9 @@ async function exists(path: string): Promise<boolean> {
 async function moveBoard(from: string, to: string): Promise<void> {
   await Deno.mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
   for (const suffix of ["", "-shm", "-wal"]) {
-    if (await exists(from + suffix)) await Deno.rename(from + suffix, to + suffix);
+    if (await exists(from + suffix)) {
+      await Deno.rename(from + suffix, to + suffix);
+    }
   }
 }
 

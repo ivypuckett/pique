@@ -8,7 +8,12 @@ import {
   rejectPrompt,
   savePrompt,
 } from "./service.ts";
-import { ensurePromptDirs, pendingPromptPath, promptPath, promptsDir } from "./paths.ts";
+import {
+  ensurePromptDirs,
+  pendingPromptPath,
+  promptPath,
+  promptsDir,
+} from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -30,7 +35,9 @@ async function write(
   state: "live" | "pending" = "live",
 ): Promise<void> {
   await ensurePromptDirs(scope);
-  const path = state === "live" ? promptPath(scope, name) : pendingPromptPath(scope, name);
+  const path = state === "live"
+    ? promptPath(scope, name)
+    : pendingPromptPath(scope, name);
   await Deno.writeTextFile(path, body);
 }
 
@@ -45,10 +52,16 @@ Deno.test("live and pending templates are listed with their state", async () => 
     await write("ws-1", "review", "---\ndescription: d\n---\nbody");
     await write("ws-1", "audit", "---\n---\nbody", "pending");
 
-    assertEquals((await listPrompts("ws-1")).map((p) => ({ name: p.name, state: p.state })), [
-      { name: "audit", state: "pending" },
-      { name: "review", state: "live" },
-    ]);
+    assertEquals(
+      (await listPrompts("ws-1")).map((p) => ({
+        name: p.name,
+        state: p.state,
+      })),
+      [
+        { name: "audit", state: "pending" },
+        { name: "review", state: "live" },
+      ],
+    );
   });
 });
 
@@ -65,7 +78,11 @@ Deno.test("non-markdown files and illegal names are skipped", async () => {
 
 Deno.test("saving writes a live template a chat can invoke straight away", async () => {
   await withTempHome(async () => {
-    await savePrompt("ws-1", "ship", { description: "Ship it", argumentHint: "<pr>", body: "Merge $1" });
+    await savePrompt("ws-1", "ship", {
+      description: "Ship it",
+      argumentHint: "<pr>",
+      body: "Merge $1",
+    });
 
     const [p] = await listPrompts("ws-1");
     assertEquals(p.state, "live");
@@ -88,7 +105,9 @@ Deno.test("saving an existing name replaces it rather than adding a second", asy
 
 Deno.test("a name that could escape the scope is rejected before any write", async () => {
   await withTempHome(async () => {
-    await assertRejects(() => savePrompt("ws-1", "../escape", { description: "d", body: "b" }));
+    await assertRejects(() =>
+      savePrompt("ws-1", "../escape", { description: "d", body: "b" })
+    );
   });
 });
 
@@ -97,9 +116,15 @@ Deno.test("approving moves the template from quarantine to live", async () => {
     await write("ws-1", "audit", "---\ndescription: d\n---\nbody", "pending");
     await approvePrompt("ws-1", "audit");
 
-    assertEquals((await listPrompts("ws-1")).map((p) => ({ name: p.name, state: p.state })), [
-      { name: "audit", state: "live" },
-    ]);
+    assertEquals(
+      (await listPrompts("ws-1")).map((p) => ({
+        name: p.name,
+        state: p.state,
+      })),
+      [
+        { name: "audit", state: "live" },
+      ],
+    );
   });
 });
 
@@ -129,9 +154,14 @@ Deno.test("a workspace sees root's templates as well as its own", async () => {
     await write(ROOT, "shared", "body");
     await write("ws-1", "local", "body");
 
-    assertEquals((await listVisiblePrompts("ws-1")).map((p) => p.name).sort(), ["local", "shared"]);
+    assertEquals((await listVisiblePrompts("ws-1")).map((p) => p.name).sort(), [
+      "local",
+      "shared",
+    ]);
     // Root can never see a workspace's.
-    assertEquals((await listVisiblePrompts(ROOT)).map((p) => p.name), ["shared"]);
+    assertEquals((await listVisiblePrompts(ROOT)).map((p) => p.name), [
+      "shared",
+    ]);
   });
 });
 
@@ -140,7 +170,11 @@ Deno.test("a workspace sees root's templates as well as its own", async () => {
 Deno.test("a name defined in both scopes resolves once, to the nearest", async () => {
   await withTempHome(async () => {
     await write(ROOT, "review", "---\ndescription: root's\n---\nroot body");
-    await write("ws-1", "review", "---\ndescription: the workspace's\n---\nlocal body");
+    await write(
+      "ws-1",
+      "review",
+      "---\ndescription: the workspace's\n---\nlocal body",
+    );
 
     const visible = await listVisiblePrompts("ws-1");
     assertEquals(visible.length, 1);
@@ -165,7 +199,9 @@ Deno.test("only ancestors' dirs are passed to pi as extra paths", async () => {
     assertEquals(inheritedPromptDirs("ws-1"), [promptsDir(ROOT)]);
     // …and the dir handed over is the one a root save actually writes into.
     await savePrompt(ROOT, "shared", { description: "d", body: "b" });
-    const names = [...Deno.readDirSync(inheritedPromptDirs("ws-1")[0])].map((e) => e.name).sort();
+    const names = [...Deno.readDirSync(inheritedPromptDirs("ws-1")[0])].map((
+      e,
+    ) => e.name).sort();
     assertEquals(names, ["pending", "shared.md"]);
   });
 });

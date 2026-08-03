@@ -1,5 +1,10 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { isValidSource, npmSearchUrl, toExtInfo, toSearchResult } from "./packages.ts";
+import {
+  isValidSource,
+  npmSearchUrl,
+  toExtInfo,
+  toSearchResult,
+} from "./packages.ts";
 
 Deno.test("isValidSource accepts pi source forms", () => {
   for (
@@ -28,7 +33,12 @@ Deno.test("isValidSource rejects blank and bare names", () => {
 
 Deno.test("toExtInfo maps a ConfiguredPackage with an installed path", () => {
   assertEquals(
-    toExtInfo({ source: "npm:x", scope: "user", filtered: false, installedPath: "/p" }),
+    toExtInfo({
+      source: "npm:x",
+      scope: "user",
+      filtered: false,
+      installedPath: "/p",
+    }),
     { source: "npm:x", scope: "user", path: "/p" },
   );
 });
@@ -43,11 +53,17 @@ Deno.test("toExtInfo omits a missing installed path", () => {
 Deno.test("npmSearchUrl constrains to the pi-package keyword and encodes the query", () => {
   const url = npmSearchUrl("code review");
   assertStringIncludes(url, "registry.npmjs.org/-/v1/search");
-  assertStringIncludes(url, encodeURIComponent("keywords:pi-package code review"));
+  assertStringIncludes(
+    url,
+    encodeURIComponent("keywords:pi-package code review"),
+  );
 });
 
 Deno.test("npmSearchUrl handles a blank query (keyword only)", () => {
-  assertStringIncludes(npmSearchUrl("  "), encodeURIComponent("keywords:pi-package"));
+  assertStringIncludes(
+    npmSearchUrl("  "),
+    encodeURIComponent("keywords:pi-package"),
+  );
 });
 
 Deno.test("toSearchResult projects an npm search object to an install-ready hit", () => {
@@ -75,6 +91,13 @@ Deno.test("toSearchResult projects an npm search object to an install-ready hit"
 Deno.test("toSearchResult defaults missing fields", () => {
   assertEquals(
     toSearchResult({ package: { name: "pi-x" } }),
-    { source: "npm:pi-x", name: "pi-x", description: "", author: "", downloads: 0, npm: undefined },
+    {
+      source: "npm:pi-x",
+      name: "pi-x",
+      description: "",
+      author: "",
+      downloads: 0,
+      npm: undefined,
+    },
   );
 });

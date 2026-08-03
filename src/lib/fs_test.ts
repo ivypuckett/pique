@@ -1,5 +1,11 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { createEntry, listDir, parseEntryName, removeEntry, renameEntry } from "./fs.ts";
+import {
+  createEntry,
+  listDir,
+  parseEntryName,
+  removeEntry,
+  renameEntry,
+} from "./fs.ts";
 
 Deno.test("listDir returns entries with isDir/isSymlink flags", async () => {
   const dir = await Deno.makeTempDir();
@@ -75,7 +81,10 @@ Deno.test("renameEntry moves within the same directory", async () => {
   try {
     await Deno.writeTextFile(`${dir}/old.txt`, "body");
 
-    assertEquals(await renameEntry(`${dir}/old.txt`, "new.txt"), `${dir}/new.txt`);
+    assertEquals(
+      await renameEntry(`${dir}/old.txt`, "new.txt"),
+      `${dir}/new.txt`,
+    );
     assertEquals(await Deno.readTextFile(`${dir}/new.txt`), "body");
   } finally {
     await Deno.remove(dir, { recursive: true });

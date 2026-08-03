@@ -1,5 +1,11 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { readJson, resolveGitScanDepth, resolveModuleDir, resolveWorkspaceDir, writeJson } from "./file.ts";
+import {
+  readJson,
+  resolveGitScanDepth,
+  resolveModuleDir,
+  resolveWorkspaceDir,
+  writeJson,
+} from "./file.ts";
 
 // Each test runs against a throwaway HOME so it exercises real disk I/O without
 // touching the developer's own ~/.pique.
@@ -40,7 +46,10 @@ Deno.test("writeJson creates ~/.pique when missing", async () => {
 Deno.test("readJson returns null on corrupt json", async () => {
   await withTempHome(async () => {
     await Deno.mkdir(`${Deno.env.get("HOME")}/.pique`, { recursive: true });
-    await Deno.writeTextFile(`${Deno.env.get("HOME")}/.pique/settings.json`, "{ not json");
+    await Deno.writeTextFile(
+      `${Deno.env.get("HOME")}/.pique/settings.json`,
+      "{ not json",
+    );
     assertEquals(await readJson("settings"), null);
   });
 });
@@ -53,7 +62,9 @@ Deno.test("writeJson rejects names with path separators", async () => {
 
 // Both resolvers read the LAYOUT tree now: the fallback directory is the root
 // workspace's cwd, which is what the old global workspace.defaultDir became.
-const layout = (cwd: unknown) => ({ root: { cwd } } as Parameters<typeof resolveWorkspaceDir>[0]);
+const layout = (
+  cwd: unknown,
+) => ({ root: { cwd } } as Parameters<typeof resolveWorkspaceDir>[0]);
 
 Deno.test("resolveWorkspaceDir returns root's cwd when it is a non-empty string", () => {
   assertEquals(resolveWorkspaceDir(layout("/proj/x")), "/proj/x");
@@ -111,5 +122,8 @@ Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () =
   assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: -1 } }), 3);
   assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 2.5 } }), 3);
   // deno-lint-ignore no-explicit-any
-  assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: "4" as any } }), 3);
+  assertEquals(
+    resolveGitScanDepth({ workspace: { gitScanDepth: "4" as any } }),
+    3,
+  );
 });

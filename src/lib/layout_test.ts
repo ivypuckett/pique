@@ -1,16 +1,16 @@
 import { assertEquals } from "@std/assert";
 import {
   createInitialView,
-  visibleIds,
-  resizeBoundary,
-  gridTemplateColumns,
   fixedPx,
+  gridTemplateColumns,
   MIN_WIDTH_PCT,
+  resizeBoundary,
+  visibleIds,
 } from "./layout.ts";
 import {
-  addTab,
   addDiffTab,
   addEditorTab,
+  addTab,
   closeTab,
   isViewState,
   setActiveTab,
@@ -54,7 +54,10 @@ Deno.test("resizeBoundary explorer-tabs sets the explorer's share of the pane", 
   const v = resizeBoundary(createInitialView(), "explorer-tabs", 30);
   assertEquals(v.explorer.widthPct, 30);
   // clamped to MIN_WIDTH_PCT at the edges
-  assertEquals(resizeBoundary(v, "explorer-tabs", 2).explorer.widthPct, MIN_WIDTH_PCT);
+  assertEquals(
+    resizeBoundary(v, "explorer-tabs", 2).explorer.widthPct,
+    MIN_WIDTH_PCT,
+  );
 });
 
 Deno.test("setExplorerHidden toggles the explorer flag without touching widths", () => {
@@ -107,7 +110,10 @@ Deno.test("isViewState rejects a column whose activeTabId names no row", () => {
 });
 
 Deno.test("isViewState rejects a column missing activeTabId", () => {
-  const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
+  const bad = createInitialView() as unknown as Record<
+    string,
+    Record<string, unknown>
+  >;
   delete bad.center.activeTabId;
   assertEquals(isViewState(bad), false);
 });
@@ -115,14 +121,22 @@ Deno.test("isViewState rejects a column missing activeTabId", () => {
 Deno.test("addTab appends a tab to the right column and activates it", () => {
   const v = addTab(createInitialView(), "terminal");
   assertEquals(v.right.rows.length, 2);
-  assertEquals(v.right.rows[1], { id: "right-2", title: "Terminal", kind: "terminal" });
+  assertEquals(v.right.rows[1], {
+    id: "right-2",
+    title: "Terminal",
+    kind: "terminal",
+  });
   assertEquals(v.right.activeTabId, "right-2");
 });
 
 Deno.test("addTab picks the smallest free right-N id", () => {
   let v = addTab(createInitialView(), "terminal"); // right-2
   v = addTab(v, "terminal"); // right-3
-  assertEquals(v.right.rows.map((r) => r.id), ["right-1", "right-2", "right-3"]);
+  assertEquals(v.right.rows.map((r) => r.id), [
+    "right-1",
+    "right-2",
+    "right-3",
+  ]);
 });
 
 Deno.test("setActiveTab switches the active right tab", () => {
@@ -175,7 +189,10 @@ Deno.test("isViewState accepts a real view and rejects malformed shapes", () => 
   assertEquals(isViewState(null), false);
   assertEquals(isViewState({}), false);
   assertEquals(isViewState({ left: {}, center: {}, right: {} }), false);
-  assertEquals(isViewState(JSON.parse(JSON.stringify(createInitialView()))), true);
+  assertEquals(
+    isViewState(JSON.parse(JSON.stringify(createInitialView()))),
+    true,
+  );
   // missing a column
   const { right: _right, ...missingRight } = createInitialView();
   assertEquals(isViewState(missingRight), false);
@@ -195,7 +212,11 @@ Deno.test("addEditorTab adds an active right-column terminal tab titled with the
   assertEquals(tab.kind, "terminal");
   assertEquals(tab.title, "layout.ts");
   assertEquals(next.right.activeTabId, tab.id);
-  assertEquals(tab.props, { argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"], autoCloseOnExit: true, autoFocus: true });
+  assertEquals(tab.props, {
+    argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"],
+    autoCloseOnExit: true,
+    autoFocus: true,
+  });
 });
 
 Deno.test("addEditorTab falls back to the full path when there is no basename", () => {
@@ -212,5 +233,7 @@ Deno.test("addDiffTab adds an active right-column gitdiff tab scoped to the file
   assertEquals(tab.kind, "gitdiff");
   assertEquals(tab.title, "layout.ts");
   assertEquals(next.right.activeTabId, tab.id);
-  assertEquals(tab.props, { path: "/home/ivy/workspace/pique/src/lib/layout.ts" });
+  assertEquals(tab.props, {
+    path: "/home/ivy/workspace/pique/src/lib/layout.ts",
+  });
 });

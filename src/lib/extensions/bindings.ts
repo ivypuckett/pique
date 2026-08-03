@@ -18,7 +18,9 @@ export interface ExtensionBindings {
   ): Promise<ExtensionSource>;
   extensionsEnable(arg: { scope: string; id: string }): Promise<unknown>;
   extensionsRevoke(arg: { scope: string; id: string }): Promise<unknown>;
-  extensionsRemove(arg: { scope: string; id: string; state: ExtState }): Promise<unknown>;
+  extensionsRemove(
+    arg: { scope: string; id: string; state: ExtState },
+  ): Promise<unknown>;
   // Fetches the bytes and quarantines them; it does NOT enable the package.
   extensionsFetch(arg: { scope: string; source: string }): Promise<unknown>;
   extensionsSearch(arg: { query: string }): Promise<ExtSearchResult[]>;

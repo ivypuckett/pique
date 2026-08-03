@@ -62,8 +62,16 @@ Deno.test("a workspace agent gets its own tools and the ones it inherits from ro
     await defineAndApprove("ws-1", "local_tool");
 
     const tools = await toolsFor("ws-1");
-    assertEquals(tools.includes("shared_tool"), true, "root's tool should be inherited");
-    assertEquals(tools.includes("local_tool"), true, "the workspace's own tool should load");
+    assertEquals(
+      tools.includes("shared_tool"),
+      true,
+      "root's tool should be inherited",
+    );
+    assertEquals(
+      tools.includes("local_tool"),
+      true,
+      "the workspace's own tool should load",
+    );
   });
 });
 
@@ -74,7 +82,11 @@ Deno.test("a root agent cannot see a workspace's tools", async () => {
 
     const tools = await toolsFor(ROOT);
     assertEquals(tools.includes("shared_tool"), true);
-    assertEquals(tools.includes("local_tool"), false, "root must not inherit downward");
+    assertEquals(
+      tools.includes("local_tool"),
+      false,
+      "root must not inherit downward",
+    );
   });
 });
 
@@ -85,7 +97,11 @@ Deno.test("sibling workspaces are isolated from each other", async () => {
 
     const tools = await toolsFor("ws-1");
     assertEquals(tools.includes("one_tool"), true);
-    assertEquals(tools.includes("two_tool"), false, "a sibling's tools must not leak");
+    assertEquals(
+      tools.includes("two_tool"),
+      false,
+      "a sibling's tools must not leak",
+    );
   });
 });
 
@@ -93,7 +109,10 @@ Deno.test("a quarantined tool never reaches an agent", async () => {
   await withTempHome(async () => {
     // Written to pending but never approved — the gate the whole design rests on.
     await ensureExtensionDirs(ROOT);
-    await Deno.writeTextFile(pendingPath(ROOT, "unapproved"), extensionSource("unapproved"));
+    await Deno.writeTextFile(
+      pendingPath(ROOT, "unapproved"),
+      extensionSource("unapproved"),
+    );
 
     assertEquals((await toolsFor("ws-1")).includes("unapproved"), false);
     assertEquals((await toolsFor(ROOT)).includes("unapproved"), false);
@@ -104,8 +123,16 @@ Deno.test("pique's compiled-in tools are present in every scope", async () => {
   await withTempHome(async () => {
     for (const scope of [ROOT, "ws-1"]) {
       const tools = await toolsFor(scope);
-      assertEquals(tools.includes("define_extension"), true, `define_extension missing in ${scope}`);
-      assertEquals(tools.includes("kanban_get_board"), true, `kanban tools missing in ${scope}`);
+      assertEquals(
+        tools.includes("define_extension"),
+        true,
+        `define_extension missing in ${scope}`,
+      );
+      assertEquals(
+        tools.includes("kanban_get_board"),
+        true,
+        `kanban tools missing in ${scope}`,
+      );
     }
   });
 });

@@ -4,14 +4,23 @@
 // into the auto-discovered extensions dir. Passed to createAgentSession as customTools
 // (see chat/agent.ts). Runs Deno-side only.
 import { Type } from "typebox";
-import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { assertExtensionName, ensureExtensionDirs, pendingPath } from "./paths.ts";
+import {
+  defineTool,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
+import {
+  assertExtensionName,
+  ensureExtensionDirs,
+  pendingPath,
+} from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 // The rationale is recorded as a header comment rather than a sidecar file, so the
 // reviewer reads intent and code together — the source is the whole artifact.
 function withHeader(source: string, rationale: string): string {
-  return `// Defined by an agent. Rationale: ${rationale.replace(/\r?\n/g, " ")}\n${source}`;
+  return `// Defined by an agent. Rationale: ${
+    rationale.replace(/\r?\n/g, " ")
+  }\n${source}`;
 }
 
 // Bound to the scope its chat agent runs in: an extension an agent writes is
@@ -39,18 +48,25 @@ export function extensionAuthoringTools(scope: ScopeId): ToolDefinition[] {
             "Extension name, lowercase letters/digits/underscores, e.g. lookup_weather.",
         }),
         rationale: Type.String({
-          description: "Why this extension is needed. Shown to the user when they review it.",
+          description:
+            "Why this extension is needed. Shown to the user when they review it.",
         }),
-        source: Type.String({ description: "The full TypeScript module source." }),
+        source: Type.String({
+          description: "The full TypeScript module source.",
+        }),
       }),
       async execute(_id, p) {
         assertExtensionName(p.name);
         await ensureExtensionDirs(scope);
-        await Deno.writeTextFile(pendingPath(scope, p.name), withHeader(p.source, p.rationale));
+        await Deno.writeTextFile(
+          pendingPath(scope, p.name),
+          withHeader(p.source, p.rationale),
+        );
         return {
           content: [{
             type: "text",
-            text: `Wrote ${p.name} to the pending directory. It is not active yet — the user ` +
+            text:
+              `Wrote ${p.name} to the pending directory. It is not active yet — the user ` +
               `must enable it in Settings → Extensions, and it loads in chat sessions started ` +
               `after that.`,
           }],

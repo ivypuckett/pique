@@ -34,24 +34,49 @@ Deno.test("live and pending are separate dirs inside the scope's agent dir", () 
 Deno.test("each scope gets its own pair of dirs", () => {
   withHome("/home/x", () => {
     assertEquals(liveDir(ROOT), "/home/x/.pique/scopes/root/agent/extensions");
-    assertEquals(liveDir("ws-2"), "/home/x/.pique/scopes/ws-2/agent/extensions");
+    assertEquals(
+      liveDir("ws-2"),
+      "/home/x/.pique/scopes/ws-2/agent/extensions",
+    );
   });
 });
 
 Deno.test("local extension names cannot escape their directory", () => {
-  for (const bad of ["../evil", "a/b", "/abs", "", ".", "Upper", "9lead", "has-dash", "sp ace"]) {
-    assertThrows(() => assertExtensionName(bad), Error, "invalid extension name");
+  for (
+    const bad of [
+      "../evil",
+      "a/b",
+      "/abs",
+      "",
+      ".",
+      "Upper",
+      "9lead",
+      "has-dash",
+      "sp ace",
+    ]
+  ) {
+    assertThrows(
+      () => assertExtensionName(bad),
+      Error,
+      "invalid extension name",
+    );
   }
 });
 
 Deno.test("local extension names accept lowercase identifiers", () => {
-  for (const ok of ["a", "lookup_weather", "ext9", "a_b_c"]) assertExtensionName(ok);
+  for (const ok of ["a", "lookup_weather", "ext9", "a_b_c"]) {
+    assertExtensionName(ok);
+  }
 });
 
 Deno.test("a bad scope id is refused before it reaches the filesystem", () => {
   withHome("/home/x", () => {
     assertThrows(() => liveDir("../evil"), Error, "invalid scope id");
-    assertThrows(() => pendingPath("a/b", "ok_name"), Error, "invalid scope id");
+    assertThrows(
+      () => pendingPath("a/b", "ok_name"),
+      Error,
+      "invalid scope id",
+    );
   });
 });
 
@@ -75,7 +100,9 @@ Deno.test("package slugs round-trip every source form pi accepts", () => {
 });
 
 Deno.test("a package slug can never contain a separator", () => {
-  for (const source of ["npm:@scope/pkg", "/abs/path", "../../escape", "a/b/c"]) {
+  for (
+    const source of ["npm:@scope/pkg", "/abs/path", "../../escape", "a/b/c"]
+  ) {
     assertEquals(packageSlug(source).includes("/"), false);
   }
 });
@@ -84,7 +111,13 @@ Deno.test("a traversal-shaped source stays one file inside the pending dir", () 
   withHome("/home/x", () => {
     const base = "/home/x/.pique/scopes/ws-1/agent/pending";
     // "/" is percent-encoded, so the result is a single filename, not a path.
-    assertEquals(pendingPackagePath("ws-1", "../../evil"), `${base}/..%2F..%2Fevil.json`);
-    assertEquals(pendingPackagePath("ws-1", "npm:@scope/pkg"), `${base}/npm%3A%40scope%2Fpkg.json`);
+    assertEquals(
+      pendingPackagePath("ws-1", "../../evil"),
+      `${base}/..%2F..%2Fevil.json`,
+    );
+    assertEquals(
+      pendingPackagePath("ws-1", "npm:@scope/pkg"),
+      `${base}/npm%3A%40scope%2Fpkg.json`,
+    );
   });
 });

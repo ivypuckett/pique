@@ -1,12 +1,22 @@
 # Layout Shell Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a single, correct View — three resizable/collapsible columns (20/60/20) holding mocked modules — as the foundation of the Pique coding harness.
+**Goal:** Build a single, correct View — three resizable/collapsible columns
+(20/60/20) holding mocked modules — as the foundation of the Pique coding
+harness.
 
-**Architecture:** A Svelte SPA served by `deno desktop`'s Vite auto-detection. Pure layout math (widths, collapse redistribution, grid template) lives in `layout.ts` and is unit-tested with `deno test`. A `writable` store wraps that logic, persists to `localStorage`, and drives dumb Svelte components (`Workspace → View → Column → ModuleFrame → Placeholder`).
+**Architecture:** A Svelte SPA served by `deno desktop`'s Vite auto-detection.
+Pure layout math (widths, collapse redistribution, grid template) lives in
+`layout.ts` and is unit-tested with `deno test`. A `writable` store wraps that
+logic, persists to `localStorage`, and drives dumb Svelte components
+(`Workspace → View → Column → ModuleFrame → Placeholder`).
 
-**Tech Stack:** Deno 2.9, Svelte 5 (runes), Vite, Tailwind CSS v4 + DaisyUI v5, `deno desktop` (webview backend).
+**Tech Stack:** Deno 2.9, Svelte 5 (runes), Vite, Tailwind CSS v4 + DaisyUI v5,
+`deno desktop` (webview backend).
 
 **Spec:** `docs/superpowers/specs/2026-07-14-layout-shell-design.md`
 
@@ -36,18 +46,22 @@ src/
       Placeholder.svelte # mocked module body
 ```
 
-The old `Deno.serve` `main.ts` is deleted (replaced by `src/main.ts` + the Vite SPA).
+The old `Deno.serve` `main.ts` is deleted (replaced by `src/main.ts` + the Vite
+SPA).
 
 ---
 
 ## Task 1: Scaffold toolchain + walking skeleton
 
-Prove Svelte + Tailwind + DaisyUI render inside `deno desktop` before building any logic.
+Prove Svelte + Tailwind + DaisyUI render inside `deno desktop` before building
+any logic.
 
 **Files:**
+
 - Delete: `main.ts`
 - Modify: `deno.json`
-- Create: `vite.config.ts`, `svelte.config.js`, `index.html`, `src/main.ts`, `src/app.css`, `src/App.svelte`
+- Create: `vite.config.ts`, `svelte.config.js`, `index.html`, `src/main.ts`,
+  `src/app.css`, `src/App.svelte`
 
 - [ ] **Step 1: Replace `deno.json`**
 
@@ -126,7 +140,9 @@ export default { preprocess: vitePreprocess() };
   themes: dark --default, light;
 }
 
-html, body, #app {
+html,
+body,
+#app {
   height: 100%;
   margin: 0;
 }
@@ -175,7 +191,11 @@ deno install --allow-scripts
 deno task dev
 ```
 
-Expected: a desktop window opens showing a centered DaisyUI primary button reading "Pique is alive" on a dark background. If `--hmr` fails to start the Vite dev server for the SPA, fall back to running `deno run -A npm:vite` in one terminal and `deno desktop http://localhost:5173` — but try the task first. Close the window to stop.
+Expected: a desktop window opens showing a centered DaisyUI primary button
+reading "Pique is alive" on a dark background. If `--hmr` fails to start the
+Vite dev server for the SPA, fall back to running `deno run -A npm:vite` in one
+terminal and `deno desktop http://localhost:5173` — but try the task first.
+Close the window to stop.
 
 - [ ] **Step 10: Commit**
 
@@ -189,6 +209,7 @@ git commit -m "Scaffold Svelte + Vite + DaisyUI shell under deno desktop"
 ## Task 2: Layout types + initial view (TDD)
 
 **Files:**
+
 - Create: `src/lib/layout.ts`, `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Write the failing test — `src/lib/layout_test.ts`**
@@ -202,7 +223,11 @@ Deno.test("createInitialView starts at 20/60/20, none collapsed", () => {
   assertEquals(v.left.widthPct, 20);
   assertEquals(v.center.widthPct, 60);
   assertEquals(v.right.widthPct, 20);
-  assertEquals([v.left.collapsed, v.center.collapsed, v.right.collapsed], [false, false, false]);
+  assertEquals([v.left.collapsed, v.center.collapsed, v.right.collapsed], [
+    false,
+    false,
+    false,
+  ]);
 });
 
 Deno.test("visible widths sum to 100", () => {
@@ -220,8 +245,8 @@ Deno.test("center has one row, left has two", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: FAIL — module `./layout.ts` not found.
+Run: `deno test src/lib/layout_test.ts` Expected: FAIL — module `./layout.ts`
+not found.
 
 - [ ] **Step 3: Implement `src/lib/layout.ts`**
 
@@ -285,8 +310,7 @@ export function visibleIds(v: ViewState): ColumnId[] {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: PASS (3 tests).
+Run: `deno test src/lib/layout_test.ts` Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -300,6 +324,7 @@ git commit -m "Add layout types and initial view"
 ## Task 3: Resize + grid template pure functions (TDD)
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`, `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Add failing tests to `src/lib/layout_test.ts`**
@@ -307,11 +332,11 @@ git commit -m "Add layout types and initial view"
 ```ts
 import {
   createInitialView,
-  visibleIds,
-  resizeBoundary,
-  gridTemplateColumns,
   fixedPx,
+  gridTemplateColumns,
   MIN_WIDTH_PCT,
+  resizeBoundary,
+  visibleIds,
 } from "./layout.ts";
 
 Deno.test("resizeBoundary moves width between two columns, keeps their sum", () => {
@@ -328,7 +353,10 @@ Deno.test("resizeBoundary clamps to MIN_WIDTH_PCT", () => {
 });
 
 Deno.test("gridTemplateColumns lists fr tracks and splitters when all visible", () => {
-  assertEquals(gridTemplateColumns(createInitialView()), "20fr 6px 60fr 6px 20fr");
+  assertEquals(
+    gridTemplateColumns(createInitialView()),
+    "20fr 6px 60fr 6px 20fr",
+  );
 });
 
 Deno.test("fixedPx counts two splitters when all visible", () => {
@@ -338,8 +366,8 @@ Deno.test("fixedPx counts two splitters when all visible", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: FAIL — `resizeBoundary` / `gridTemplateColumns` / `fixedPx` not exported.
+Run: `deno test src/lib/layout_test.ts` Expected: FAIL — `resizeBoundary` /
+`gridTemplateColumns` / `fixedPx` not exported.
 
 - [ ] **Step 3: Append to `src/lib/layout.ts`**
 
@@ -353,8 +381,14 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function resizeBoundary(v: ViewState, b: Boundary, newFirstPct: number): ViewState {
-  const [a, c]: [ColumnId, ColumnId] = b === "left-center" ? ["left", "center"] : ["center", "right"];
+export function resizeBoundary(
+  v: ViewState,
+  b: Boundary,
+  newFirstPct: number,
+): ViewState {
+  const [a, c]: [ColumnId, ColumnId] = b === "left-center"
+    ? ["left", "center"]
+    : ["center", "right"];
   const combined = v[a].widthPct + v[c].widthPct;
   const first = clamp(newFirstPct, MIN_WIDTH_PCT, combined - MIN_WIDTH_PCT);
   return {
@@ -383,8 +417,7 @@ export function gridTemplateColumns(v: ViewState): string {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: PASS (7 tests total).
+Run: `deno test src/lib/layout_test.ts` Expected: PASS (7 tests total).
 
 - [ ] **Step 5: Commit**
 
@@ -398,6 +431,7 @@ git commit -m "Add resize and grid-template layout functions"
 ## Task 4: Collapse/expand + row toggle (TDD)
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`, `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Add failing tests to `src/lib/layout_test.ts`**
@@ -435,8 +469,8 @@ Deno.test("toggleRows adds then removes a second row on a side column", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: FAIL — `toggleCollapse` / `toggleRows` not exported.
+Run: `deno test src/lib/layout_test.ts` Expected: FAIL — `toggleCollapse` /
+`toggleRows` not exported.
 
 - [ ] **Step 3: Append to `src/lib/layout.ts`**
 
@@ -454,7 +488,10 @@ function collapse(v: ViewState, id: SideId): ViewState {
     [id]: { ...v[id], collapsed: true, savedWidthPct: freed, widthPct: 0 },
   };
   for (const x of others) {
-    next[x] = { ...v[x], widthPct: v[x].widthPct + freed * (v[x].widthPct / otherSum) };
+    next[x] = {
+      ...v[x],
+      widthPct: v[x].widthPct + freed * (v[x].widthPct / otherSum),
+    };
   }
   return next;
 }
@@ -481,7 +518,11 @@ export function toggleCollapse(v: ViewState, id: SideId): ViewState {
 export function toggleRows(v: ViewState, id: SideId): ViewState {
   const col = v[id];
   const rows: ModuleRef[] = col.rows.length === 1
-    ? [...col.rows, { id: `${id}-2`, title: `${cap(id)} B`, kind: "placeholder" }]
+    ? [...col.rows, {
+      id: `${id}-2`,
+      title: `${cap(id)} B`,
+      kind: "placeholder",
+    }]
     : [col.rows[0]];
   return { ...v, [id]: { ...col, rows } };
 }
@@ -489,8 +530,7 @@ export function toggleRows(v: ViewState, id: SideId): ViewState {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `deno test src/lib/layout_test.ts`
-Expected: PASS (10 tests total).
+Run: `deno test src/lib/layout_test.ts` Expected: PASS (10 tests total).
 
 - [ ] **Step 5: Commit**
 
@@ -503,9 +543,11 @@ git commit -m "Add collapse/expand and row-toggle layout functions"
 
 ## Task 5: Reactive store with persistence
 
-Thin reactive wrapper over the pure functions; not unit-tested (browser `localStorage` + trivial wiring), verified live in Task 9.
+Thin reactive wrapper over the pure functions; not unit-tested (browser
+`localStorage` + trivial wiring), verified live in Task 9.
 
 **Files:**
+
 - Create: `src/lib/store.ts`
 
 - [ ] **Step 1: Create `src/lib/store.ts`**
@@ -555,8 +597,7 @@ export function toggleRows(id: SideId): void {
 
 - [ ] **Step 2: Type-check**
 
-Run: `deno check src/lib/store.ts`
-Expected: no errors.
+Run: `deno check src/lib/store.ts` Expected: no errors.
 
 - [ ] **Step 3: Commit**
 
@@ -570,7 +611,9 @@ git commit -m "Add reactive layout store with localStorage persistence"
 ## Task 6: Module chrome + placeholder body + registry
 
 **Files:**
-- Create: `src/lib/ModuleFrame.svelte`, `src/lib/modules/Placeholder.svelte`, `src/lib/modules/registry.ts`
+
+- Create: `src/lib/ModuleFrame.svelte`, `src/lib/modules/Placeholder.svelte`,
+  `src/lib/modules/registry.ts`
 
 - [ ] **Step 1: Create `src/lib/ModuleFrame.svelte`**
 
@@ -609,10 +652,11 @@ git commit -m "Add reactive layout store with localStorage persistence"
 
 - [ ] **Step 3: Create `src/lib/modules/registry.ts`**
 
-This is the interface that must age well: modules are addressed by a serializable
-`kind` string, and the registry maps that to a Svelte component. Registering a real
-module later (agent chat, diff, terminal) is a one-line addition here — no layout code
-changes. Every registered component takes a single `title: string` prop.
+This is the interface that must age well: modules are addressed by a
+serializable `kind` string, and the registry maps that to a Svelte component.
+Registering a real module later (agent chat, diff, terminal) is a one-line
+addition here — no layout code changes. Every registered component takes a
+single `title: string` prop.
 
 ```ts
 import type { Component } from "svelte";
@@ -635,6 +679,7 @@ git commit -m "Add module frame chrome, placeholder module, and registry"
 ## Task 7: Column (rows, rail, controls)
 
 **Files:**
+
 - Create: `src/lib/Column.svelte`
 
 - [ ] **Step 1: Create `src/lib/Column.svelte`**
@@ -699,7 +744,8 @@ git commit -m "Add module frame chrome, placeholder module, and registry"
 
 - [ ] **Step 2: Commit**
 
-(Svelte components are compile-checked headlessly via `vite build` in Task 9 — `deno check` cannot parse `.svelte`.)
+(Svelte components are compile-checked headlessly via `vite build` in Task 9 —
+`deno check` cannot parse `.svelte`.)
 
 ```bash
 git add src/lib/Column.svelte
@@ -711,6 +757,7 @@ git commit -m "Add Column with rows, collapsed rail, and controls"
 ## Task 8: Splitter + View (grid assembly + drag)
 
 **Files:**
+
 - Create: `src/lib/Splitter.svelte`, `src/lib/View.svelte`
 
 - [ ] **Step 1: Create `src/lib/Splitter.svelte`**
@@ -799,6 +846,7 @@ git commit -m "Add Splitter and View grid with drag-to-resize"
 ## Task 9: Assemble app + verify all success criteria
 
 **Files:**
+
 - Create: `src/lib/Workspace.svelte`
 - Modify: `src/App.svelte`
 
@@ -828,24 +876,31 @@ git commit -m "Add Splitter and View grid with drag-to-resize"
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `deno task test`
-Expected: PASS (10 tests).
+Run: `deno task test` Expected: PASS (10 tests).
 
-- [ ] **Step 4: Headless compile check (catches Svelte/type errors without a window)**
+- [ ] **Step 4: Headless compile check (catches Svelte/type errors without a
+      window)**
 
-Run: `deno run -A npm:vite build`
-Expected: build succeeds, emits `dist/`. Any Svelte compile or import error fails here. Fix before launching.
+Run: `deno run -A npm:vite build` Expected: build succeeds, emits `dist/`. Any
+Svelte compile or import error fails here. Fix before launching.
 
 - [ ] **Step 5: Launch and verify every success criterion**
 
 Run: `deno task dev`
 
 Confirm each, matching the spec's success criteria:
-1. One view, three columns at ~20/60/20; left column shows two stacked modules, center and right one each; all with DaisyUI card chrome on a dark theme.
-2. Drag the divider between columns → widths change smoothly; a column cannot shrink below ~10%.
-3. Click « on a side column → it collapses to a thin rail with a » expand button; the other columns grow to fill. Click » → the previous width is restored.
-4. Click + / − on a side column's header → it toggles between one and two stacked rows.
-5. Resize/collapse, then close and relaunch (`deno task dev`) → the layout is exactly as left.
+
+1. One view, three columns at ~20/60/20; left column shows two stacked modules,
+   center and right one each; all with DaisyUI card chrome on a dark theme.
+2. Drag the divider between columns → widths change smoothly; a column cannot
+   shrink below ~10%.
+3. Click « on a side column → it collapses to a thin rail with a » expand
+   button; the other columns grow to fill. Click » → the previous width is
+   restored.
+4. Click + / − on a side column's header → it toggles between one and two
+   stacked rows.
+5. Resize/collapse, then close and relaunch (`deno task dev`) → the layout is
+   exactly as left.
 6. `deno task test` passes.
 
 - [ ] **Step 6: Commit**
@@ -863,4 +918,5 @@ git commit -m "Assemble Workspace and App shell"
 - Saved / predefined Layouts.
 - Real module functionality (agent chat, diff, terminal, …).
 - Resizable row dividers (row split is fixed 50/50).
-- Final placement of the row-count control (provisional +/− button in the header for now).
+- Final placement of the row-count control (provisional +/− button in the header
+  for now).

@@ -14,7 +14,10 @@ export interface WorkspaceState {
   cwd?: string;
 }
 
-export function createInitialWorkspace(id = "ws-1", title = "Workspace 1"): WorkspaceState {
+export function createInitialWorkspace(
+  id = "ws-1",
+  title = "Workspace 1",
+): WorkspaceState {
   const view = createInitialView("view-1");
   return { id, title, views: [view], activeId: view.id };
 }
@@ -64,7 +67,10 @@ export function focusView(w: WorkspaceState, id: string): WorkspaceState {
 }
 
 // Set (or clear, with "") the per-workspace working-directory override.
-export function setWorkspaceDir(w: WorkspaceState, dir: string): WorkspaceState {
+export function setWorkspaceDir(
+  w: WorkspaceState,
+  dir: string,
+): WorkspaceState {
   return { ...w, cwd: dir.trim() === "" ? undefined : dir };
 }
 

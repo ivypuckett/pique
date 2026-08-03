@@ -1,7 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { type BoardHandle, openBoard } from "./board.ts";
 
-const DEFAULTS = [{ name: "Backlog" }, { name: "Todo" }, { name: "In Progress" }, { name: "Done" }];
+const DEFAULTS = [{ name: "Backlog" }, { name: "Todo" }, {
+  name: "In Progress",
+}, { name: "Done" }];
 
 // A seeded in-memory board plus the id of each status, for the mutation tests.
 function fresh(): { b: BoardHandle; status: (name: string) => string } {
@@ -27,7 +29,12 @@ Deno.test("openBoard creates the three tables", () => {
 Deno.test("a fresh board seeds statuses from defaults, in order", () => {
   const b = openBoard(":memory:", { defaultStatuses: DEFAULTS });
   const statuses = b.getBoard().statuses;
-  assertEquals(statuses.map((s) => s.name), ["Backlog", "Todo", "In Progress", "Done"]);
+  assertEquals(statuses.map((s) => s.name), [
+    "Backlog",
+    "Todo",
+    "In Progress",
+    "Done",
+  ]);
   assertEquals(statuses.map((s) => s.position), [0, 1, 2, 3]);
   b.close();
 });
@@ -46,7 +53,11 @@ Deno.test("reopening an existing board does not re-seed", async () => {
 
 Deno.test("createCard places a card in a status and round-trips", () => {
   const { b, status } = fresh();
-  const id = b.createCard({ statusId: status("Todo"), title: "Write plan", actor: "human" });
+  const id = b.createCard({
+    statusId: status("Todo"),
+    title: "Write plan",
+    actor: "human",
+  });
   const c = card(b, id);
   assertEquals(c.title, "Write plan");
   assertEquals(c.statusId, status("Todo"));
@@ -56,7 +67,12 @@ Deno.test("createCard places a card in a status and round-trips", () => {
 Deno.test("setStatus moves the card and logs from/to + reason", () => {
   const { b, status } = fresh();
   const id = b.createCard({ statusId: status("Todo"), actor: "human" });
-  b.setStatus({ cardId: id, statusId: status("Done"), reason: "shipped", actor: "agent" });
+  b.setStatus({
+    cardId: id,
+    statusId: status("Done"),
+    reason: "shipped",
+    actor: "agent",
+  });
   assertEquals(card(b, id).statusId, status("Done"));
   const logs = b.getLogs(id).filter((l) => l.action === "set_status");
   assertEquals(logs.length, 1);
@@ -70,17 +86,39 @@ Deno.test("setStatus moves the card and logs from/to + reason", () => {
 Deno.test("setStatus throws when reason is missing or blank", () => {
   const { b, status } = fresh();
   const id = b.createCard({ statusId: status("Todo"), actor: "human" });
-  assertThrows(() => b.setStatus({ cardId: id, statusId: status("Done"), reason: "", actor: "human" }));
   assertThrows(() =>
-    b.setStatus({ cardId: id, statusId: status("Done"), reason: "  ", actor: "human" })
+    b.setStatus({
+      cardId: id,
+      statusId: status("Done"),
+      reason: "",
+      actor: "human",
+    })
+  );
+  assertThrows(() =>
+    b.setStatus({
+      cardId: id,
+      statusId: status("Done"),
+      reason: "  ",
+      actor: "human",
+    })
   );
   b.close();
 });
 
 Deno.test("setMetadata patches only provided fields and logs the diff", () => {
   const { b, status } = fresh();
-  const id = b.createCard({ statusId: status("Todo"), title: "orig", description: "d", actor: "human" });
-  b.setMetadata({ cardId: id, title: "renamed", tags: { size: "L" }, actor: "human" });
+  const id = b.createCard({
+    statusId: status("Todo"),
+    title: "orig",
+    description: "d",
+    actor: "human",
+  });
+  b.setMetadata({
+    cardId: id,
+    title: "renamed",
+    tags: { size: "L" },
+    actor: "human",
+  });
   const c = card(b, id);
   assertEquals(c.title, "renamed");
   assertEquals(c.description, "d"); // untouched
@@ -115,7 +153,10 @@ Deno.test("a card's subtasks default to empty and round-trip through setMetadata
   assertEquals(card(b, a).subtasks, []);
   b.setMetadata({
     cardId: a,
-    subtasks: [{ text: "write it", done: true }, { text: "ship it", done: false }],
+    subtasks: [{ text: "write it", done: true }, {
+      text: "ship it",
+      done: false,
+    }],
     actor: "human",
   });
   assertEquals(card(b, a).subtasks, [
@@ -130,17 +171,37 @@ Deno.test("a card's subtasks default to empty and round-trip through setMetadata
 Deno.test("setMetadata defaults a subtask's missing done to false", () => {
   const { b, status } = fresh();
   const a = b.createCard({ statusId: status("Todo"), actor: "human" });
-  b.setMetadata({ cardId: a, subtasks: [{ text: "no flag" } as never], actor: "human" });
+  b.setMetadata({
+    cardId: a,
+    subtasks: [{ text: "no flag" } as never],
+    actor: "human",
+  });
   assertEquals(card(b, a).subtasks, [{ text: "no flag", done: false }]);
   b.close();
 });
 
 Deno.test("setMetadata rejects malformed subtasks without half-applying the edit", () => {
   const { b, status } = fresh();
-  const a = b.createCard({ statusId: status("Todo"), title: "before", actor: "human" });
-  for (const bad of [["a plain string"], [{ done: true }], [{ text: "  " }], "nope"]) {
+  const a = b.createCard({
+    statusId: status("Todo"),
+    title: "before",
+    actor: "human",
+  });
+  for (
+    const bad of [
+      ["a plain string"],
+      [{ done: true }],
+      [{ text: "  " }],
+      "nope",
+    ]
+  ) {
     assertThrows(() =>
-      b.setMetadata({ cardId: a, title: "after", subtasks: bad as never, actor: "human" })
+      b.setMetadata({
+        cardId: a,
+        title: "after",
+        subtasks: bad as never,
+        actor: "human",
+      })
     );
   }
   // The title in the same call was refused along with the subtasks.
@@ -151,9 +212,21 @@ Deno.test("setMetadata rejects malformed subtasks without half-applying the edit
 
 Deno.test("setMetadata replaces the whole subtask list and leaves other fields alone", () => {
   const { b, status } = fresh();
-  const a = b.createCard({ statusId: status("Todo"), title: "t", actor: "human" });
-  b.setMetadata({ cardId: a, subtasks: [{ text: "one", done: false }], actor: "human" });
-  b.setMetadata({ cardId: a, subtasks: [{ text: "two", done: true }], actor: "human" });
+  const a = b.createCard({
+    statusId: status("Todo"),
+    title: "t",
+    actor: "human",
+  });
+  b.setMetadata({
+    cardId: a,
+    subtasks: [{ text: "one", done: false }],
+    actor: "human",
+  });
+  b.setMetadata({
+    cardId: a,
+    subtasks: [{ text: "two", done: true }],
+    actor: "human",
+  });
   assertEquals(card(b, a).subtasks, [{ text: "two", done: true }]);
   assertEquals(card(b, a).title, "t");
   b.close();
@@ -163,7 +236,13 @@ Deno.test("addStatus appends a column at the end and returns its id", () => {
   const { b } = fresh();
   const id = b.addStatus({ name: "Blocked" });
   const statuses = b.getBoard().statuses;
-  assertEquals(statuses.map((s) => s.name), ["Backlog", "Todo", "In Progress", "Done", "Blocked"]);
+  assertEquals(statuses.map((s) => s.name), [
+    "Backlog",
+    "Todo",
+    "In Progress",
+    "Done",
+    "Blocked",
+  ]);
   assertEquals(statuses.map((s) => s.position), [0, 1, 2, 3, 4]);
   assertEquals(statuses.at(-1)!.id, id);
   b.close();
@@ -171,7 +250,11 @@ Deno.test("addStatus appends a column at the end and returns its id", () => {
 
 Deno.test("addStatus rejects a blank name", () => {
   const { b } = fresh();
-  assertThrows(() => b.addStatus({ name: "   " }), Error, "column name cannot be empty");
+  assertThrows(
+    () => b.addStatus({ name: "   " }),
+    Error,
+    "column name cannot be empty",
+  );
   b.close();
 });
 
@@ -256,8 +339,16 @@ Deno.test("deleteStatus refuses a column that still has cards", () => {
 
 Deno.test("deleteStatus with withCards deletes the column's cards and prunes their edges", () => {
   const { b, status } = fresh();
-  const doomed = b.createCard({ statusId: status("Todo"), title: "x", actor: "human" });
-  const after = b.createCard({ statusId: status("Done"), title: "after", actor: "human" });
+  const doomed = b.createCard({
+    statusId: status("Todo"),
+    title: "x",
+    actor: "human",
+  });
+  const after = b.createCard({
+    statusId: status("Done"),
+    title: "after",
+    actor: "human",
+  });
   b.setConnections({ cardId: after, predecessors: [doomed], actor: "human" });
 
   b.deleteStatus({ statusId: status("Todo"), withCards: true });

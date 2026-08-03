@@ -1,5 +1,5 @@
 // The prompt template file format, and nothing else. Pure — no filesystem, no pi — so
-// the format is testable on its own, the same way profiles/parse.ts is.
+// the format is testable on its own.
 //
 // The format is pi's, not pique's: `description` and `argument-hint` frontmatter over a
 // markdown body, with the description falling back to the body's first line. This module
@@ -8,7 +8,7 @@
 import { extract } from "@std/front-matter/yaml";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
-// signature and can cross the win.bind boundary as a JSON value (profiles/parse.ts).
+// signature and can cross the win.bind boundary as a JSON value.
 export type Prompt = {
   name: string;
   // pi always resolves a description: the frontmatter key, or the body's first line
@@ -26,7 +26,9 @@ export type Prompt = {
   error?: string;
 };
 
-const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+const str = (
+  v: unknown,
+): string | undefined => (typeof v === "string" ? v : undefined);
 
 // pi's fallback, reproduced exactly: the first non-empty line, truncated at 60 with an
 // ellipsis. Diverging here would make Settings disagree with the `/` menu.
@@ -52,7 +54,12 @@ export function parsePrompt(name: string, text: string): Prompt {
       // pi's own frontmatter parser is more forgiving than a YAML one, so a file that
       // fails here may still load for pi. Report it, but keep the whole text as the body
       // rather than pretending the file is empty.
-      return { name, description: firstLine(text), body: text.trim(), error: `frontmatter: ${(err as Error).message}` };
+      return {
+        name,
+        description: firstLine(text),
+        body: text.trim(),
+        error: `frontmatter: ${(err as Error).message}`,
+      };
     }
   }
   return {
@@ -66,14 +73,21 @@ export function parsePrompt(name: string, text: string): Prompt {
 }
 
 // Serialize back to the on-disk format. Frontmatter is emitted by hand rather than with a
-// YAML writer for the reason profiles/agent-tools.ts gives: the schema is three keys wide,
-// and JSON's encoding of a string is valid YAML flow syntax — which is also what contains
-// the text, so a description holding `---` or a newline stays inside its quoted scalar.
+// YAML writer: the schema is three keys wide, and JSON's encoding of a string is valid
+// YAML flow syntax — which is also what contains the text, so a description holding `---`
+// or a newline stays inside its quoted scalar.
 export function promptFile(
-  p: { description: string; argumentHint?: string; rationale?: string; body: string },
+  p: {
+    description: string;
+    argumentHint?: string;
+    rationale?: string;
+    body: string;
+  },
 ): string {
   const lines = [`description: ${JSON.stringify(p.description)}`];
-  if (p.argumentHint) lines.push(`argument-hint: ${JSON.stringify(p.argumentHint)}`);
+  if (p.argumentHint) {
+    lines.push(`argument-hint: ${JSON.stringify(p.argumentHint)}`);
+  }
   if (p.rationale) lines.push(`rationale: ${JSON.stringify(p.rationale)}`);
   return `---\n${lines.join("\n")}\n---\n\n${p.body.trim()}\n`;
 }

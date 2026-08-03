@@ -10,15 +10,23 @@ export type { PromptInfo, PromptState };
 export interface PromptBindings {
   promptsList(arg: { scope: string }): Promise<PromptInfo[]>;
   promptsSave(
-    arg: { scope: string; name: string; description: string; argumentHint?: string; body: string },
+    arg: {
+      scope: string;
+      name: string;
+      description: string;
+      argumentHint?: string;
+      body: string;
+    },
   ): Promise<unknown>;
   promptsApprove(arg: { scope: string; name: string }): Promise<unknown>;
   promptsReject(arg: { scope: string; name: string }): Promise<unknown>;
-  promptsDelete(arg: { scope: string; name: string; state: PromptState }): Promise<unknown>;
+  promptsDelete(
+    arg: { scope: string; name: string; state: PromptState },
+  ): Promise<unknown>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — the Prompts
-// section then shows a desktop-only note, same as providers/extensions/profiles.
+// section then shows a desktop-only note, same as providers/extensions.
 export function promptBindings(): PromptBindings | null {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
   return b ? (b as PromptBindings) : null;

@@ -11,7 +11,10 @@ Deno.test("mergeSettings keeps a partial persisted section over defaults", () =>
 
 Deno.test("mergeSettings fills a section's defaults when it is absent", () => {
   const merged = mergeSettings({ appearance: { theme: "nord" } });
-  assertEquals(merged.workspace.gitScanDepth, DEFAULT_SETTINGS.workspace.gitScanDepth);
+  assertEquals(
+    merged.workspace.gitScanDepth,
+    DEFAULT_SETTINGS.workspace.gitScanDepth,
+  );
 });
 
 Deno.test("THEMES has no duplicates", () => {

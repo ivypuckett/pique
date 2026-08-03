@@ -15,7 +15,8 @@ import {
 } from "./service.ts";
 import { fetchPackage } from "./packages.ts";
 
-const ENTRY_SOURCE = 'export default function (pi) { pi.registerTool({ name: "hello" }); }\n';
+const ENTRY_SOURCE =
+  'export default function (pi) { pi.registerTool({ name: "hello" }); }\n';
 
 // A minimal pi package: a package.json and one auto-discovered extension entry.
 async function makePackage(dir: string): Promise<string> {
@@ -29,7 +30,9 @@ async function makePackage(dir: string): Promise<string> {
   return pkg;
 }
 
-async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
+async function withTempHome(
+  fn: (home: string) => Promise<void>,
+): Promise<void> {
   const prev = Deno.env.get("HOME");
   const dir = await Deno.makeTempDir();
   Deno.env.set("HOME", dir);

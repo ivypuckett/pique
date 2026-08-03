@@ -1,7 +1,7 @@
 // The chat session store, driven against a fake backend. What is worth testing here is
-// the restart that switching profile forces: pi fixes the system prompt at session
-// creation, so pickProfile stops one agent and starts another, and the events of the
-// old one must not land in the new transcript.
+// the restart a new chat forces: the session file cannot be swapped on a running pi
+// session, so newChat stops one agent and starts another, and the events of the old one
+// must not land in the new transcript.
 import { assertEquals } from "@std/assert";
 import { get } from "svelte/store";
 import type { ChatEvent, Item } from "./bindings.ts";
@@ -12,7 +12,7 @@ import { chatSession } from "./store.ts";
 // the saved conversation the real backend hands back: agents started with fresh:true get
 // none, matching SessionManager.create vs continueRecent.
 function fakeBindings(resumed: Item[] = []) {
-  const started: { id: string; profile?: string; fresh?: boolean }[] = [];
+  const started: { id: string; fresh?: boolean }[] = [];
   const stopped: string[] = [];
   const queues = new Map<string, ChatEvent[]>();
   const histories = new Map<string, Item[]>();
@@ -21,7 +21,7 @@ function fakeBindings(resumed: Item[] = []) {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
       const id = `agent-${next++}`;
-      started.push({ id, profile: arg.profile, fresh: arg.fresh });
+      started.push({ id, fresh: arg.fresh });
       queues.set(id, []);
       histories.set(id, arg.fresh ? [] : resumed);
       return Promise.resolve({ id });
@@ -51,8 +51,6 @@ function fakeBindings(resumed: Item[] = []) {
     chatListCommands: () => Promise.resolve([]),
     chatSetModel: () => Promise.resolve(true),
     chatSetThinking: () => Promise.resolve(true),
-    profilesVisible: () => Promise.resolve([]),
-    profilesList: () => Promise.resolve([]),
     scopeConfigRead: () => Promise.resolve({}),
     scopeConfigWrite: () => Promise.resolve(true),
     scopeConfigResolve: () => Promise.resolve({}),
@@ -97,7 +95,11 @@ Deno.test("a started session shows the conversation the backend resumed", async 
     await settle();
 
     assertEquals(get(s.items), SAVED, "reopening picks the transcript back up");
-    assertEquals(f.started[0].fresh, undefined, "the first start resumes rather than resets");
+    assertEquals(
+      f.started[0].fresh,
+      undefined,
+      "the first start resumes rather than resets",
+    );
 
     // And the resumed transcript is what new events build on, not a separate one.
     f.emit("agent-1", { kind: "text", delta: " and continuing" });
@@ -122,32 +124,18 @@ Deno.test("a new chat starts fresh and drops the resumed transcript", async () =
     await settle();
 
     assertEquals(get(s.items), [], "a new chat is an empty one");
-    assertEquals(f.stopped, ["agent-1"], "the old agent is stopped, not leaked");
+    assertEquals(
+      f.stopped,
+      ["agent-1"],
+      "the old agent is stopped, not leaked",
+    );
     assertEquals(f.started.map((x) => x.fresh), [undefined, true]);
 
     s.release();
   }, SAVED);
 });
 
-Deno.test("a new chat keeps the profile in use", async () => {
-  await withFakeBackend(async (f) => {
-    const s = chatSession("ws-resume-3");
-    s.retain();
-    await settle();
-
-    s.pickProfile("reviewer");
-    await settle();
-    s.newChat();
-    await settle();
-
-    assertEquals(f.started.map((x) => x.profile), [undefined, "reviewer", "reviewer"]);
-    assertEquals(get(s.profile), "reviewer");
-
-    s.release();
-  });
-});
-
-Deno.test("picking a profile restarts the agent and clears the transcript", async () => {
+Deno.test("a new chat drops the transcript the old agent streamed", async () => {
   await withFakeBackend(async (f) => {
     const s = chatSession("ws-restart-1");
     s.retain();
@@ -157,14 +145,24 @@ Deno.test("picking a profile restarts the agent and clears the transcript", asyn
     await settle();
     assertEquals(get(s.items).length, 1);
 
-    s.pickProfile("reviewer");
+    s.newChat();
     await settle();
 
-    assertEquals(get(s.items), [], "the transcript belongs to the agent that produced it");
-    assertEquals(f.stopped, ["agent-1"], "the old agent is stopped, not leaked");
-    assertEquals(f.started.map((x) => x.profile), [undefined, "reviewer"]);
-    assertEquals(f.started[1].fresh, true, "a switched profile gets a new conversation, not the saved one");
-    assertEquals(get(s.profile), "reviewer");
+    assertEquals(
+      get(s.items),
+      [],
+      "the transcript belongs to the agent that produced it",
+    );
+    assertEquals(
+      f.stopped,
+      ["agent-1"],
+      "the old agent is stopped, not leaked",
+    );
+    assertEquals(
+      f.started[1].fresh,
+      true,
+      "a new chat gets a new conversation, not the saved one",
+    );
 
     s.release();
   });
@@ -178,7 +176,7 @@ Deno.test("a late reply from the old agent cannot land in the new transcript", a
 
     // The restart happens while agent-1's read is still parked — the exact window a
     // plain `alive` flag would reopen, because start() sets it back to true.
-    s.pickProfile("reviewer");
+    s.newChat();
     f.emit("agent-1", { kind: "text", delta: "stale answer" });
     await settle();
 
@@ -187,25 +185,6 @@ Deno.test("a late reply from the old agent cannot land in the new transcript", a
     f.emit("agent-2", { kind: "text", delta: "fresh answer" });
     await settle();
     assertEquals(get(s.items), [{ role: "assistant", text: "fresh answer" }]);
-
-    s.release();
-  });
-});
-
-Deno.test("picking the profile already in use does nothing", async () => {
-  await withFakeBackend(async (f) => {
-    const s = chatSession("ws-restart-3");
-    s.retain();
-    await settle();
-
-    f.emit("agent-1", { kind: "text", delta: "kept" });
-    await settle();
-
-    s.pickProfile("");
-    await settle();
-
-    assertEquals(f.started.length, 1, "no needless restart");
-    assertEquals(get(s.items).length, 1, "and no needless transcript loss");
 
     s.release();
   });

@@ -37,7 +37,9 @@ export function parseEntryName(name: string): { rel: string; isDir: boolean } {
   const rel = isDir ? trimmed.slice(0, -1) : trimmed;
   for (const seg of rel.split("/")) {
     if (seg === "") throw new Error(`invalid name: ${trimmed}`);
-    if (seg === "." || seg === "..") throw new Error("name must not contain . or ..");
+    if (seg === "." || seg === "..") {
+      throw new Error("name must not contain . or ..");
+    }
   }
   return { rel, isDir };
 }
@@ -45,7 +47,10 @@ export function parseEntryName(name: string): { rel: string; isDir: boolean } {
 // Create an empty file (or a directory, for a trailing-slash name) under `parent`,
 // returning its absolute path. Missing intermediate directories are created, but the
 // leaf is not: an existing name fails rather than silently reusing or truncating it.
-export async function createEntry(parent: string, name: string): Promise<string> {
+export async function createEntry(
+  parent: string,
+  name: string,
+): Promise<string> {
   const { rel, isDir } = parseEntryName(name);
   const path = `${parent.replace(/\/$/, "")}/${rel}`;
   await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });

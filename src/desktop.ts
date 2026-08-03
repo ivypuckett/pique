@@ -13,7 +13,11 @@
 //    array". PTY output is therefore sent as a plain number array and rebuilt into a
 //    Uint8Array on the frontend.
 
-const win = new Deno.BrowserWindow({ title: "pique", width: 1200, height: 800 });
+const win = new Deno.BrowserWindow({
+  title: "pique",
+  width: 1200,
+  height: 800,
+});
 
 let term: typeof import("./lib/terminal/pty.ts");
 let chat: typeof import("./lib/chat/agent.ts");
@@ -24,7 +28,6 @@ let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
-let profiles: typeof import("./lib/profiles/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
@@ -41,7 +44,9 @@ win.bind("termStart", async (arg) => {
     cwd?: string;
     argv?: string[];
   };
-  return { id: term.startSession({ cols, rows, cwd: await moduleDir(override), argv }) };
+  return {
+    id: term.startSession({ cols, rows, cwd: await moduleDir(override), argv }),
+  };
 });
 
 win.bind("termWrite", async (arg) => {
@@ -78,15 +83,12 @@ win.bind("termKill", async (arg) => {
 });
 
 win.bind("chatStart", async (arg) => {
-  // `profile` is passed through as-is: undefined means "the scope's default" and ""
-  // means "no profile", a distinction startAgent relies on.
-  const { cwd, scope, profile, fresh } = arg as {
+  const { cwd, scope, fresh } = arg as {
     cwd?: string;
     scope?: string;
-    profile?: string;
     fresh?: boolean;
   };
-  return { id: await chat.startAgent({ cwd, scope, profile, fresh }) };
+  return { id: await chat.startAgent({ cwd, scope, fresh }) };
 });
 
 win.bind("chatHistory", async (arg) => {
@@ -136,7 +138,11 @@ win.bind("chatReloadPrompts", async (arg) => {
 });
 
 win.bind("chatSetModel", async (arg) => {
-  const { id, provider, model } = arg as { id: string; provider: string; model: string };
+  const { id, provider, model } = arg as {
+    id: string;
+    provider: string;
+    model: string;
+  };
   await chat.setModel(id, provider, model);
   return true;
 });
@@ -215,7 +221,9 @@ win.bind("scopeConfigResolve", async (arg) => {
 
 win.bind("pickDirectory", async (arg) => {
   const { startDir } = arg as { startDir?: string };
-  const start = startDir && startDir.trim() !== "" ? startDir : await moduleDir();
+  const start = startDir && startDir.trim() !== ""
+    ? startDir
+    : await moduleDir();
   const path = await dialog.pickDirectory(start);
   return path ? { path } : null;
 });
@@ -247,13 +255,21 @@ win.bind("removeEntry", async (arg) => {
 });
 
 win.bind("gitDiff", async (arg) => {
-  const { cwd: override, staged, path } = arg as { cwd?: string; staged?: boolean; path?: string };
-  return { diff: await git.gitDiff(await moduleDir(override), staged ?? false, path) };
+  const { cwd: override, staged, path } = arg as {
+    cwd?: string;
+    staged?: boolean;
+    path?: string;
+  };
+  return {
+    diff: await git.gitDiff(await moduleDir(override), staged ?? false, path),
+  };
 });
 
 win.bind("gitChanges", async (arg) => {
   const { path } = arg as { path?: string };
-  const depth = settings.resolveGitScanDepth(await settings.readJson("settings"));
+  const depth = settings.resolveGitScanDepth(
+    await settings.readJson("settings"),
+  );
   return { changes: await git.changedPaths(await moduleDir(path), depth) };
 });
 
@@ -281,7 +297,11 @@ win.bind("kanbanAddStatus", async (arg) => {
 });
 
 win.bind("kanbanRenameStatus", async (arg) => {
-  const { scope, statusId, name } = arg as { scope: string; statusId: string; name: string };
+  const { scope, statusId, name } = arg as {
+    scope: string;
+    statusId: string;
+    name: string;
+  };
   (await kanban.board(scope)).renameStatus({ statusId, name });
   return true;
 });
@@ -331,7 +351,11 @@ win.bind("kanbanDeleteCard", async (arg) => {
 // Reordering within a column. Unlike kanbanSetStatus this needs no reason: the card
 // stays where it is, only its place in the column changes.
 win.bind("kanbanMoveCard", async (arg) => {
-  const { scope, cardId, position } = arg as { scope: string; cardId: string; position: number };
+  const { scope, cardId, position } = arg as {
+    scope: string;
+    cardId: string;
+    position: number;
+  };
   (await kanban.board(scope)).moveCard({ cardId, position });
   return true;
 });
@@ -343,7 +367,12 @@ win.bind("kanbanSetStatus", async (arg) => {
     statusId: string;
     reason: string;
   };
-  (await kanban.board(scope)).setStatus({ cardId, statusId, reason, actor: "human" });
+  (await kanban.board(scope)).setStatus({
+    cardId,
+    statusId,
+    reason,
+    actor: "human",
+  });
   return true;
 });
 
@@ -447,38 +476,6 @@ win.bind("extensionsSearch", async (arg) => {
   return await extensions.searchExtensions(query);
 });
 
-// Profiles — a named base prompt plus a tool allowlist, per scope. Agents can only write
-// into their scope's quarantine dir (profiles/agent-tools.ts); approving is what makes a
-// profile selectable, so it goes through here. profilesList returns the scope's own
-// profiles; profilesVisible is what a Chat module there can select (its own plus root's).
-win.bind("profilesList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await profiles.listProfiles(scope);
-});
-
-win.bind("profilesVisible", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await profiles.listVisibleProfiles(scope);
-});
-
-win.bind("profilesApprove", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await profiles.approveProfile(scope, name);
-  return true;
-});
-
-win.bind("profilesReject", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await profiles.rejectProfile(scope, name);
-  return true;
-});
-
-win.bind("profilesRevoke", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await profiles.revokeProfile(scope, name);
-  return true;
-});
-
 // Prompt templates — reusable messages invoked as `/name` in a Chat module, per scope.
 // A human editing one here writes straight to live; agents can only write into the
 // scope's quarantine dir (prompts/agent-tools.ts), so promptsApprove is what makes an
@@ -514,7 +511,11 @@ win.bind("promptsReject", async (arg) => {
 });
 
 win.bind("promptsDelete", async (arg) => {
-  const { scope, name, state } = arg as { scope: string; name: string; state: "live" | "pending" };
+  const { scope, name, state } = arg as {
+    scope: string;
+    name: string;
+    state: "live" | "pending";
+  };
   await prompts.deletePrompt(scope, name, state);
   return true;
 });
@@ -535,7 +536,6 @@ fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 extensions = await import("./lib/extensions/service.ts");
-profiles = await import("./lib/profiles/service.ts");
 prompts = await import("./lib/prompts/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into

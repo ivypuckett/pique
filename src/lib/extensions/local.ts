@@ -3,11 +3,21 @@
 // runs, in pending/ it cannot — so there is no flag that could disagree with what pi
 // loads. agent-tools.ts is the agent half and can only ever write into pending/.
 // Runs Deno-side only.
-import { ensureExtensionDirs, liveDir, livePath, pendingDir, pendingPath } from "./paths.ts";
+import {
+  ensureExtensionDirs,
+  liveDir,
+  livePath,
+  pendingDir,
+  pendingPath,
+} from "./paths.ts";
 import { chain, type ScopeId } from "../scope/paths.ts";
 
 export type LocalState = "pending" | "enabled";
-export type LocalExtension = { name: string; state: LocalState; scope: ScopeId };
+export type LocalExtension = {
+  name: string;
+  state: LocalState;
+  scope: ScopeId;
+};
 
 // Local module names are the `*.ts` basenames in a dir. A missing dir means "none yet"
 // (nothing has been defined in this scope), not an error. `*.json` files in pending/
@@ -16,7 +26,9 @@ async function namesIn(dir: string): Promise<string[]> {
   const names: string[] = [];
   try {
     for await (const entry of Deno.readDir(dir)) {
-      if (entry.isFile && entry.name.endsWith(".ts")) names.push(entry.name.slice(0, -3));
+      if (entry.isFile && entry.name.endsWith(".ts")) {
+        names.push(entry.name.slice(0, -3));
+      }
     }
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) return [];
@@ -33,14 +45,24 @@ export async function listLocal(scope: ScopeId): Promise<LocalExtension[]> {
     namesIn(liveDir(scope)),
   ]);
   return [
-    ...pending.map((name): LocalExtension => ({ name, state: "pending", scope })),
-    ...enabled.map((name): LocalExtension => ({ name, state: "enabled", scope })),
+    ...pending.map((name): LocalExtension => ({
+      name,
+      state: "pending",
+      scope,
+    })),
+    ...enabled.map((name): LocalExtension => ({
+      name,
+      state: "enabled",
+      scope,
+    })),
   ];
 }
 
 // Every local extension an agent in `scope` can reach: its own, plus each ancestor's.
 // Ordered root-first so the UI shows inherited ones above local ones.
-export async function listVisibleLocal(scope: ScopeId): Promise<LocalExtension[]> {
+export async function listVisibleLocal(
+  scope: ScopeId,
+): Promise<LocalExtension[]> {
   const out: LocalExtension[] = [];
   for (const s of chain(scope)) out.push(...await listLocal(s));
   return out;
@@ -51,7 +73,9 @@ export async function listVisibleLocal(scope: ScopeId): Promise<LocalExtension[]
 // a dir yields "Cannot find module" and the tools silently don't load), so this globs
 // the files. A scope's OWN extensions are not listed — pi auto-discovers those from
 // its agentDir. Packages are NOT inherited; see docs/extensions.md.
-export async function inheritedExtensionFiles(scope: ScopeId): Promise<string[]> {
+export async function inheritedExtensionFiles(
+  scope: ScopeId,
+): Promise<string[]> {
   const ancestors = chain(scope).filter((s) => s !== scope);
   const files: string[] = [];
   for (const s of ancestors) {
@@ -95,5 +119,7 @@ export async function removeLocal(
   name: string,
   state: LocalState,
 ): Promise<void> {
-  await Deno.remove(state === "pending" ? pendingPath(scope, name) : livePath(scope, name));
+  await Deno.remove(
+    state === "pending" ? pendingPath(scope, name) : livePath(scope, name),
+  );
 }

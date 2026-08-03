@@ -53,6 +53,8 @@ interface DialogBindings {
 // bindings) and on cancel — callers keep the current value in both cases.
 export async function pickDirectory(startDir?: string): Promise<string | null> {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
-  const res = await (b as DialogBindings | undefined)?.pickDirectory({ startDir });
+  const res = await (b as DialogBindings | undefined)?.pickDirectory({
+    startDir,
+  });
   return res?.path ?? null;
 }

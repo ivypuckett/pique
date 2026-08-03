@@ -11,8 +11,20 @@ const PRE_ROOT_LAYOUT = {
     views: [{
       id: "view-1",
       explorer: { hidden: false, widthPct: 50 },
-      center: { rows: [], activeTabId: "", collapsed: false, widthPct: 60, savedWidthPct: 60 },
-      right: { rows: [], activeTabId: "", collapsed: false, widthPct: 40, savedWidthPct: 40 },
+      center: {
+        rows: [],
+        activeTabId: "",
+        collapsed: false,
+        widthPct: 60,
+        savedWidthPct: 60,
+      },
+      right: {
+        rows: [],
+        activeTabId: "",
+        collapsed: false,
+        widthPct: 40,
+        savedWidthPct: 40,
+      },
     }],
   }],
   activeId: "ws-1",
@@ -20,10 +32,13 @@ const PRE_ROOT_LAYOUT = {
 
 // hydrateSession goes through the config bindings, so an in-memory stub is enough to
 // observe exactly what it reads and what it writes back.
-function stubBindings(files: Record<string, unknown>): { writes: Record<string, unknown> } {
+function stubBindings(
+  files: Record<string, unknown>,
+): { writes: Record<string, unknown> } {
   const writes: Record<string, unknown> = {};
   (globalThis as Record<string, unknown>).bindings = {
-    configRead: ({ name }: { name: string }) => Promise.resolve(files[name] ?? null),
+    configRead: ({ name }: { name: string }) =>
+      Promise.resolve(files[name] ?? null),
     configWrite: ({ name, data }: { name: string; data: unknown }) => {
       writes[name] = data;
       return Promise.resolve(true);

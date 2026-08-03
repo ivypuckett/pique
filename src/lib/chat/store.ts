@@ -3,9 +3,15 @@
 // resolve to the same ChatSession here (keyed by workspaceId) and thus show the same
 // transcript, input, model, and streaming state. The backend agent starts on the first
 // pane's retain() and stops when the last one releases (i.e. the workspace closes).
-import { get, writable, type Writable } from "svelte/store";
-import { chatBindings, type ChatEvent, type CommandInfo, type Item, type ModelInfo, type ThinkingLevel } from "./bindings.ts";
-import { profileBindings, type ProfileInfo } from "../profiles/bindings.ts";
+import { get, type Writable, writable } from "svelte/store";
+import {
+  chatBindings,
+  type ChatEvent,
+  type CommandInfo,
+  type Item,
+  type ModelInfo,
+  type ThinkingLevel,
+} from "./bindings.ts";
 import { scopeBindings } from "../scope/bindings.ts";
 import { patchScopeChat } from "../scope/store.ts";
 import { ROOT } from "../scope/paths.ts";
@@ -22,22 +28,21 @@ export interface ChatSession {
   models: Writable<ModelInfo[]>;
   commands: Writable<CommandInfo[]>;
   level: Writable<ThinkingLevel>;
-  // The profile this conversation runs under ("" = none) and the ones it could run
-  // under — its scope's own plus root's.
-  profile: Writable<string>;
-  profiles: Writable<ProfileInfo[]>;
   send(): void;
   stop(): void;
   refreshCommands(): Promise<void>;
   pickModel(value: string): Promise<void>;
   pickLevel(value: ThinkingLevel): void;
-  pickProfile(value: string): void;
   newChat(): void;
   retain(): void;
   release(): void;
 }
 
-function createSession(key: string, cwd: string | undefined, workspaceId: string | undefined): ChatSession {
+function createSession(
+  key: string,
+  cwd: string | undefined,
+  workspaceId: string | undefined,
+): ChatSession {
   const b = chatBindings();
   // The scope this conversation runs in — what its defaults are read from and
   // written back to. A pane with no workspace id falls back to root.
@@ -53,15 +58,9 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
   // object already in memory. The backend applies the same resolved value to the
   // agent itself, so this only keeps the picker's label honest.
   const level = writable<ThinkingLevel>("off");
-  // Same story for the profile: the backend resolves the scope default itself, so this
-  // read only keeps the picker's label honest.
-  const profile = writable("");
-  const profiles = writable<ProfileInfo[]>([]);
   scopeBindings()?.scopeConfigResolve({ scope }).then((c) => {
     const l = c?.chat?.defaultThinkingLevel;
     if (l) level.set(l);
-    const p = c?.chat?.defaultProfile;
-    if (p) profile.set(p);
   });
 
   // The backend agent id, assigned once chatStart resolves.
@@ -79,50 +78,78 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
     if (ev.kind === "text") {
       items.update((xs) => {
         const last = xs[xs.length - 1];
-        if (last?.role === "assistant") return [...xs.slice(0, -1), { ...last, text: last.text + ev.delta }];
+        if (last?.role === "assistant") {
+          return [...xs.slice(0, -1), { ...last, text: last.text + ev.delta }];
+        }
         return [...xs, { role: "assistant", text: ev.delta }];
       });
     } else if (ev.kind === "thinking") {
       items.update((xs) => {
         const last = xs[xs.length - 1];
-        if (last?.role === "thinking") return [...xs.slice(0, -1), { ...last, text: last.text + ev.delta }];
+        if (last?.role === "thinking") {
+          return [...xs.slice(0, -1), { ...last, text: last.text + ev.delta }];
+        }
         return [...xs, { role: "thinking", text: ev.delta }];
       });
     } else if (ev.kind === "tool_start") {
-      items.update((xs) => [...xs, { role: "tool", id: ev.id, name: ev.name, args: ev.args, result: "", isError: false, done: false }]);
+      items.update((
+        xs,
+      ) => [...xs, {
+        role: "tool",
+        id: ev.id,
+        name: ev.name,
+        args: ev.args,
+        result: "",
+        isError: false,
+        done: false,
+      }]);
     } else if (ev.kind === "tool_end") {
       items.update((xs) =>
-        xs.map((i) => (i.role === "tool" && i.id === ev.id ? { ...i, result: ev.result, isError: ev.isError, done: true } : i))
+        xs.map((
+          i,
+        ) => (i.role === "tool" && i.id === ev.id
+          ? { ...i, result: ev.result, isError: ev.isError, done: true }
+          : i)
+        )
       );
     } else if (ev.kind === "done" || ev.kind === "error") {
       streaming.set(false);
-      if (ev.kind === "error") items.update((xs) => [...xs, { role: "assistant", text: `⚠️ ${ev.message}` }]);
+      if (ev.kind === "error") {
+        items.update((
+          xs,
+        ) => [...xs, { role: "assistant", text: `⚠️ ${ev.message}` }]);
+      }
     }
   }
 
-  // `profileName` is undefined on the first start (let the backend apply the scope
-  // default) and an explicit name — possibly "" — on a restart. `fresh` asks the backend
-  // to begin a new conversation rather than resume the scope's saved one.
-  function start(profileName?: string, fresh?: boolean) {
+  // `fresh` asks the backend to begin a new conversation rather than resume the scope's
+  // saved one.
+  function start(fresh?: boolean) {
     if (!b) {
-      items.set([{ role: "assistant", text: "Chat unavailable — run the desktop app (bindings are absent in a browser tab)." }]);
+      items.set([{
+        role: "assistant",
+        text:
+          "Chat unavailable — run the desktop app (bindings are absent in a browser tab).",
+      }]);
       return;
     }
     alive = true;
     const gen = ++generation;
     const current = () => alive && gen === generation;
     (async () => {
-      const started = await b.chatStart({ cwd, scope: workspaceId, profile: profileName, fresh });
+      const started = await b.chatStart({ cwd, scope: workspaceId, fresh });
       // What the resumed conversation already holds, read before the id is published so
       // a start that loses the race cannot paint its transcript over the winner's.
       const history = await b.chatHistory({ id: started.id });
       // Torn down or restarted while starting: stop this agent and bail without
       // publishing its id, so the newer start owns the session.
-      if (!current()) { b.chatStop({ id: started.id }).catch(() => {}); return; }
+      if (!current()) {
+        b.chatStop({ id: started.id }).catch(() => {});
+        return;
+      }
       id = started.id;
       items.set(history);
       ready.set(true);
-      profiles.set(await profileBindings()?.profilesVisible({ scope }) ?? []);
       models.set(await b.chatListModels({ id }));
       commands.set(await b.chatListCommands({ id }));
       while (current()) {
@@ -133,18 +160,17 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
     })();
   }
 
-  // Stop the live agent and start another on a new conversation. Neither the system
-  // prompt nor the session file can be swapped on a running pi session, so both callers
-  // — switching profile and starting a new chat — have to go through a restart, and both
-  // want a new conversation rather than the saved one resumed.
-  function restart(profileName: string) {
+  // Stop the live agent and start another on a new conversation. The session file cannot
+  // be swapped on a running pi session, so starting a new chat has to go through a
+  // restart, and wants a new conversation rather than the saved one resumed.
+  function restart() {
     if (id) b?.chatStop({ id }).catch(() => {});
     id = undefined;
     alive = false;
     items.set([]);
     streaming.set(false);
     ready.set(false);
-    start(profileName, true);
+    start(true);
   }
 
   return {
@@ -155,8 +181,6 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
     models,
     commands,
     level,
-    profile,
-    profiles,
     send() {
       const text = get(input).trim();
       if (!b || !get(ready) || !id || get(streaming) || !text) return;
@@ -183,7 +207,10 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
         // The pick becomes THIS scope's default, not the app's — a workspace that
         // picks a model stops inheriting root's, and every other workspace is
         // unaffected.
-        patchScopeChat(scope, { defaultProvider: m.provider, defaultModel: m.id });
+        patchScopeChat(scope, {
+          defaultProvider: m.provider,
+          defaultModel: m.id,
+        });
         models.set(await b.chatListModels({ id }));
       }
     },
@@ -192,19 +219,10 @@ function createSession(key: string, cwd: string | undefined, workspaceId: string
       if (id) b?.chatSetThinking({ id, level: value });
       patchScopeChat(scope, { defaultThinkingLevel: value });
     },
-    // A profile cannot be applied to a live agent — pi fixes the system prompt at session
-    // creation — so this restarts, which is why the transcript goes with it. The pick
-    // becomes the scope's default, as pickModel's does.
-    pickProfile(value: string) {
-      if (value === get(profile)) return;
-      profile.set(value);
-      patchScopeChat(scope, { defaultProfile: value });
-      restart(value);
-    },
-    // Put the saved conversation behind us and begin another under the same profile. The
-    // old session file stays on disk; it is simply no longer the most recent one.
+    // Put the saved conversation behind us and begin another. The old session file stays
+    // on disk; it is simply no longer the most recent one.
     newChat() {
-      restart(get(profile));
+      restart();
     },
     retain() {
       if (refs++ === 0) start();

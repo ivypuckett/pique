@@ -22,10 +22,22 @@
 // Deno 2.9.4 (docs/extensions.md Known broken #5) — see docs/scopes.md Deferred #1.
 
 import { resolve } from "node:path";
-import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import {
+  DefaultPackageManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
-import { ensureScopeDirs, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
-import { ensureExtensionDirs, packageSource, pendingDir, pendingPackagePath } from "./paths.ts";
+import {
+  ensureScopeDirs,
+  scopeAgentDir,
+  type ScopeId,
+} from "../scope/paths.ts";
+import {
+  ensureExtensionDirs,
+  packageSource,
+  pendingDir,
+  pendingPackagePath,
+} from "./paths.ts";
 
 // JSON-safe projection of pi's ConfiguredPackage that crosses the win.bind boundary.
 export type ExtInfo = { source: string; scope: string; path?: string };
@@ -34,7 +46,11 @@ export type ExtInfo = { source: string; scope: string; path?: string };
 // filename is only its encoding — because pi rewrites some sources on the way into
 // settings.json (a local path becomes relative to agentDir), so the string we install
 // with is not always the string we read back.
-export type PendingPackage = { source: string; installedPath?: string; requestedAt: string };
+export type PendingPackage = {
+  source: string;
+  installedPath?: string;
+  requestedAt: string;
+};
 
 // A browse hit from the npm registry (pi.dev/packages is just an index over npm).
 // `source` is install-ready ("npm:<name>") so it feeds the existing install path.
@@ -62,7 +78,9 @@ export function isValidSource(source: string): boolean {
 // and constrain to that keyword, ANDed with the user's free-text query.
 export function npmSearchUrl(query: string): string {
   const text = `keywords:pi-package ${query.trim()}`.trim();
-  return `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(text)}&size=25`;
+  return `https://registry.npmjs.org/-/v1/search?text=${
+    encodeURIComponent(text)
+  }&size=25`;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -72,7 +90,9 @@ export function toSearchResult(obj: any): ExtSearchResult {
     source: `npm:${pkg.name}`,
     name: String(pkg.name ?? ""),
     description: String(pkg.description ?? ""),
-    author: String(pkg.publisher?.username ?? pkg.maintainers?.[0]?.username ?? ""),
+    author: String(
+      pkg.publisher?.username ?? pkg.maintainers?.[0]?.username ?? "",
+    ),
     downloads: Number(obj?.downloads?.monthly ?? 0),
     npm: typeof pkg.links?.npm === "string" ? pkg.links.npm : undefined,
   };
@@ -136,20 +156,28 @@ export async function listEnabledPackages(scope: ScopeId): Promise<ExtInfo[]> {
 // Pending = a `<slug>.json` in the scope's pending dir. A missing dir means none yet.
 // A file that does not parse is skipped rather than raising: the dir is user-visible,
 // and one bad file must not blank the whole list.
-export async function listPendingPackages(scope: ScopeId): Promise<PendingPackage[]> {
+export async function listPendingPackages(
+  scope: ScopeId,
+): Promise<PendingPackage[]> {
   const out: PendingPackage[] = [];
   try {
     for await (const entry of Deno.readDir(pendingDir(scope))) {
       if (!entry.isFile || !entry.name.endsWith(".json")) continue;
       try {
-        const rec = JSON.parse(await Deno.readTextFile(`${pendingDir(scope)}/${entry.name}`));
+        const rec = JSON.parse(
+          await Deno.readTextFile(`${pendingDir(scope)}/${entry.name}`),
+        );
         out.push({
           // Fall back to the filename's own encoding if the record lost its source.
           source: typeof rec?.source === "string"
             ? rec.source
             : packageSource(entry.name.slice(0, -5)),
-          installedPath: typeof rec?.installedPath === "string" ? rec.installedPath : undefined,
-          requestedAt: typeof rec?.requestedAt === "string" ? rec.requestedAt : "",
+          installedPath: typeof rec?.installedPath === "string"
+            ? rec.installedPath
+            : undefined,
+          requestedAt: typeof rec?.requestedAt === "string"
+            ? rec.requestedAt
+            : "",
         });
       } catch {
         continue;
@@ -165,7 +193,10 @@ export async function listPendingPackages(scope: ScopeId): Promise<PendingPackag
 // Fetch the bytes and quarantine them. install() downloads without registering the
 // source, so this deliberately does NOT reach the loading set — review happens against
 // code on disk rather than against a string the user typed.
-export async function fetchPackage(scope: ScopeId, source: string): Promise<void> {
+export async function fetchPackage(
+  scope: ScopeId,
+  source: string,
+): Promise<void> {
   const s = source.trim();
   if (!isValidSource(s)) throw new Error(`invalid extension source: ${source}`);
   const pm = await manager(scope);
@@ -176,7 +207,10 @@ export async function fetchPackage(scope: ScopeId, source: string): Promise<void
     installedPath: pm.getInstalledPath(s, "user"),
     requestedAt: new Date().toISOString(),
   };
-  await Deno.writeTextFile(pendingPackagePath(scope, s), JSON.stringify(rec, null, 2));
+  await Deno.writeTextFile(
+    pendingPackagePath(scope, s),
+    JSON.stringify(rec, null, 2),
+  );
 }
 
 // The files pi would execute for this source — what the reviewer actually reads.
@@ -187,7 +221,9 @@ export async function resolvePackageFiles(
   scope: ScopeId,
   source: string,
 ): Promise<{ extensions: string[]; skills: string[] }> {
-  const resolved = await (await manager(scope)).resolveExtensionSources([source]);
+  const resolved = await (await manager(scope)).resolveExtensionSources([
+    source,
+  ]);
   // deno-lint-ignore no-explicit-any
   const paths = (list: any[]) => list.map((r) => String(r.path));
   return {
@@ -199,7 +235,10 @@ export async function resolvePackageFiles(
 // Enable = add to settings.json, then drop the quarantine record. The pending file is
 // removed by the slug of the source WE hold, never by matching what came back from
 // settings — pi normalizes some sources on the way in, so a match could miss.
-export async function enablePackage(scope: ScopeId, source: string): Promise<void> {
+export async function enablePackage(
+  scope: ScopeId,
+  source: string,
+): Promise<void> {
   const pm = await manager(scope);
   pm.addSourceToSettings(source);
   await Deno.remove(pendingPackagePath(scope, source)).catch(() => {});
@@ -211,17 +250,30 @@ export async function enablePackage(scope: ScopeId, source: string): Promise<voi
 // normalized form ("../pkg", relative to agentDir). Verified 2026-08-03 that the
 // normalized form round-trips: removeSourceFromSettings, resolveExtensionSources and
 // addSourceToSettings all accept it, so a revoked package re-enables cleanly.
-export async function revokePackage(scope: ScopeId, source: string): Promise<void> {
+export async function revokePackage(
+  scope: ScopeId,
+  source: string,
+): Promise<void> {
   const pm = await manager(scope);
   const installedPath = pm.getInstalledPath(source, "user");
   pm.removeSourceFromSettings(source);
   await ensureExtensionDirs(scope);
-  const rec: PendingPackage = { source, installedPath, requestedAt: new Date().toISOString() };
-  await Deno.writeTextFile(pendingPackagePath(scope, source), JSON.stringify(rec, null, 2));
+  const rec: PendingPackage = {
+    source,
+    installedPath,
+    requestedAt: new Date().toISOString(),
+  };
+  await Deno.writeTextFile(
+    pendingPackagePath(scope, source),
+    JSON.stringify(rec, null, 2),
+  );
 }
 
 // Delete the bytes and every record of the package, from whichever state it is in.
-export async function removePackage(scope: ScopeId, source: string): Promise<void> {
+export async function removePackage(
+  scope: ScopeId,
+  source: string,
+): Promise<void> {
   const pm = await manager(scope);
   pm.removeSourceFromSettings(source);
   await pm.remove(source);
@@ -230,7 +282,9 @@ export async function removePackage(scope: ScopeId, source: string): Promise<voi
 
 // Browse pi packages via npm's public registry search. Networked; the caller
 // (Settings UI) surfaces failures and falls back to the manual source input.
-export async function searchExtensions(query: string): Promise<ExtSearchResult[]> {
+export async function searchExtensions(
+  query: string,
+): Promise<ExtSearchResult[]> {
   const res = await fetch(npmSearchUrl(query));
   if (!res.ok) throw new Error(`npm search failed: ${res.status}`);
   const data = await res.json();

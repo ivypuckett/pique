@@ -8,7 +8,13 @@ import {
   removeLocal,
   revokeLocal,
 } from "./local.ts";
-import { ensureExtensionDirs, liveDir, livePath, pendingDir, pendingPath } from "./paths.ts";
+import {
+  ensureExtensionDirs,
+  liveDir,
+  livePath,
+  pendingDir,
+  pendingPath,
+} from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 // Point HOME at a throwaway dir so the service reads/writes under a temp tree,
@@ -25,7 +31,11 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-async function seedPending(scope: ScopeId, name: string, source: string): Promise<void> {
+async function seedPending(
+  scope: ScopeId,
+  name: string,
+  source: string,
+): Promise<void> {
   await ensureExtensionDirs(scope);
   await Deno.writeTextFile(pendingPath(scope, name), source);
 }
@@ -70,13 +80,19 @@ Deno.test("an extension enabled in root is visible from every workspace", async 
     await enableLocal(ROOT, "shared");
 
     // Root's own list is unchanged by what workspaces hold.
-    assertEquals(await listLocal(ROOT), [{ name: "shared", state: "enabled", scope: ROOT }]);
+    assertEquals(await listLocal(ROOT), [{
+      name: "shared",
+      state: "enabled",
+      scope: ROOT,
+    }]);
     // The workspace owns nothing, but sees root's.
     assertEquals(await listLocal("ws-1"), []);
     assertEquals(await listVisibleLocal("ws-1"), [
       { name: "shared", state: "enabled", scope: ROOT },
     ]);
-    assertEquals(await inheritedExtensionFiles("ws-1"), [livePath(ROOT, "shared")]);
+    assertEquals(await inheritedExtensionFiles("ws-1"), [
+      livePath(ROOT, "shared"),
+    ]);
   });
 });
 
@@ -118,7 +134,11 @@ Deno.test("re-enabling a redefinition supersedes the live copy", async () => {
     await seedPending("ws-1", "my_ext", "// v2");
     await enableLocal("ws-1", "my_ext");
 
-    assertEquals(await listLocal("ws-1"), [{ name: "my_ext", state: "enabled", scope: "ws-1" }]);
+    assertEquals(await listLocal("ws-1"), [{
+      name: "my_ext",
+      state: "enabled",
+      scope: "ws-1",
+    }]);
     assertEquals(await readLocalSource("ws-1", "my_ext", "enabled"), "// v2");
   });
 });
@@ -130,8 +150,14 @@ Deno.test("the same name can be defined independently in two scopes", async () =
     await seedPending("ws-1", "dup", "// workspace version");
     await enableLocal("ws-1", "dup");
 
-    assertEquals(await readLocalSource(ROOT, "dup", "enabled"), "// root version");
-    assertEquals(await readLocalSource("ws-1", "dup", "enabled"), "// workspace version");
+    assertEquals(
+      await readLocalSource(ROOT, "dup", "enabled"),
+      "// root version",
+    );
+    assertEquals(
+      await readLocalSource("ws-1", "dup", "enabled"),
+      "// workspace version",
+    );
   });
 });
 
@@ -143,9 +169,16 @@ Deno.test("revoke returns an enabled extension to quarantine, keeping its source
     await enableLocal("ws-1", "live_one");
     await revokeLocal("ws-1", "live_one");
 
-    assertEquals(await listLocal("ws-1"), [{ name: "live_one", state: "pending", scope: "ws-1" }]);
+    assertEquals(await listLocal("ws-1"), [{
+      name: "live_one",
+      state: "pending",
+      scope: "ws-1",
+    }]);
     assertEquals([...Deno.readDirSync(liveDir("ws-1"))].length, 0);
-    assertEquals(await readLocalSource("ws-1", "live_one", "pending"), "// src");
+    assertEquals(
+      await readLocalSource("ws-1", "live_one", "pending"),
+      "// src",
+    );
   });
 });
 
@@ -185,7 +218,11 @@ Deno.test("a pending package's json is not mistaken for a local extension", asyn
 
 Deno.test("service refuses names and scopes that would escape the extension dirs", async () => {
   await withTempHome(async () => {
-    await assertRejects(() => enableLocal("ws-1", "../evil"), Error, "invalid extension name");
+    await assertRejects(
+      () => enableLocal("ws-1", "../evil"),
+      Error,
+      "invalid extension name",
+    );
     await assertRejects(
       () => readLocalSource("ws-1", "a/b", "pending"),
       Error,

@@ -4,15 +4,14 @@
 //   agent/prompts/          LIVE. pi discovers these itself.
 //   agent/prompts/pending/  QUARANTINE. Agent-authored; nothing here is ever invocable.
 //
-// Deliberately INSIDE the scope's agent/ dir, which is the opposite of where profiles
-// live (profiles/paths.ts) and for the same reason: pi auto-discovers <agentDir>/prompts,
-// and here that discovery is exactly what we want. The quarantine dir is safe to nest
-// under it because pi's directory scan does not recurse — verified against the SDK, and
-// pinned by a test in service_test.ts.
+// Deliberately INSIDE the scope's agent/ dir, because pi auto-discovers
+// <agentDir>/prompts and here that discovery is exactly what we want. The quarantine dir
+// is safe to nest under it because pi's directory scan does not recurse — verified
+// against the SDK, and pinned by a test in service_test.ts.
 import { scopeAgentDir, type ScopeId } from "../scope/paths.ts";
 
 // A template name is a filename AND the token typed after `/`, so it is constrained the
-// same way a profile name is: no separators, no traversal.
+// same way a scope id is: no separators, no traversal.
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export function promptsDir(scope: ScopeId): string {

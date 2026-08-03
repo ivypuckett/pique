@@ -4,7 +4,9 @@ import { readScopeConfig } from "./config.ts";
 import { ROOT, scopeAgentDir, scopeBoardPath, scopesDir } from "./paths.ts";
 import { readJson } from "../settings/file.ts";
 
-async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
+async function withTempHome(
+  fn: (home: string) => Promise<void>,
+): Promise<void> {
   const prev = Deno.env.get("HOME");
   const dir = await Deno.makeTempDir();
   Deno.env.set("HOME", dir);
@@ -30,8 +32,14 @@ async function exists(path: string): Promise<boolean> {
 async function seedOldLayout(home: string): Promise<void> {
   await Deno.mkdir(`${home}/.pique/agent/extensions`, { recursive: true });
   await Deno.mkdir(`${home}/.pique/boards`, { recursive: true });
-  await Deno.writeTextFile(`${home}/.pique/agent/extensions/old_tool.ts`, "// tool");
-  await Deno.writeTextFile(`${home}/.pique/agent/settings.json`, `{"packages":[]}`);
+  await Deno.writeTextFile(
+    `${home}/.pique/agent/extensions/old_tool.ts`,
+    "// tool",
+  );
+  await Deno.writeTextFile(
+    `${home}/.pique/agent/settings.json`,
+    `{"packages":[]}`,
+  );
   await Deno.writeTextFile(`${home}/.pique/boards/ws-1.db`, "db1");
   await Deno.writeTextFile(`${home}/.pique/boards/ws-1.db-wal`, "wal1");
   await Deno.writeTextFile(`${home}/.pique/boards/ws-3.db`, "db3");
@@ -52,7 +60,10 @@ Deno.test("migration moves the global agent dir to root's scope", async () => {
     await seedOldLayout(home);
     await migrateToScopes();
 
-    assertEquals(await exists(`${scopeAgentDir(ROOT)}/extensions/old_tool.ts`), true);
+    assertEquals(
+      await exists(`${scopeAgentDir(ROOT)}/extensions/old_tool.ts`),
+      true,
+    );
     assertEquals(await exists(`${scopeAgentDir(ROOT)}/settings.json`), true);
     assertEquals(await exists(`${home}/.pique/agent`), false);
   });
@@ -66,7 +77,10 @@ Deno.test("migration keeps each board with the workspace it belonged to", async 
     assertEquals(await Deno.readTextFile(scopeBoardPath("ws-1")), "db1");
     assertEquals(await Deno.readTextFile(scopeBoardPath("ws-3")), "db3");
     // SQLite siblings travel with the db, or the board opens empty.
-    assertEquals(await Deno.readTextFile(`${scopeBoardPath("ws-1")}-wal`), "wal1");
+    assertEquals(
+      await Deno.readTextFile(`${scopeBoardPath("ws-1")}-wal`),
+      "wal1",
+    );
     assertEquals(await exists(`${home}/.pique/boards`), false);
   });
 });

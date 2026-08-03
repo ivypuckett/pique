@@ -10,9 +10,16 @@ import { assertEquals } from "@std/assert";
 import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
 import { inheritedPromptDirs, savePrompt } from "./service.ts";
 import { ensurePromptDirs, pendingPromptPath } from "./paths.ts";
-import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir } from "../scope/paths.ts";
+import {
+  ensureScopeDirs,
+  ROOT,
+  scopeAgentDir,
+  type ScopeId,
+} from "../scope/paths.ts";
 
-async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
+async function withTempHome(
+  fn: (home: string) => Promise<void>,
+): Promise<void> {
   const prev = Deno.env.get("HOME");
   const dir = await Deno.makeTempDir();
   Deno.env.set("HOME", dir);
@@ -67,9 +74,18 @@ Deno.test("a quarantined template is invisible to pi", async () => {
 
 Deno.test("root's templates reach a workspace, and the workspace's own shadow them", async () => {
   await withTempHome(async (home) => {
-    await savePrompt(ROOT, "shared", { description: "root's only", body: "root body" });
-    await savePrompt(ROOT, "review", { description: "root's review", body: "root body" });
-    await savePrompt("ws-1", "review", { description: "the workspace's", body: "local body" });
+    await savePrompt(ROOT, "shared", {
+      description: "root's only",
+      body: "root body",
+    });
+    await savePrompt(ROOT, "review", {
+      description: "root's review",
+      body: "root body",
+    });
+    await savePrompt("ws-1", "review", {
+      description: "the workspace's",
+      body: "local body",
+    });
 
     const loaded = await loadFor("ws-1", home);
     // pi's loader collapses a name collision itself, first path wins — so the `/` menu
@@ -77,7 +93,10 @@ Deno.test("root's templates reach a workspace, and the workspace's own shadow th
     // wins: that follows from the load order chat/agent.ts sets up (the scope's own
     // agentDir first, ancestors' dirs after), and the workspace's has to be the survivor.
     assertEquals(loaded.map((t) => t.name).sort(), ["review", "shared"]);
-    assertEquals(loaded.find((t) => t.name === "review").description, "the workspace's");
+    assertEquals(
+      loaded.find((t) => t.name === "review").description,
+      "the workspace's",
+    );
   });
 });
 

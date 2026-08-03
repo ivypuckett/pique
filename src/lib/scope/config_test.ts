@@ -1,5 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { mergeConfig, readScopeConfig, resolveScopeConfig, writeScopeConfig } from "./config.ts";
+import {
+  mergeConfig,
+  readScopeConfig,
+  resolveScopeConfig,
+  writeScopeConfig,
+} from "./config.ts";
 import { ROOT, scopeConfigPath } from "./paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -26,9 +31,12 @@ Deno.test("mergeConfig layers plain objects key by key", () => {
 
 Deno.test("mergeConfig replaces arrays and scalars outright", () => {
   assertEquals(
-    mergeConfig({ kanban: { defaultStatuses: [{ name: "A" }, { name: "B" }] } }, {
-      kanban: { defaultStatuses: [{ name: "C" }] },
-    }),
+    mergeConfig(
+      { kanban: { defaultStatuses: [{ name: "A" }, { name: "B" }] } },
+      {
+        kanban: { defaultStatuses: [{ name: "C" }] },
+      },
+    ),
     // A scope's status list is its own list, not root's with extras appended.
     { kanban: { defaultStatuses: [{ name: "C" }] } },
   );
@@ -44,7 +52,9 @@ Deno.test("mergeConfig treats a null override as no override", () => {
 Deno.test("a scope with no config of its own resolves to root's", async () => {
   await withTempHome(async () => {
     await writeScopeConfig(ROOT, { chat: { defaultModel: "root-model" } });
-    assertEquals(await resolveScopeConfig("ws-1"), { chat: { defaultModel: "root-model" } });
+    assertEquals(await resolveScopeConfig("ws-1"), {
+      chat: { defaultModel: "root-model" },
+    });
     // Its OWN config is still empty — inheritance is resolution, not copying.
     assertEquals(await readScopeConfig("ws-1"), null);
   });
@@ -81,6 +91,8 @@ Deno.test("a corrupt config file reads as null rather than throwing", async () =
     await writeScopeConfig("ws-1", {}); // creates the dir, then corrupt the file
     await Deno.writeTextFile(scopeConfigPath("ws-1"), "{{{");
     // The workspace's own file is unreadable, so it falls back to inheriting.
-    assertEquals(await resolveScopeConfig("ws-1"), { chat: { defaultModel: "root-model" } });
+    assertEquals(await resolveScopeConfig("ws-1"), {
+      chat: { defaultModel: "root-model" },
+    });
   });
 });

@@ -6,7 +6,7 @@
 // separate "current scope" would write the outgoing scope's values into the incoming
 // scope on every switch.
 import { get, writable } from "svelte/store";
-import { type ScopeConfig, scopeBindings } from "./bindings.ts";
+import { scopeBindings, type ScopeConfig } from "./bindings.ts";
 import { ROOT } from "./paths.ts";
 
 // The loaded config together with the scope it was read from. `loaded` stays false
@@ -17,7 +17,11 @@ interface Editing {
   loaded: boolean;
 }
 
-export const editing = writable<Editing>({ scope: ROOT, config: {}, loaded: false });
+export const editing = writable<Editing>({
+  scope: ROOT,
+  config: {},
+  loaded: false,
+});
 
 // Point the modal at a scope and read that scope's own config. Always marks the
 // store unloaded first, so an in-flight switch can never persist to the old scope.
@@ -26,7 +30,9 @@ export async function editScope(scope: string): Promise<void> {
   const raw = await scopeBindings()?.scopeConfigRead({ scope });
   // A later switch may have landed while this read was in flight — drop the result
   // if it is no longer the scope being edited.
-  editing.update((e) => e.scope !== scope ? e : { scope, config: raw ?? {}, loaded: true });
+  editing.update((e) =>
+    e.scope !== scope ? e : { scope, config: raw ?? {}, loaded: true }
+  );
 }
 
 // Apply an edit to the scope currently being edited and persist it. Explicit rather

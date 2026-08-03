@@ -23,7 +23,10 @@ Deno.test("a scope owns one directory holding its agent dir, config and board", 
   withHome("/home/x", () => {
     assertEquals(scopeDir("ws-1"), "/home/x/.pique/scopes/ws-1");
     assertEquals(scopeAgentDir("ws-1"), "/home/x/.pique/scopes/ws-1/agent");
-    assertEquals(scopeConfigPath("ws-1"), "/home/x/.pique/scopes/ws-1/config.json");
+    assertEquals(
+      scopeConfigPath("ws-1"),
+      "/home/x/.pique/scopes/ws-1/config.json",
+    );
     assertEquals(scopeBoardPath("ws-1"), "/home/x/.pique/scopes/ws-1/board.db");
     assertEquals(scopeAgentDir(ROOT), "/home/x/.pique/scopes/root/agent");
   });
@@ -41,7 +44,18 @@ Deno.test("the chain orders ancestors first so the nearest scope wins", () => {
 });
 
 Deno.test("scope ids cannot escape the scopes directory", () => {
-  for (const bad of ["../evil", "a/b", "/abs", "", ".", "Upper", "-lead", "under_score"]) {
+  for (
+    const bad of [
+      "../evil",
+      "a/b",
+      "/abs",
+      "",
+      ".",
+      "Upper",
+      "-lead",
+      "under_score",
+    ]
+  ) {
     assertThrows(() => assertScopeId(bad), Error, "invalid scope id");
     assertThrows(() => chain(bad), Error, "invalid scope id");
   }

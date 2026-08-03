@@ -1,10 +1,10 @@
 // Backend service for prompt templates: lists a scope's templates, saves and deletes
 // them, and moves agent-written ones from quarantine to live. The prompts* win.bind
 // handlers (desktop.ts) are the human half; agent-tools.ts is the agent half and can
-// only ever write into pending. Shaped on profiles/service.ts, with one deliberate
-// difference: a human editing a template writes straight to live. A template is inert
-// text that only runs when the user types its name, so there is nothing for a human to
-// approve to themselves — the quarantine exists for the agent alone (docs/prompts.md).
+// only ever write into pending. A human editing a template writes straight to live: a
+// template is inert text that only runs when the user types its name, so there is nothing
+// for a human to approve to themselves — the quarantine exists for the agent alone
+// (docs/prompts.md).
 // Runs Deno-side only.
 import { parsePrompt, type Prompt, promptFile } from "./parse.ts";
 import {
@@ -44,8 +44,14 @@ async function namesIn(dir: string): Promise<string[]> {
   return names.sort();
 }
 
-async function read(scope: ScopeId, name: string, state: PromptState): Promise<PromptInfo> {
-  const path = state === "live" ? promptPath(scope, name) : pendingPromptPath(scope, name);
+async function read(
+  scope: ScopeId,
+  name: string,
+  state: PromptState,
+): Promise<PromptInfo> {
+  const path = state === "live"
+    ? promptPath(scope, name)
+    : pendingPromptPath(scope, name);
   return { ...parsePrompt(name, await Deno.readTextFile(path)), scope, state };
 }
 
@@ -65,7 +71,9 @@ export async function listPrompts(scope: ScopeId): Promise<PromptInfo[]> {
 // defined in more than one scope appears ONCE, resolved to the nearest. That de-duplication
 // is not cosmetic: pi loads both files and its expander takes the first match, so without
 // this the `/` menu would list a shadowed twin that can never be invoked.
-export async function listVisiblePrompts(scope: ScopeId): Promise<PromptInfo[]> {
+export async function listVisiblePrompts(
+  scope: ScopeId,
+): Promise<PromptInfo[]> {
   const byName = new Map<string, PromptInfo>();
   for (const s of chain(scope)) {
     for (const p of await listPrompts(s)) {
@@ -100,12 +108,18 @@ export async function savePrompt(
 // Approve = move quarantine → live, within the same scope. From here pi loads it for that
 // scope (and, for root, for every workspace). Rename replaces any same-named live file, so
 // approving a redefinition supersedes the old one rather than leaving both.
-export async function approvePrompt(scope: ScopeId, name: string): Promise<void> {
+export async function approvePrompt(
+  scope: ScopeId,
+  name: string,
+): Promise<void> {
   await ensurePromptDirs(scope);
   await Deno.rename(pendingPromptPath(scope, name), promptPath(scope, name));
 }
 
-export async function rejectPrompt(scope: ScopeId, name: string): Promise<void> {
+export async function rejectPrompt(
+  scope: ScopeId,
+  name: string,
+): Promise<void> {
   await Deno.remove(pendingPromptPath(scope, name));
 }
 
@@ -115,5 +129,7 @@ export async function deletePrompt(
   name: string,
   state: PromptState,
 ): Promise<void> {
-  await Deno.remove(state === "live" ? promptPath(scope, name) : pendingPromptPath(scope, name));
+  await Deno.remove(
+    state === "live" ? promptPath(scope, name) : pendingPromptPath(scope, name),
+  );
 }

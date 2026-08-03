@@ -1,44 +1,74 @@
 # Multiple Workspaces Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a session above the existing workspace — N workspaces with auto-numbered titles, one selected, navigated with a `ctrl+j` chord (`j/k/n/w`), listed in a fixed left rail.
+**Goal:** Add a session above the existing workspace — N workspaces with
+auto-numbered titles, one selected, navigated with a `ctrl+j` chord (`j/k/n/w`),
+listed in a fixed left rail.
 
-**Architecture:** Today's `WorkspaceState` is already "an ordered set of views with one active", so it becomes a real workspace by gaining `id` and `title`. A new `session.ts` sits above it as a structural sibling of `workspace.ts` with the same seven pure reducers one level up. Rendering recurses the existing pattern: `Session.svelte` keeps every workspace mounted and shows only the selected one, exactly as `Workspace.svelte` already does for views, so backgrounded terminals stay alive. `layout.ts` is untouched.
+**Architecture:** Today's `WorkspaceState` is already "an ordered set of views
+with one active", so it becomes a real workspace by gaining `id` and `title`. A
+new `session.ts` sits above it as a structural sibling of `workspace.ts` with
+the same seven pure reducers one level up. Rendering recurses the existing
+pattern: `Session.svelte` keeps every workspace mounted and shows only the
+selected one, exactly as `Workspace.svelte` already does for views, so
+backgrounded terminals stay alive. `layout.ts` is untouched.
 
-**Tech Stack:** Deno, Svelte 5 (runes), Tailwind + daisyui, xterm.js. Tests: `deno task test` (`deno test -A src/`) with `@std/assert`.
+**Tech Stack:** Deno, Svelte 5 (runes), Tailwind + daisyui, xterm.js. Tests:
+`deno task test` (`deno test -A src/`) with `@std/assert`.
 
-**Design spec:** `docs/superpowers/specs/2026-07-16-multiple-workspaces-design.md`
+**Design spec:**
+`docs/superpowers/specs/2026-07-16-multiple-workspaces-design.md`
 
 ---
 
 ## File Structure
 
-- `src/lib/workspace.ts` (modify) — add `id` and `title` to `WorkspaceState`; extend `createInitialWorkspace` and `isWorkspaceState`. Other reducers unchanged.
+- `src/lib/workspace.ts` (modify) — add `id` and `title` to `WorkspaceState`;
+  extend `createInitialWorkspace` and `isWorkspaceState`. Other reducers
+  unchanged.
 - `src/lib/workspace_test.ts` (modify) — cover the new fields.
-- `src/lib/session.ts` (create) — `SessionState` and its seven pure reducers: `createInitialSession`, `addWorkspace`, `closeWorkspace`, `focusAdjacent`, `focusWorkspace`, `updateWorkspace`, `isSessionState`.
+- `src/lib/session.ts` (create) — `SessionState` and its seven pure reducers:
+  `createInitialSession`, `addWorkspace`, `closeWorkspace`, `focusAdjacent`,
+  `focusWorkspace`, `updateWorkspace`, `isSessionState`.
 - `src/lib/session_test.ts` (create) — unit tests for all of the above.
-- `src/lib/store.ts` (modify) — `session` writable replaces `workspace`; bump key to `v5`; add `activeWorkspace` derived; route `edit()` through two levels; add session-level actions.
+- `src/lib/store.ts` (modify) — `session` writable replaces `workspace`; bump
+  key to `v5`; add `activeWorkspace` derived; route `edit()` through two levels;
+  add session-level actions.
 - `src/lib/WorkspacePane.svelte` (create) — the fixed 180px left rail.
-- `src/lib/Session.svelte` (create) — stacks all workspaces, shows the selected one.
-- `src/lib/Workspace.svelte` (modify) — take a `workspace` prop instead of reading the store.
-- `src/lib/TopBar.svelte` (modify) — read `$activeWorkspace` instead of `$workspace`.
-- `src/App.svelte` (modify) — two-column shell; `chordMode` replaces `chordPending`; `ctrl+j` handler.
-- `src/lib/StatusBar.svelte` (modify) — take `chordMode`; show per-mode key sets.
+- `src/lib/Session.svelte` (create) — stacks all workspaces, shows the selected
+  one.
+- `src/lib/Workspace.svelte` (modify) — take a `workspace` prop instead of
+  reading the store.
+- `src/lib/TopBar.svelte` (modify) — read `$activeWorkspace` instead of
+  `$workspace`.
+- `src/App.svelte` (modify) — two-column shell; `chordMode` replaces
+  `chordPending`; `ctrl+j` handler.
+- `src/lib/StatusBar.svelte` (modify) — take `chordMode`; show per-mode key
+  sets.
 
-**Task order rationale:** Tasks 1–3 are pure state (fully unit-tested, no UI). Tasks 4–7 are rendering and keybindings, verified by running the app. The app will not compile between Task 3 and Task 6 — `store.ts` stops exporting `workspace` while components still import it. Task 6 closes that. Do not stop between 3 and 6.
+**Task order rationale:** Tasks 1–3 are pure state (fully unit-tested, no UI).
+Tasks 4–7 are rendering and keybindings, verified by running the app. The app
+will not compile between Task 3 and Task 6 — `store.ts` stops exporting
+`workspace` while components still import it. Task 6 closes that. Do not stop
+between 3 and 6.
 
 ---
 
 ## Task 1: `WorkspaceState` gains `id` and `title`
 
 **Files:**
+
 - Modify: `src/lib/workspace.ts`
 - Test: `src/lib/workspace_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/lib/workspace_test.ts` (imports `createInitialWorkspace`, `isWorkspaceState` already exist at the top of the file):
+Add to `src/lib/workspace_test.ts` (imports `createInitialWorkspace`,
+`isWorkspaceState` already exist at the top of the file):
 
 ```ts
 Deno.test("createInitialWorkspace defaults to ws-1 / Workspace 1", () => {
@@ -66,12 +96,13 @@ Deno.test("isWorkspaceState rejects a workspace missing id or title", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno task test`
-Expected: FAIL — `createInitialWorkspace defaults to ws-1` fails with `Values are not equal: undefined !== "ws-1"`.
+Run: `deno task test` Expected: FAIL — `createInitialWorkspace defaults to ws-1`
+fails with `Values are not equal: undefined !== "ws-1"`.
 
 - [ ] **Step 3: Add the fields**
 
-In `src/lib/workspace.ts`, replace the `WorkspaceState` interface and `createInitialWorkspace`:
+In `src/lib/workspace.ts`, replace the `WorkspaceState` interface and
+`createInitialWorkspace`:
 
 ```ts
 // A workspace is an ordered set of views tiled horizontally with equal width. Exactly
@@ -84,7 +115,10 @@ export interface WorkspaceState {
   activeId: string; // names one of the views
 }
 
-export function createInitialWorkspace(id = "ws-1", title = "Workspace 1"): WorkspaceState {
+export function createInitialWorkspace(
+  id = "ws-1",
+  title = "Workspace 1",
+): WorkspaceState {
   const view = createInitialView("view-1");
   return { id, title, views: [view], activeId: view.id };
 }
@@ -104,7 +138,10 @@ export function isWorkspaceState(w: unknown): w is WorkspaceState {
 }
 ```
 
-`focusAdjacent`, `focusView`, and `updateView` already spread `...w`, so the new fields carry through — leave them untouched. `addView` and `closeView` rebuild the object literally (`{ views, activeId }`), which would **drop `id` and `title`**. Add the spread to both:
+`focusAdjacent`, `focusView`, and `updateView` already spread `...w`, so the new
+fields carry through — leave them untouched. `addView` and `closeView` rebuild
+the object literally (`{ views, activeId }`), which would **drop `id` and
+`title`**. Add the spread to both:
 
 ```ts
 export function addView(w: WorkspaceState): WorkspaceState {
@@ -124,8 +161,8 @@ export function closeView(w: WorkspaceState): WorkspaceState {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `deno task test`
-Expected: PASS — all `workspace_test.ts` tests green, including the pre-existing ones.
+Run: `deno task test` Expected: PASS — all `workspace_test.ts` tests green,
+including the pre-existing ones.
 
 - [ ] **Step 5: Commit**
 
@@ -139,6 +176,7 @@ git commit -m "feat: give WorkspaceState an id and title"
 ## Task 2: `session.ts` — state, creation, and add
 
 **Files:**
+
 - Create: `src/lib/session.ts`
 - Test: `src/lib/session_test.ts`
 
@@ -179,15 +217,18 @@ Deno.test("addWorkspace picks the smallest free ws-N id", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno task test`
-Expected: FAIL — module not found: `./session.ts`.
+Run: `deno task test` Expected: FAIL — module not found: `./session.ts`.
 
 - [ ] **Step 3: Write the minimal implementation**
 
 Create `src/lib/session.ts`:
 
 ```ts
-import { createInitialWorkspace, isWorkspaceState, type WorkspaceState } from "./workspace.ts";
+import {
+  createInitialWorkspace,
+  isWorkspaceState,
+  type WorkspaceState,
+} from "./workspace.ts";
 
 // A session is an ordered set of workspaces, navigated vertically (ctrl+j j/k). Exactly
 // one is "active" (the shown workspace). Workspaces are not tiled on screen: only the
@@ -223,8 +264,7 @@ export function addWorkspace(s: SessionState): SessionState {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `deno task test`
-Expected: PASS — 3 new `session_test.ts` tests green.
+Run: `deno task test` Expected: PASS — 3 new `session_test.ts` tests green.
 
 - [ ] **Step 5: Commit**
 
@@ -238,6 +278,7 @@ git commit -m "feat: add SessionState with createInitialSession and addWorkspace
 ## Task 3: `session.ts` — close, focus, update, and the guard
 
 **Files:**
+
 - Modify: `src/lib/session.ts`
 - Test: `src/lib/session_test.ts`
 
@@ -338,8 +379,8 @@ Deno.test("isSessionState accepts a real session and rejects malformed shapes", 
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno task test`
-Expected: FAIL — `closeWorkspace` is not exported by `./session.ts`.
+Run: `deno task test` Expected: FAIL — `closeWorkspace` is not exported by
+`./session.ts`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -377,14 +418,19 @@ export function updateWorkspace(
   id: string,
   fn: (w: WorkspaceState) => WorkspaceState,
 ): SessionState {
-  return { ...s, workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)) };
+  return {
+    ...s,
+    workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)),
+  };
 }
 
 // Structural guard for persisted state, mirroring isWorkspaceState one level up.
 export function isSessionState(s: unknown): s is SessionState {
   if (typeof s !== "object" || s === null) return false;
   const obj = s as Record<string, unknown>;
-  if (!Array.isArray(obj.workspaces) || obj.workspaces.length === 0) return false;
+  if (!Array.isArray(obj.workspaces) || obj.workspaces.length === 0) {
+    return false;
+  }
   if (!obj.workspaces.every(isWorkspaceState)) return false;
   return typeof obj.activeId === "string" &&
     (obj.workspaces as WorkspaceState[]).some((w) => w.id === obj.activeId);
@@ -393,8 +439,8 @@ export function isSessionState(s: unknown): s is SessionState {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `deno task test`
-Expected: PASS — all `session_test.ts` and `workspace_test.ts` tests green.
+Run: `deno task test` Expected: PASS — all `session_test.ts` and
+`workspace_test.ts` tests green.
 
 - [ ] **Step 5: Commit**
 
@@ -408,13 +454,18 @@ git commit -m "feat: add session close, focus, update, and validation"
 ## Task 4: Store — session writable, derived stores, two-level routing
 
 **Files:**
+
 - Modify: `src/lib/store.ts`
 
-No test step: `store.ts` is a thin binding layer over reducers already covered by Tasks 1–3, and it touches `localStorage` (not available under `deno test`). The existing `store.ts` has no test file — follow that precedent. Verification is Task 7's manual run.
+No test step: `store.ts` is a thin binding layer over reducers already covered
+by Tasks 1–3, and it touches `localStorage` (not available under `deno test`).
+The existing `store.ts` has no test file — follow that precedent. Verification
+is Task 7's manual run.
 
 - [ ] **Step 1: Rewrite the imports and state**
 
-Replace the import block and the `KEY` / `load` / `workspace` section at the top of `src/lib/store.ts` (lines 1–47) with:
+Replace the import block and the `KEY` / `load` / `workspace` section at the top
+of `src/lib/store.ts` (lines 1–47) with:
 
 ```ts
 import { derived, get, writable } from "svelte/store";
@@ -492,7 +543,10 @@ Immediately below, replace the `workspace.subscribe(...)` block with:
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 session.subscribe((s) => {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => localStorage.setItem(KEY, JSON.stringify(s)), 150);
+  saveTimer = setTimeout(
+    () => localStorage.setItem(KEY, JSON.stringify(s)),
+    150,
+  );
 });
 ```
 
@@ -515,12 +569,13 @@ function edit(viewId: string, fn: (v: ViewState) => ViewState): void {
 ```
 
 Every existing view-scoped wrapper below it (`resizeBoundary`, `toggleCollapse`,
-`toggleRows`, `resizeRow`, `addTab`, `setActiveTab`, `closeTab`, `resetView`) calls
-`edit` and needs **no change**.
+`toggleRows`, `resizeRow`, `addTab`, `setActiveTab`, `closeTab`, `resetView`)
+calls `edit` and needs **no change**.
 
 - [ ] **Step 4: Retarget the view-level actions and add session-level ones**
 
-Replace everything from the `// Workspace-level actions` comment to the end of the file with:
+Replace everything from the `// Workspace-level actions` comment to the end of
+the file with:
 
 ```ts
 // View-level actions — used by the ctrl+h chord and the top bar. They target the shown
@@ -569,9 +624,9 @@ export function focusWorkspace(id: string): void {
 
 - [ ] **Step 5: Typecheck**
 
-Run: `deno check src/lib/store.ts`
-Expected: PASS (no output). Component files still importing `workspace` will fail their
-own checks until Task 6 — that is expected and is why Tasks 4–6 land together.
+Run: `deno check src/lib/store.ts` Expected: PASS (no output). Component files
+still importing `workspace` will fail their own checks until Task 6 — that is
+expected and is why Tasks 4–6 land together.
 
 - [ ] **Step 6: Commit**
 
@@ -585,6 +640,7 @@ git commit -m "feat: make the store session-aware with v5 storage"
 ## Task 5: `WorkspacePane.svelte` — the left rail
 
 **Files:**
+
 - Create: `src/lib/WorkspacePane.svelte`
 
 - [ ] **Step 1: Write the component**
@@ -627,6 +683,7 @@ git commit -m "feat: add the workspace rail"
 ## Task 6: `Session.svelte` and the two-column shell
 
 **Files:**
+
 - Create: `src/lib/Session.svelte`
 - Modify: `src/lib/Workspace.svelte`
 - Modify: `src/lib/TopBar.svelte`
@@ -677,42 +734,44 @@ Replace all of `src/lib/Workspace.svelte`:
 ```
 
 Note the wrapper changed from `min-h-0 flex-1` to `h-full`: it is now inside
-`Session.svelte`'s `absolute inset-0` box rather than being a flex child of `main`.
+`Session.svelte`'s `absolute inset-0` box rather than being a flex child of
+`main`.
 
 - [ ] **Step 3: Point `TopBar.svelte` at the active workspace**
 
 In `src/lib/TopBar.svelte`, replace the import line:
 
 ```svelte
-  import { activeView, activeWorkspace, focusView, resetView, toggleCollapse } from "./store.ts";
+import { activeView, activeWorkspace, focusView, resetView, toggleCollapse } from "./store.ts";
 ```
 
-Then replace every `$workspace` with `$activeWorkspace` in the markup — there are five
-occurrences: the `{#if $workspace.views.length > 1}` guard, the `{#each $workspace.views ...}`
-loop, the two `v.id === $workspace.activeId` comparisons inside it, and three
-`$workspace.activeId` arguments in the `toggleCollapse` / `resetView` handlers. After the
-edit, `grep -n 'workspace' src/lib/TopBar.svelte` should show only `activeWorkspace`.
+Then replace every `$workspace` with `$activeWorkspace` in the markup — there
+are five occurrences: the `{#if $workspace.views.length > 1}` guard, the
+`{#each $workspace.views ...}` loop, the two `v.id === $workspace.activeId`
+comparisons inside it, and three `$workspace.activeId` arguments in the
+`toggleCollapse` / `resetView` handlers. After the edit,
+`grep -n 'workspace' src/lib/TopBar.svelte` should show only `activeWorkspace`.
 
 - [ ] **Step 4: Rewire the shell in `App.svelte`**
 
 In `src/App.svelte`, replace the imports:
 
 ```svelte
-  import { onMount } from "svelte";
-  import TopBar from "./lib/TopBar.svelte";
-  import WorkspacePane from "./lib/WorkspacePane.svelte";
-  import Session from "./lib/Session.svelte";
-  import StatusBar from "./lib/StatusBar.svelte";
-  import {
-    activeId,
-    addView,
-    addWorkspace,
-    closeView,
-    closeWorkspace,
-    focusAdjacent,
-    focusAdjacentWorkspace,
-    toggleCollapse,
-  } from "./lib/store.ts";
+import { onMount } from "svelte";
+import TopBar from "./lib/TopBar.svelte";
+import WorkspacePane from "./lib/WorkspacePane.svelte";
+import Session from "./lib/Session.svelte";
+import StatusBar from "./lib/StatusBar.svelte";
+import {
+  activeId,
+  addView,
+  addWorkspace,
+  closeView,
+  closeWorkspace,
+  focusAdjacent,
+  focusAdjacentWorkspace,
+  toggleCollapse,
+} from "./lib/store.ts";
 ```
 
 And replace the markup at the bottom of the file:
@@ -728,7 +787,8 @@ And replace the markup at the bottom of the file:
 </div>
 ```
 
-`chordMode` does not exist yet — Task 7 adds it. The file will not typecheck until then.
+`chordMode` does not exist yet — Task 7 adds it. The file will not typecheck
+until then.
 
 - [ ] **Step 5: Commit**
 
@@ -742,13 +802,14 @@ git commit -m "feat: render workspaces in a session with a left rail"
 ## Task 7: The `ctrl+j` chord and StatusBar modes
 
 **Files:**
+
 - Modify: `src/App.svelte`
 - Modify: `src/lib/StatusBar.svelte`
 
 - [ ] **Step 1: Replace the chord state machine**
 
-In `src/App.svelte`, replace the chord state block and the `onMount` handler (everything
-from `let chordPending` through the end of `onMount`) with:
+In `src/App.svelte`, replace the chord state block and the `onMount` handler
+(everything from `let chordPending` through the end of `onMount`) with:
 
 ```svelte
   // ctrl+h / ctrl+j are tmux-style prefixes: press one to enter a mode, then its keys act
@@ -831,9 +892,9 @@ from `let chordPending` through the end of `onMount`) with:
   });
 ```
 
-The prefix check sits **above** the armed-mode branch so a prefix always re-arms. Bare
-`h`/`j` (no modifier) still fall through to the armed-mode switch, so `ctrl+j` then `j`
-moves down.
+The prefix check sits **above** the armed-mode branch so a prefix always
+re-arms. Bare `h`/`j` (no modifier) still fall through to the armed-mode switch,
+so `ctrl+j` then `j` moves down.
 
 - [ ] **Step 2: Update `StatusBar.svelte` to take a mode**
 
@@ -896,26 +957,31 @@ Replace all of `src/lib/StatusBar.svelte`:
 
 - [ ] **Step 3: Typecheck and test**
 
-Run: `deno task test`
-Expected: PASS — all `session_test.ts`, `workspace_test.ts`, `layout_test.ts` tests green.
+Run: `deno task test` Expected: PASS — all `session_test.ts`,
+`workspace_test.ts`, `layout_test.ts` tests green.
 
-Run: `deno task build`
-Expected: build succeeds with no unresolved imports (this is what catches a missed
-`$workspace` reference in a component).
+Run: `deno task build` Expected: build succeeds with no unresolved imports (this
+is what catches a missed `$workspace` reference in a component).
 
 - [ ] **Step 4: Manual verification**
 
 Run: `deno task dev`
 
 Confirm each of these:
-1. The rail shows `Workspace 1`, highlighted; the StatusBar reads `⌃H view`, `⌃J workspace`, `⌃B columns`.
+
+1. The rail shows `Workspace 1`, highlighted; the StatusBar reads `⌃H view`,
+   `⌃J workspace`, `⌃B columns`.
 2. `ctrl+j` shows the `workspace` badge with `n w k j esc`.
 3. `ctrl+j n` adds `Workspace 2` to the rail and selects it.
 4. `ctrl+j k` selects Workspace 1; `ctrl+j j` returns to 2. Clamps at both ends.
 5. Clicking a rail row selects that workspace.
-6. `ctrl+h` shows the `view` badge; `ctrl+h n` adds a view within the current workspace only, and the TopBar's view numbers update.
-7. **Terminal keep-alive:** run `top` in Workspace 1's terminal, `ctrl+j n` to a new workspace, `ctrl+j k` back — `top` is still running with scrollback intact and correctly sized.
-8. `ctrl+j w` closes a workspace and selects a neighbor; at one workspace it does nothing.
+6. `ctrl+h` shows the `view` badge; `ctrl+h n` adds a view within the current
+   workspace only, and the TopBar's view numbers update.
+7. **Terminal keep-alive:** run `top` in Workspace 1's terminal, `ctrl+j n` to a
+   new workspace, `ctrl+j k` back — `top` is still running with scrollback
+   intact and correctly sized.
+8. `ctrl+j w` closes a workspace and selects a neighbor; at one workspace it
+   does nothing.
 9. Reload the app: the workspace list, selection, and view layouts persist.
 
 - [ ] **Step 5: Commit**
@@ -929,6 +995,15 @@ git commit -m "feat: add the ctrl+j workspace chord"
 
 ## Self-Review Notes
 
-- **Spec coverage:** session model → Tasks 2–3; `id`/`title` → Task 1; storage `v5` + no migration → Task 4; rail → Task 5; stacked rendering + keep-alive → Task 6; `ctrl+j` and the `ctrl+h` rename → Task 7. Non-goals (rename, reorder, rail resize/collapse, migration) have no tasks, as intended.
-- **Known compile gap:** `store.ts` drops the `workspace` export in Task 4 while `TopBar`/`Workspace` still import it until Task 6, and `App.svelte` references `chordMode` before Task 7 defines it. Tasks 4–7 must land as one sequence; only Task 7 Step 3 is expected to build clean.
-- **Type consistency:** `focusAdjacent` is the session-level export in `session.ts` but is re-exported from `store.ts` as `focusAdjacentWorkspace` (the view-level `focusAdjacent` keeps that name for existing call sites). `activeId()` keeps returning a *view* id.
+- **Spec coverage:** session model → Tasks 2–3; `id`/`title` → Task 1; storage
+  `v5` + no migration → Task 4; rail → Task 5; stacked rendering + keep-alive →
+  Task 6; `ctrl+j` and the `ctrl+h` rename → Task 7. Non-goals (rename, reorder,
+  rail resize/collapse, migration) have no tasks, as intended.
+- **Known compile gap:** `store.ts` drops the `workspace` export in Task 4 while
+  `TopBar`/`Workspace` still import it until Task 6, and `App.svelte` references
+  `chordMode` before Task 7 defines it. Tasks 4–7 must land as one sequence;
+  only Task 7 Step 3 is expected to build clean.
+- **Type consistency:** `focusAdjacent` is the session-level export in
+  `session.ts` but is re-exported from `store.ts` as `focusAdjacentWorkspace`
+  (the view-level `focusAdjacent` keeps that name for existing call sites).
+  `activeId()` keeps returning a _view_ id.

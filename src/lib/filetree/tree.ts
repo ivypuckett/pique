@@ -15,7 +15,13 @@ export interface Row {
 }
 
 export function nodeFromEntry(e: Entry): Node {
-  return { name: e.name, path: e.path, isDir: e.isDir, isSymlink: e.isSymlink, expanded: false };
+  return {
+    name: e.name,
+    path: e.path,
+    isDir: e.isDir,
+    isSymlink: e.isSymlink,
+    expanded: false,
+  };
 }
 
 // Directories first, then files; each group case-insensitive alphabetical.
@@ -32,7 +38,9 @@ export function sortEntries(entries: Entry[]): Entry[] {
 // tail and truncate normally from the end.
 export function splitName(name: string): { head: string; tail: string } {
   const i = name.lastIndexOf(".");
-  if (i > 0 && i < name.length - 1) return { head: name.slice(0, i), tail: name.slice(i) };
+  if (i > 0 && i < name.length - 1) {
+    return { head: name.slice(0, i), tail: name.slice(i) };
+  }
   return { head: name, tail: "" };
 }
 
@@ -74,7 +82,11 @@ export function parentDir(path: string): string {
 
 // Return a new tree with the node at `path` replaced by fn(node). Recurses into
 // loaded children; nodes off the path are returned unchanged (by reference).
-export function updateAt(nodes: Node[], path: string, fn: (n: Node) => Node): Node[] {
+export function updateAt(
+  nodes: Node[],
+  path: string,
+  fn: (n: Node) => Node,
+): Node[] {
   return nodes.map((n) => {
     if (n.path === path) return fn(n);
     if (n.children) return { ...n, children: updateAt(n.children, path, fn) };

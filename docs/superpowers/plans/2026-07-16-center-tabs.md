@@ -1,12 +1,25 @@
 # Center Tabs Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let the center column hold multiple switchable tabs, with a tab strip, a `+` module picker, per-tab close, and inactive tabs kept alive (hidden) so a backgrounded terminal keeps running.
+**Goal:** Let the center column hold multiple switchable tabs, with a tab strip,
+a `+` module picker, per-tab close, and inactive tabs kept alive (hidden) so a
+backgrounded terminal keeps running.
 
-**Architecture:** The center's existing `rows: ModuleRef[]` becomes an ordered tab list; a new `activeTabId` field on `ColumnState` names the visible tab. Pure reducers (`addTab`/`setActiveTab`/`closeTab`) in `layout.ts` mutate the immutable view, exposed through thin `store.ts` wrappers. A new `TabStrip.svelte` renders the strip; `Column.svelte` gains a center branch that mounts every tab's module at once and hides inactive ones with `display:none` (never unmounting, so terminals survive). Side columns keep their unchanged row-split path.
+**Architecture:** The center's existing `rows: ModuleRef[]` becomes an ordered
+tab list; a new `activeTabId` field on `ColumnState` names the visible tab. Pure
+reducers (`addTab`/`setActiveTab`/`closeTab`) in `layout.ts` mutate the
+immutable view, exposed through thin `store.ts` wrappers. A new
+`TabStrip.svelte` renders the strip; `Column.svelte` gains a center branch that
+mounts every tab's module at once and hides inactive ones with `display:none`
+(never unmounting, so terminals survive). Side columns keep their unchanged
+row-split path.
 
-**Tech Stack:** Deno, Svelte 5 (runes), Tailwind + daisyui, xterm.js. Tests: `deno test` with `@std/assert`.
+**Tech Stack:** Deno, Svelte 5 (runes), Tailwind + daisyui, xterm.js. Tests:
+`deno test` with `@std/assert`.
 
 **Design spec:** `docs/superpowers/specs/2026-07-16-center-tabs-design.md`
 
@@ -14,24 +27,33 @@
 
 ## File Structure
 
-- `src/lib/layout.ts` (modify) — add `activeTabId` to `ColumnState`; add `moduleLabel`, `nextCenterId` helpers and the `addTab` / `setActiveTab` / `closeTab` reducers; extend `createInitialView` and `isColumnState`. Export `moduleLabel`.
-- `src/lib/layout_test.ts` (modify) — unit tests for the new field, reducers, and validation.
-- `src/lib/store.ts` (modify) — bump storage key to `v3`; add `addTab` / `closeTab` / `setActiveTab` wrappers.
-- `src/lib/TabStrip.svelte` (create) — the center tab strip: tab buttons, close controls, `+` module-picker dropdown.
-- `src/lib/Column.svelte` (modify) — add the center branch that renders `<TabStrip>` plus all tab modules (active visible, inactive hidden).
+- `src/lib/layout.ts` (modify) — add `activeTabId` to `ColumnState`; add
+  `moduleLabel`, `nextCenterId` helpers and the `addTab` / `setActiveTab` /
+  `closeTab` reducers; extend `createInitialView` and `isColumnState`. Export
+  `moduleLabel`.
+- `src/lib/layout_test.ts` (modify) — unit tests for the new field, reducers,
+  and validation.
+- `src/lib/store.ts` (modify) — bump storage key to `v3`; add `addTab` /
+  `closeTab` / `setActiveTab` wrappers.
+- `src/lib/TabStrip.svelte` (create) — the center tab strip: tab buttons, close
+  controls, `+` module-picker dropdown.
+- `src/lib/Column.svelte` (modify) — add the center branch that renders
+  `<TabStrip>` plus all tab modules (active visible, inactive hidden).
 
 ---
 
 ## Task 1: Data model — `activeTabId` field, defaults, validation, storage key
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`
 - Modify: `src/lib/store.ts`
 - Test: `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/lib/layout_test.ts` (the imports `createInitialView`, `isViewState` already exist at the top of the file):
+Add to `src/lib/layout_test.ts` (the imports `createInitialView`, `isViewState`
+already exist at the top of the file):
 
 ```ts
 Deno.test("createInitialView sets activeTabId to the first row of each column", () => {
@@ -42,7 +64,10 @@ Deno.test("createInitialView sets activeTabId to the first row of each column", 
 });
 
 Deno.test("isViewState rejects a column missing activeTabId", () => {
-  const bad = createInitialView() as unknown as Record<string, Record<string, unknown>>;
+  const bad = createInitialView() as unknown as Record<
+    string,
+    Record<string, unknown>
+  >;
   delete bad.center.activeTabId;
   assertEquals(isViewState(bad), false);
 });
@@ -50,8 +75,8 @@ Deno.test("isViewState rejects a column missing activeTabId", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: the two new tests FAIL (`activeTabId` is `undefined`; `isViewState` still returns `true`).
+Run: `deno test -A src/lib/layout_test.ts` Expected: the two new tests FAIL
+(`activeTabId` is `undefined`; `isViewState` still returns `true`).
 
 - [ ] **Step 3: Add the field, defaults, and validation**
 
@@ -68,50 +93,53 @@ export interface ColumnState {
 }
 ```
 
-In `createInitialView`, add `activeTabId` to each column (matching its first row id):
+In `createInitialView`, add `activeTabId` to each column (matching its first row
+id):
 
 ```ts
-    left: {
-      widthPct: 20,
-      collapsed: false,
-      savedWidthPct: 20,
-      rowSplitPct: 50,
-      activeTabId: "left-1",
-      rows: [
-        { id: "left-1", title: "Left A", kind: "placeholder" },
-        { id: "left-2", title: "Left B", kind: "placeholder" },
-      ],
-    },
-    center: {
-      widthPct: 60,
-      collapsed: false,
-      savedWidthPct: 60,
-      rowSplitPct: 50,
-      activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
-    },
-    right: {
-      widthPct: 20,
-      collapsed: false,
-      savedWidthPct: 20,
-      rowSplitPct: 50,
-      activeTabId: "right-1",
-      rows: [{ id: "right-1", title: "Right", kind: "placeholder" }],
-    },
+left: {
+  widthPct: 20,
+  collapsed: false,
+  savedWidthPct: 20,
+  rowSplitPct: 50,
+  activeTabId: "left-1",
+  rows: [
+    { id: "left-1", title: "Left A", kind: "placeholder" },
+    { id: "left-2", title: "Left B", kind: "placeholder" },
+  ],
+},
+center: {
+  widthPct: 60,
+  collapsed: false,
+  savedWidthPct: 60,
+  rowSplitPct: 50,
+  activeTabId: "center-1",
+  rows: [{ id: "center-1", title: "Terminal", kind: "terminal" }],
+},
+right: {
+  widthPct: 20,
+  collapsed: false,
+  savedWidthPct: 20,
+  rowSplitPct: 50,
+  activeTabId: "right-1",
+  rows: [{ id: "right-1", title: "Right", kind: "placeholder" }],
+},
 ```
 
 In `isColumnState`, add the `activeTabId` check to the returned expression:
 
 ```ts
-  return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
-    typeof col.savedWidthPct === "number" && typeof col.rowSplitPct === "number" &&
-    typeof col.activeTabId === "string" &&
-    Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef);
+return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
+  typeof col.savedWidthPct === "number" &&
+  typeof col.rowSplitPct === "number" &&
+  typeof col.activeTabId === "string" &&
+  Array.isArray(col.rows) && col.rows.length > 0 && col.rows.every(isModuleRef);
 ```
 
 - [ ] **Step 4: Bump the storage key**
 
-In `src/lib/store.ts`, change the key so old persisted layouts (which lack `activeTabId`) are ignored and defaults load:
+In `src/lib/store.ts`, change the key so old persisted layouts (which lack
+`activeTabId`) are ignored and defaults load:
 
 ```ts
 const KEY = "pique.layout.v3";
@@ -119,8 +147,8 @@ const KEY = "pique.layout.v3";
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: PASS (all tests, including the two new ones).
+Run: `deno test -A src/lib/layout_test.ts` Expected: PASS (all tests, including
+the two new ones).
 
 - [ ] **Step 6: Commit**
 
@@ -134,33 +162,43 @@ git commit -m "feat: add activeTabId to ColumnState for center tabs"
 ## Task 2: `addTab` reducer + store wrapper
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`
 - Modify: `src/lib/store.ts`
 - Test: `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/lib/layout_test.ts`, and add `addTab` to the existing `./layout.ts` import list at the top of the file:
+Add to `src/lib/layout_test.ts`, and add `addTab` to the existing `./layout.ts`
+import list at the top of the file:
 
 ```ts
 Deno.test("addTab appends a tab to center and activates it", () => {
   const v = addTab(createInitialView(), "placeholder");
   assertEquals(v.center.rows.length, 2);
-  assertEquals(v.center.rows[1], { id: "center-2", title: "Placeholder", kind: "placeholder" });
+  assertEquals(v.center.rows[1], {
+    id: "center-2",
+    title: "Placeholder",
+    kind: "placeholder",
+  });
   assertEquals(v.center.activeTabId, "center-2");
 });
 
 Deno.test("addTab picks the smallest free center-N id", () => {
   let v = addTab(createInitialView(), "terminal"); // center-2
   v = addTab(v, "terminal"); // center-3
-  assertEquals(v.center.rows.map((r) => r.id), ["center-1", "center-2", "center-3"]);
+  assertEquals(v.center.rows.map((r) => r.id), [
+    "center-1",
+    "center-2",
+    "center-3",
+  ]);
 });
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: FAIL with "addTab is not defined" (or import error).
+Run: `deno test -A src/lib/layout_test.ts` Expected: FAIL with "addTab is not
+defined" (or import error).
 
 - [ ] **Step 3: Implement `addTab` and helpers**
 
@@ -191,7 +229,8 @@ export function addTab(v: ViewState, kind: string): ViewState {
 
 - [ ] **Step 4: Add the store wrapper**
 
-In `src/lib/store.ts`, add `addTab as addTabFn` to the `./layout.ts` import block, then add the wrapper:
+In `src/lib/store.ts`, add `addTab as addTabFn` to the `./layout.ts` import
+block, then add the wrapper:
 
 ```ts
 export function addTab(kind: string): void {
@@ -201,8 +240,7 @@ export function addTab(kind: string): void {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: PASS.
+Run: `deno test -A src/lib/layout_test.ts` Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -216,13 +254,15 @@ git commit -m "feat: addTab reducer and store action"
 ## Task 3: `setActiveTab` reducer + store wrapper
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`
 - Modify: `src/lib/store.ts`
 - Test: `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/lib/layout_test.ts`, and add `setActiveTab` to the `./layout.ts` import list:
+Add to `src/lib/layout_test.ts`, and add `setActiveTab` to the `./layout.ts`
+import list:
 
 ```ts
 Deno.test("setActiveTab switches the active center tab", () => {
@@ -239,8 +279,8 @@ Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: FAIL with "setActiveTab is not defined".
+Run: `deno test -A src/lib/layout_test.ts` Expected: FAIL with "setActiveTab is
+not defined".
 
 - [ ] **Step 3: Implement `setActiveTab`**
 
@@ -255,7 +295,8 @@ export function setActiveTab(v: ViewState, tabId: string): ViewState {
 
 - [ ] **Step 4: Add the store wrapper**
 
-In `src/lib/store.ts`, add `setActiveTab as setActiveTabFn` to the import block, then:
+In `src/lib/store.ts`, add `setActiveTab as setActiveTabFn` to the import block,
+then:
 
 ```ts
 export function setActiveTab(tabId: string): void {
@@ -265,8 +306,7 @@ export function setActiveTab(tabId: string): void {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: PASS.
+Run: `deno test -A src/lib/layout_test.ts` Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -280,13 +320,15 @@ git commit -m "feat: setActiveTab reducer and store action"
 ## Task 4: `closeTab` reducer + store wrapper
 
 **Files:**
+
 - Modify: `src/lib/layout.ts`
 - Modify: `src/lib/store.ts`
 - Test: `src/lib/layout_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/lib/layout_test.ts`, and add `closeTab` to the `./layout.ts` import list:
+Add to `src/lib/layout_test.ts`, and add `closeTab` to the `./layout.ts` import
+list:
 
 ```ts
 Deno.test("closeTab removes a tab", () => {
@@ -325,8 +367,8 @@ Deno.test("closeTab leaves the active tab unchanged when closing a different tab
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: FAIL with "closeTab is not defined".
+Run: `deno test -A src/lib/layout_test.ts` Expected: FAIL with "closeTab is not
+defined".
 
 - [ ] **Step 3: Implement `closeTab`**
 
@@ -360,8 +402,7 @@ export function closeTab(tabId: string): void {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `deno test -A src/lib/layout_test.ts`
-Expected: PASS.
+Run: `deno test -A src/lib/layout_test.ts` Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -375,6 +416,7 @@ git commit -m "feat: closeTab reducer and store action"
 ## Task 5: `TabStrip.svelte` component
 
 **Files:**
+
 - Create: `src/lib/TabStrip.svelte`
 
 - [ ] **Step 1: Create the component**
@@ -421,8 +463,8 @@ Create `src/lib/TabStrip.svelte`:
 
 - [ ] **Step 2: Verify it type-checks / builds**
 
-Run: `deno task build`
-Expected: build succeeds with no Svelte/TS errors. (`TabStrip` isn't rendered yet — this only confirms the component compiles.)
+Run: `deno task build` Expected: build succeeds with no Svelte/TS errors.
+(`TabStrip` isn't rendered yet — this only confirms the component compiles.)
 
 - [ ] **Step 3: Commit**
 
@@ -436,6 +478,7 @@ git commit -m "feat: TabStrip component for center tabs"
 ## Task 6: Wire the center branch into `Column.svelte`
 
 **Files:**
+
 - Modify: `src/lib/Column.svelte`
 
 - [ ] **Step 1: Import TabStrip**
@@ -443,12 +486,16 @@ git commit -m "feat: TabStrip component for center tabs"
 In the `<script>` of `src/lib/Column.svelte`, add:
 
 ```ts
-  import TabStrip from "./TabStrip.svelte";
+import TabStrip from "./TabStrip.svelte";
 ```
 
 - [ ] **Step 2: Add the center branch**
 
-In `src/lib/Column.svelte`, the render currently reads `{#if col.collapsed} …rail… {:else} …rows grid… {/if}`. Insert a center branch between them by changing the `{:else}` that opens the rows grid into `{:else if id === "center"}` … `{:else}`. Concretely, replace the opening of the non-collapsed block:
+In `src/lib/Column.svelte`, the render currently reads
+`{#if col.collapsed} …rail… {:else} …rows grid… {/if}`. Insert a center branch
+between them by changing the `{:else}` that opens the rows grid into
+`{:else if id === "center"}` … `{:else}`. Concretely, replace the opening of the
+non-collapsed block:
 
 Find:
 
@@ -492,8 +539,7 @@ The rest of the existing rows-grid block (the sides path) stays exactly as-is.
 
 - [ ] **Step 3: Build to verify it compiles**
 
-Run: `deno task build`
-Expected: build succeeds with no errors.
+Run: `deno task build` Expected: build succeeds with no errors.
 
 - [ ] **Step 4: Commit**
 
@@ -510,27 +556,35 @@ git commit -m "feat: render center column as tabs"
 
 - [ ] **Step 1: Launch the desktop app**
 
-Run: `deno task dev`
-Expected: the window opens with a single center tab "Terminal" showing a live shell.
+Run: `deno task dev` Expected: the window opens with a single center tab
+"Terminal" showing a live shell.
 
 - [ ] **Step 2: Verify add / picker**
 
-Click `+` in the center tab strip → choose "Terminal". A second tab "Terminal" appears and becomes active with its own shell. Click `+` → "Placeholder" → a placeholder tab appears and activates.
+Click `+` in the center tab strip → choose "Terminal". A second tab "Terminal"
+appears and becomes active with its own shell. Click `+` → "Placeholder" → a
+placeholder tab appears and activates.
 
 - [ ] **Step 3: Verify keep-alive (the core risk)**
 
-In the first terminal tab, run `top`. Switch to another tab, wait a few seconds, then switch back. Expected: `top` is **still running**, scrollback is intact, and the terminal is sized to the pane (no clipped/garbled layout).
+In the first terminal tab, run `top`. Switch to another tab, wait a few seconds,
+then switch back. Expected: `top` is **still running**, scrollback is intact,
+and the terminal is sized to the pane (no clipped/garbled layout).
 
 - [ ] **Step 4: Verify close & minimum-one**
 
-Close a tab with its `×`; the active tab falls back to a neighbor. Close down to a single tab; the `×` disappears (cannot close the last tab).
+Close a tab with its `×`; the active tab falls back to a neighbor. Close down to
+a single tab; the `×` disappears (cannot close the last tab).
 
 - [ ] **Step 5: Verify persistence & reset**
 
-Reload/reopen the app: the center tab set and active tab persist (storage key `pique.layout.v3`). The side columns still collapse (Ctrl/Cmd+B) and row-split exactly as before.
+Reload/reopen the app: the center tab set and active tab persist (storage key
+`pique.layout.v3`). The side columns still collapse (Ctrl/Cmd+B) and row-split
+exactly as before.
 
 - [ ] **Step 6: Final full-suite check**
 
-Run: `deno task test`
-Expected: all tests pass.
+Run: `deno task test` Expected: all tests pass.
+
+```
 ```

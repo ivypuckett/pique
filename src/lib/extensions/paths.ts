@@ -16,7 +16,11 @@
 // Every path is keyed by scope: an extension enabled in ws-1 is ws-1's alone, while a
 // local module enabled in root is inherited by every workspace (see local.ts
 // inheritedExtensionFiles). Runs Deno-side only.
-import { ensureScopeDirs, scopeAgentDir, type ScopeId } from "../scope/paths.ts";
+import {
+  ensureScopeDirs,
+  scopeAgentDir,
+  type ScopeId,
+} from "../scope/paths.ts";
 
 // Local extension names become filenames, so constrain them so a name can never
 // escape its dir (no separators / traversal), mirroring scope/paths.ts's ID_RE. The

@@ -1,4 +1,8 @@
-import { createInitialWorkspace, isWorkspaceState, type WorkspaceState } from "./workspace.ts";
+import {
+  createInitialWorkspace,
+  isWorkspaceState,
+  type WorkspaceState,
+} from "./workspace.ts";
 import { ROOT } from "./scope/paths.ts";
 
 // A session is the root workspace plus an ordered set of numbered workspaces,
@@ -27,7 +31,11 @@ function nextWorkspaceNumber(workspaces: WorkspaceState[]): number {
 }
 
 export function createInitialSession(): SessionState {
-  return { root: createInitialWorkspace(ROOT, "Root"), workspaces: [], activeId: ROOT };
+  return {
+    root: createInitialWorkspace(ROOT, "Root"),
+    workspaces: [],
+    activeId: ROOT,
+  };
 }
 
 // Root first, then the numbered workspaces — rail order, and the order ctrl+j j/k
@@ -36,7 +44,10 @@ export function allWorkspaces(s: SessionState): WorkspaceState[] {
   return [s.root, ...s.workspaces];
 }
 
-export function workspaceById(s: SessionState, id: string): WorkspaceState | undefined {
+export function workspaceById(
+  s: SessionState,
+  id: string,
+): WorkspaceState | undefined {
   return allWorkspaces(s).find((w) => w.id === id);
 }
 
@@ -86,7 +97,10 @@ export function updateWorkspace(
   fn: (w: WorkspaceState) => WorkspaceState,
 ): SessionState {
   if (id === ROOT) return { ...s, root: fn(s.root) };
-  return { ...s, workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)) };
+  return {
+    ...s,
+    workspaces: s.workspaces.map((w) => (w.id === id ? fn(w) : w)),
+  };
 }
 
 // Structural guard for persisted state, mirroring isWorkspaceState one level up.
@@ -97,7 +111,10 @@ export function isSessionState(s: unknown): s is SessionState {
   if (!Array.isArray(obj.workspaces)) return false;
   if (!obj.workspaces.every(isWorkspaceState)) return false;
   if (typeof obj.activeId !== "string") return false;
-  const ids = [obj.root.id, ...(obj.workspaces as WorkspaceState[]).map((w) => w.id)];
+  const ids = [
+    obj.root.id,
+    ...(obj.workspaces as WorkspaceState[]).map((w) => w.id),
+  ];
   return ids.includes(obj.activeId);
 }
 
@@ -105,15 +122,23 @@ export function isSessionState(s: unknown): s is SessionState {
 // them by adding a fresh root above the workspaces they already have, rather than
 // discarding the tree. `defaultDir` is the old global setting, which root's cwd now
 // supersedes (see settings/file.ts resolveModuleDir).
-export function migrateSession(raw: unknown, defaultDir?: string): SessionState | null {
+export function migrateSession(
+  raw: unknown,
+  defaultDir?: string,
+): SessionState | null {
   if (isSessionState(raw)) return raw;
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
-  if (!Array.isArray(obj.workspaces) || !obj.workspaces.every(isWorkspaceState)) return null;
+  if (
+    !Array.isArray(obj.workspaces) || !obj.workspaces.every(isWorkspaceState)
+  ) return null;
   const workspaces = obj.workspaces as WorkspaceState[];
   const root = createInitialWorkspace(ROOT, "Root");
-  const seeded = defaultDir && defaultDir.trim() !== "" ? { ...root, cwd: defaultDir } : root;
-  const activeId = typeof obj.activeId === "string" && workspaces.some((w) => w.id === obj.activeId)
+  const seeded = defaultDir && defaultDir.trim() !== ""
+    ? { ...root, cwd: defaultDir }
+    : root;
+  const activeId = typeof obj.activeId === "string" &&
+      workspaces.some((w) => w.id === obj.activeId)
     ? obj.activeId
     : (workspaces[0]?.id ?? ROOT);
   return { root: seeded, workspaces, activeId };

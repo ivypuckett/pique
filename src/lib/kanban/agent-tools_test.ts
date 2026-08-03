@@ -26,7 +26,13 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
 // tools; pass undefined and read the text content back out.
 // deno-lint-ignore no-explicit-any
 async function run(tool: any, params: unknown): Promise<unknown> {
-  const res = await tool.execute("call-1", params, undefined, undefined, undefined);
+  const res = await tool.execute(
+    "call-1",
+    params,
+    undefined,
+    undefined,
+    undefined,
+  );
   const text = res.content[0].text;
   try {
     return JSON.parse(text);
@@ -35,7 +41,8 @@ async function run(tool: any, params: unknown): Promise<unknown> {
   }
 }
 // deno-lint-ignore no-explicit-any
-const byName = (tools: any[], name: string) => tools.find((t) => t.name === name);
+const byName = (tools: any[], name: string) =>
+  tools.find((t) => t.name === name);
 
 // deno-lint-ignore no-explicit-any
 async function statuses(tools: any[], params: unknown = {}) {
@@ -84,7 +91,10 @@ Deno.test("an agent writes and reads back a card's subtasks", async () => {
 
     await run(byName(tools, "kanban_set_metadata"), {
       card_id: id,
-      subtasks: [{ text: "write it", done: true }, { text: "ship it", done: false }],
+      subtasks: [{ text: "write it", done: true }, {
+        text: "ship it",
+        done: false,
+      }],
     });
 
     // Read it back the way an agent would — off kanban_get_board, not the board handle.
@@ -99,11 +109,22 @@ Deno.test("an agent writes and reads back a card's subtasks", async () => {
     // Ticking one means sending the whole list back, as the tool description says.
     await run(byName(tools, "kanban_set_metadata"), {
       card_id: id,
-      subtasks: [{ text: "write it", done: true }, { text: "ship it", done: true }],
+      subtasks: [{ text: "write it", done: true }, {
+        text: "ship it",
+        done: true,
+      }],
     });
     const b = await board("ws-sub");
-    assertEquals(b.getBoard().cards.find((c) => c.id === id)!.subtasks.every((s) => s.done), true);
-    assertEquals(b.getLogs(id).find((l) => l.action === "set_metadata")!.actor, "agent");
+    assertEquals(
+      b.getBoard().cards.find((c) => c.id === id)!.subtasks.every((s) =>
+        s.done
+      ),
+      true,
+    );
+    assertEquals(
+      b.getLogs(id).find((l) => l.action === "set_metadata")!.actor,
+      "agent",
+    );
   });
 });
 
@@ -119,7 +140,10 @@ Deno.test("a malformed subtask list from an agent is refused, not stored", async
     // The likeliest model mistake: bare strings instead of {text, done} objects. The
     // throw reaches the agent as a tool error, so it can retry with the right shape.
     await assertRejects(() =>
-      run(byName(tools, "kanban_set_metadata"), { card_id: id, subtasks: ["do the thing"] })
+      run(byName(tools, "kanban_set_metadata"), {
+        card_id: id,
+        subtasks: ["do the thing"],
+      })
     );
     assertEquals((await board("ws-bad")).getBoard().cards[0].subtasks, []);
   });
@@ -142,9 +166,14 @@ Deno.test("a workspace agent writes to its own board, not root's", async () => {
     const tools = kanbanTools("ws-1");
     const todo = (await statuses(tools)).find((s) => s.name === "Todo")!;
 
-    await run(byName(tools, "kanban_create_card"), { status_id: todo.id, title: "Local" });
+    await run(byName(tools, "kanban_create_card"), {
+      status_id: todo.id,
+      title: "Local",
+    });
 
-    assertEquals((await board("ws-1")).getBoard().cards.map((c) => c.title), ["Local"]);
+    assertEquals((await board("ws-1")).getBoard().cards.map((c) => c.title), [
+      "Local",
+    ]);
     assertEquals((await board(ROOT)).getBoard().cards, []);
   });
 });
@@ -152,7 +181,9 @@ Deno.test("a workspace agent writes to its own board, not root's", async () => {
 Deno.test("a workspace agent can reach root's shared board with scope=root", async () => {
   await withTempHome(async () => {
     const tools = kanbanTools("ws-1");
-    const rootTodo = (await statuses(tools, { scope: "root" })).find((s) => s.name === "Todo")!;
+    const rootTodo = (await statuses(tools, { scope: "root" })).find((s) =>
+      s.name === "Todo"
+    )!;
 
     await run(byName(tools, "kanban_create_card"), {
       status_id: rootTodo.id,
@@ -160,7 +191,9 @@ Deno.test("a workspace agent can reach root's shared board with scope=root", asy
       scope: "root",
     });
 
-    assertEquals((await board(ROOT)).getBoard().cards.map((c) => c.title), ["Shared"]);
+    assertEquals((await board(ROOT)).getBoard().cards.map((c) => c.title), [
+      "Shared",
+    ]);
     assertEquals((await board("ws-1")).getBoard().cards, []);
   });
 });
@@ -171,14 +204,20 @@ Deno.test("a root agent stays on root's board whatever scope it passes", async (
     const todo = (await statuses(tools)).find((s) => s.name === "Todo")!;
 
     // "own" and "root" are the same board here — root has no other to address.
-    await run(byName(tools, "kanban_create_card"), { status_id: todo.id, title: "A" });
+    await run(byName(tools, "kanban_create_card"), {
+      status_id: todo.id,
+      title: "A",
+    });
     await run(byName(tools, "kanban_create_card"), {
       status_id: todo.id,
       title: "B",
       scope: "root",
     });
 
-    assertEquals((await board(ROOT)).getBoard().cards.map((c) => c.title).sort(), ["A", "B"]);
+    assertEquals(
+      (await board(ROOT)).getBoard().cards.map((c) => c.title).sort(),
+      ["A", "B"],
+    );
   });
 });
 
@@ -187,10 +226,18 @@ Deno.test("a workspace overrides root's seed statuses with its own", async () =>
     await writeScopeConfig("ws-1", {
       kanban: { defaultStatuses: [{ name: "Only" }] },
     });
-    assertEquals((await board("ws-1")).getBoard().statuses.map((s) => s.name), ["Only"]);
+    assertEquals((await board("ws-1")).getBoard().statuses.map((s) => s.name), [
+      "Only",
+    ]);
     // Root, and any workspace that overrides nothing, keep root's list.
-    assertEquals((await board(ROOT)).getBoard().statuses.map((s) => s.name), ["Todo", "Done"]);
-    assertEquals((await board("ws-2")).getBoard().statuses.map((s) => s.name), ["Todo", "Done"]);
+    assertEquals((await board(ROOT)).getBoard().statuses.map((s) => s.name), [
+      "Todo",
+      "Done",
+    ]);
+    assertEquals((await board("ws-2")).getBoard().statuses.map((s) => s.name), [
+      "Todo",
+      "Done",
+    ]);
   });
 });
 

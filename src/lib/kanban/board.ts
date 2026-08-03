@@ -9,7 +9,7 @@ export type StatusRow = {
   id: string;
   name: string;
   position: number;
-}
+};
 
 // A step within a card. Subtasks are card content, not cards of their own: they
 // have no id, no status and no place on the board, and are addressed only by
@@ -17,7 +17,7 @@ export type StatusRow = {
 export type Subtask = {
   text: string;
   done: boolean;
-}
+};
 
 export type CardRow = {
   id: string;
@@ -31,12 +31,12 @@ export type CardRow = {
   subtasks: Subtask[];
   // Derived on read, never stored:
   successors: string[]; // cards that list this card as a predecessor
-}
+};
 
 export type Board = {
   statuses: StatusRow[];
   cards: CardRow[];
-}
+};
 
 export type Actor = "human" | "agent";
 
@@ -49,7 +49,7 @@ export type LogRow = {
   from: string | null;
   to: string | null;
   reason: string | null;
-}
+};
 
 export interface BoardHandle {
   raw: DatabaseSync;
@@ -73,7 +73,9 @@ export interface BoardHandle {
   // Reorder a card within the column it is already in. Ordering is a view concern, so
   // this is not logged — same as the column edits above, and unlike setStatus.
   moveCard(arg: { cardId: string; position: number }): void;
-  setStatus(arg: { cardId: string; statusId: string; reason: string; actor: Actor }): void;
+  setStatus(
+    arg: { cardId: string; statusId: string; reason: string; actor: Actor },
+  ): void;
   setMetadata(arg: {
     cardId: string;
     title?: string;
@@ -137,22 +139,32 @@ export function openBoard(
   db.exec(SCHEMA);
 
   // Seed statuses only when the board has none, so reopening never duplicates.
-  const count = (db.prepare("SELECT count(*) c FROM statuses").get() as { c: number }).c;
+  const count =
+    (db.prepare("SELECT count(*) c FROM statuses").get() as { c: number }).c;
   if (count === 0) {
-    const ins = db.prepare("INSERT INTO statuses (id, name, position) VALUES (?, ?, ?)");
-    opts.defaultStatuses.forEach((s, i) => ins.run(crypto.randomUUID(), s.name, i));
+    const ins = db.prepare(
+      "INSERT INTO statuses (id, name, position) VALUES (?, ?, ?)",
+    );
+    opts.defaultStatuses.forEach((s, i) =>
+      ins.run(crypto.randomUUID(), s.name, i)
+    );
   }
 
   const getRaw = (id: string): RawCard =>
-    db.prepare("SELECT * FROM cards WHERE id = ?").get(id) as unknown as RawCard;
+    db.prepare("SELECT * FROM cards WHERE id = ?").get(
+      id,
+    ) as unknown as RawCard;
 
   const nextPosition = (statusId: string): number =>
-    (db.prepare("SELECT coalesce(max(position), -1) + 1 n FROM cards WHERE status_id = ?").get(
+    (db.prepare(
+      "SELECT coalesce(max(position), -1) + 1 n FROM cards WHERE status_id = ?",
+    ).get(
       statusId,
     ) as { n: number }).n;
 
   const statusIds = (): string[] =>
-    (db.prepare("SELECT id FROM statuses ORDER BY position").all() as unknown as { id: string }[])
+    (db.prepare("SELECT id FROM statuses ORDER BY position")
+      .all() as unknown as { id: string }[])
       .map((r) => r.id);
 
   // Rewrite every status position to its index in `ids`, so an insert, move or delete
@@ -167,14 +179,17 @@ export function openBoard(
   const removeCard = (cardId: string): void => {
     db.prepare("DELETE FROM cards WHERE id = ?").run(cardId);
     // Prune the deleted id from every card's predecessor list.
-    const rows = db.prepare("SELECT id, predecessors FROM cards").all() as unknown as {
-      id: string;
-      predecessors: string;
-    }[];
+    const rows = db.prepare("SELECT id, predecessors FROM cards")
+      .all() as unknown as {
+        id: string;
+        predecessors: string;
+      }[];
     const upd = db.prepare("UPDATE cards SET predecessors = ? WHERE id = ?");
     for (const r of rows) {
       const preds = JSON.parse(r.predecessors) as string[];
-      if (preds.includes(cardId)) upd.run(JSON.stringify(preds.filter((p) => p !== cardId)), r.id);
+      if (preds.includes(cardId)) {
+        upd.run(JSON.stringify(preds.filter((p) => p !== cardId)), r.id);
+      }
     }
   };
 
@@ -229,7 +244,8 @@ export function openBoard(
         .prepare("SELECT id, name, position FROM statuses ORDER BY position")
         .all() as unknown as StatusRow[];
       const cards = hydrate(
-        db.prepare("SELECT * FROM cards ORDER BY position").all() as unknown as RawCard[],
+        db.prepare("SELECT * FROM cards ORDER BY position")
+          .all() as unknown as RawCard[],
       );
       return { statuses, cards };
     },
@@ -245,16 +261,20 @@ export function openBoard(
     addStatus({ name }) {
       const clean = cleanName(name);
       const id = crypto.randomUUID();
-      db.prepare("INSERT INTO statuses (id, name, position) VALUES (?, ?, ?)").run(
-        id,
-        clean,
-        statusIds().length,
-      );
+      db.prepare("INSERT INTO statuses (id, name, position) VALUES (?, ?, ?)")
+        .run(
+          id,
+          clean,
+          statusIds().length,
+        );
       return id;
     },
 
     renameStatus({ statusId, name }) {
-      db.prepare("UPDATE statuses SET name = ? WHERE id = ?").run(cleanName(name), statusId);
+      db.prepare("UPDATE statuses SET name = ? WHERE id = ?").run(
+        cleanName(name),
+        statusId,
+      );
     },
 
     moveStatus({ statusId, position }) {
@@ -270,11 +290,14 @@ export function openBoard(
     deleteStatus({ statusId, withCards = false }) {
       const ids = statusIds();
       if (ids.length <= 1) throw new Error("a board needs at least one column");
-      const cardIds = (db.prepare("SELECT id FROM cards WHERE status_id = ?").all(
-        statusId,
-      ) as unknown as { id: string }[]).map((r) => r.id);
+      const cardIds =
+        (db.prepare("SELECT id FROM cards WHERE status_id = ?").all(
+          statusId,
+        ) as unknown as { id: string }[]).map((r) => r.id);
       if (cardIds.length > 0 && !withCards) {
-        throw new Error(`cannot delete a column that still has cards (${cardIds.length} remaining)`);
+        throw new Error(
+          `cannot delete a column that still has cards (${cardIds.length} remaining)`,
+        );
       }
       for (const id of cardIds) removeCard(id);
       db.prepare("DELETE FROM statuses WHERE id = ?").run(statusId);
@@ -310,35 +333,56 @@ export function openBoard(
     },
 
     setStatus({ cardId, statusId, reason, actor }) {
-      if (!reason || reason.trim() === "") throw new Error("setStatus requires a change reason");
+      if (!reason || reason.trim() === "") {
+        throw new Error("setStatus requires a change reason");
+      }
       const prev = getRaw(cardId);
-      db.prepare("UPDATE cards SET status_id = ?, position = ? WHERE id = ?").run(
-        statusId,
-        nextPosition(statusId),
+      db.prepare("UPDATE cards SET status_id = ?, position = ? WHERE id = ?")
+        .run(
+          statusId,
+          nextPosition(statusId),
+          cardId,
+        );
+      log(
         cardId,
+        "set_status",
+        { statusId: prev.status_id },
+        { statusId },
+        reason,
+        actor,
       );
-      log(cardId, "set_status", { statusId: prev.status_id }, { statusId }, reason, actor);
     },
 
     setMetadata({ cardId, title, description, tags, subtasks, actor }) {
       // Checked before any write, so a rejected list can't leave a half-applied edit
       // behind (title and description are written further down).
-      const clean = subtasks === undefined ? undefined : cleanSubtasks(subtasks);
+      const clean = subtasks === undefined
+        ? undefined
+        : cleanSubtasks(subtasks);
       const prev = getRaw(cardId);
       const from: Record<string, unknown> = {};
       const to: Record<string, unknown> = {};
       if (title !== undefined) {
-        db.prepare("UPDATE cards SET title = ? WHERE id = ?").run(title, cardId);
+        db.prepare("UPDATE cards SET title = ? WHERE id = ?").run(
+          title,
+          cardId,
+        );
         from.title = prev.title;
         to.title = title;
       }
       if (description !== undefined) {
-        db.prepare("UPDATE cards SET description = ? WHERE id = ?").run(description, cardId);
+        db.prepare("UPDATE cards SET description = ? WHERE id = ?").run(
+          description,
+          cardId,
+        );
         from.description = prev.description;
         to.description = description;
       }
       if (tags !== undefined) {
-        db.prepare("UPDATE cards SET tags = ? WHERE id = ?").run(JSON.stringify(tags), cardId);
+        db.prepare("UPDATE cards SET tags = ? WHERE id = ?").run(
+          JSON.stringify(tags),
+          cardId,
+        );
         from.tags = JSON.parse(prev.tags);
         to.tags = tags;
       }
@@ -372,16 +416,23 @@ export function openBoard(
       // A successor of A is written as "A is a predecessor of that card", so the two
       // directions can never disagree.
       if (successors !== undefined) {
-        const addPred = db.prepare("UPDATE cards SET predecessors = ? WHERE id = ?");
+        const addPred = db.prepare(
+          "UPDATE cards SET predecessors = ? WHERE id = ?",
+        );
         for (const sid of successors) {
           const preds = JSON.parse(getRaw(sid).predecessors) as string[];
-          if (!preds.includes(cardId)) addPred.run(JSON.stringify([...preds, cardId]), sid);
+          if (!preds.includes(cardId)) {
+            addPred.run(JSON.stringify([...preds, cardId]), sid);
+          }
         }
       }
       log(
         cardId,
         "set_connections",
-        { artifacts: JSON.parse(prev.artifacts), predecessors: JSON.parse(prev.predecessors) },
+        {
+          artifacts: JSON.parse(prev.artifacts),
+          predecessors: JSON.parse(prev.predecessors),
+        },
         { artifacts, predecessors, successors },
         null,
         actor,

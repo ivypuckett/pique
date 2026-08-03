@@ -3,7 +3,9 @@
 // `globalThis.bindings` is injected only inside the desktop window; undefined in a
 // plain browser tab.
 export interface GitDiffBindings {
-  gitDiff(arg: { cwd?: string; staged?: boolean; path?: string }): Promise<{ diff: string }>;
+  gitDiff(
+    arg: { cwd?: string; staged?: boolean; path?: string },
+  ): Promise<{ diff: string }>;
 }
 
 export function gitDiffBindings(): GitDiffBindings | null {

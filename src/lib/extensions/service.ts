@@ -9,9 +9,9 @@
 import {
   enableLocal,
   inheritedExtensionFiles,
-  type LocalState,
   listLocal,
   listVisibleLocal,
+  type LocalState,
   readLocalSource,
   removeLocal,
   revokeLocal,
@@ -29,7 +29,12 @@ import {
 } from "./packages.ts";
 import type { ScopeId } from "../scope/paths.ts";
 
-export { inheritedExtensionFiles, type ExtSearchResult, fetchPackage, searchExtensions };
+export {
+  type ExtSearchResult,
+  fetchPackage,
+  inheritedExtensionFiles,
+  searchExtensions,
+};
 
 export type Origin = "local" | "package";
 export type ExtState = LocalState;
@@ -114,7 +119,9 @@ export async function listExtensions(scope: ScopeId): Promise<Extension[]> {
 // What an agent in `scope` can reach: its own extensions, plus ancestors' enabled LOCAL
 // ones. Packages are deliberately not inherited (packages.ts), so an ancestor's package
 // never appears here — that asymmetry is real and the UI must show it as such.
-export async function listVisibleExtensions(scope: ScopeId): Promise<Extension[]> {
+export async function listVisibleExtensions(
+  scope: ScopeId,
+): Promise<Extension[]> {
   const inherited = (await listVisibleLocal(scope))
     .filter((l) => l.scope !== scope && l.state === "enabled")
     .map((l): Extension => ({
@@ -151,7 +158,9 @@ export async function readExtension(
   for (const path of extensions) {
     // A resolved path can be missing if the bytes were removed behind our back; show
     // the gap rather than failing the whole review.
-    const raw = await Deno.readTextFile(path).catch((e) => `// unreadable: ${e.message}`);
+    const raw = await Deno.readTextFile(path).catch((e) =>
+      `// unreadable: ${e.message}`
+    );
     const c = clamp(raw);
     truncated ||= c.truncated;
     files.push({ path, text: c.text });
@@ -159,7 +168,10 @@ export async function readExtension(
   return { files, skills, truncated };
 }
 
-export async function enableExtension(scope: ScopeId, id: string): Promise<void> {
+export async function enableExtension(
+  scope: ScopeId,
+  id: string,
+): Promise<void> {
   const { origin, key } = parseId(id);
   if (origin === "local") return await enableLocal(scope, key);
   return await enablePackage(scope, key);
@@ -167,7 +179,10 @@ export async function enableExtension(scope: ScopeId, id: string): Promise<void>
 
 // Stops it running at the next session start, keeps the bytes, and sends it back
 // through review. Sessions already running keep it until they restart.
-export async function revokeExtension(scope: ScopeId, id: string): Promise<void> {
+export async function revokeExtension(
+  scope: ScopeId,
+  id: string,
+): Promise<void> {
   const { origin, key } = parseId(id);
   if (origin === "local") return await revokeLocal(scope, key);
   return await revokePackage(scope, key);

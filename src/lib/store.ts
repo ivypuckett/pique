@@ -1,11 +1,11 @@
 import { derived, get, writable } from "svelte/store";
 import {
+  addDiffTab as addDiffTabFn,
+  addEditorTab as addEditorTabFn,
   addTab as addTabFn,
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
-  addDiffTab as addDiffTabFn,
-  addEditorTab as addEditorTabFn,
   resizeBoundary as resize,
   setActiveTab as setActiveTabFn,
   setExplorerHidden as setExplorerHiddenFn,
@@ -54,10 +54,14 @@ export async function hydrateSession(): Promise<void> {
   // Layouts written before the root workspace existed are adopted under a fresh
   // root, seeded with the old global default dir that root's cwd now supersedes.
   const settings = await readConfig("settings");
-  const defaultDir = (settings as { workspace?: { defaultDir?: unknown } } | null)
-    ?.workspace?.defaultDir;
+  const defaultDir =
+    (settings as { workspace?: { defaultDir?: unknown } } | null)
+      ?.workspace?.defaultDir;
   const adopted = !isSessionState(raw);
-  const migrated = migrateSession(raw, typeof defaultDir === "string" ? defaultDir : undefined);
+  const migrated = migrateSession(
+    raw,
+    typeof defaultDir === "string" ? defaultDir : undefined,
+  );
   if (migrated) session.set(migrated);
   hydrated = true;
   // set() above ran while `hydrated` was still false, so the persist subscription
@@ -106,7 +110,11 @@ function edit(viewId: string, fn: (v: ViewState) => ViewState): void {
   editWorkspace((w) => updateView(w, viewId, fn));
 }
 
-export function resizeBoundary(viewId: string, b: Boundary, newFirstPct: number): void {
+export function resizeBoundary(
+  viewId: string,
+  b: Boundary,
+  newFirstPct: number,
+): void {
   edit(viewId, (v) => resize(v, b, newFirstPct));
 }
 

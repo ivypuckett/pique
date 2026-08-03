@@ -2,8 +2,20 @@
 // `toFrontendEvent` is the pure, JSON-safe projection of pi's SDK events that
 // crosses the win.bind boundary — keep its output plain JSON (see bindings.ts).
 
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export type ModelInfo = { provider: string; id: string; name: string; current: boolean };
+export type ThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+export type ModelInfo = {
+  provider: string;
+  id: string;
+  name: string;
+  current: boolean;
+};
 // JSON-safe projection of pi's SlashCommandInfo for the chat `/` menu. Mirrors the
 // three sources pi's TUI lists (extension commands, prompt templates, skills); the
 // `name` is the token typed after `/`, so skills already carry their `skill:` prefix.
@@ -24,13 +36,27 @@ export type Item =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string }
   | { role: "thinking"; text: string }
-  | { role: "tool"; id: string; name: string; args: string; result: string; isError: boolean; done: boolean };
+  | {
+    role: "tool";
+    id: string;
+    name: string;
+    args: string;
+    result: string;
+    isError: boolean;
+    done: boolean;
+  };
 
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "thinking"; delta: string }
   | { kind: "tool_start"; id: string; name: string; args: string }
-  | { kind: "tool_end"; id: string; name: string; result: string; isError: boolean }
+  | {
+    kind: "tool_end";
+    id: string;
+    name: string;
+    result: string;
+    isError: boolean;
+  }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -46,11 +72,18 @@ export function toFrontendEvent(event: any): ChatEvent | null {
     case "message_update": {
       const ev = event.assistantMessageEvent;
       if (ev?.type === "text_delta") return { kind: "text", delta: ev.delta };
-      if (ev?.type === "thinking_delta") return { kind: "thinking", delta: ev.delta };
+      if (ev?.type === "thinking_delta") {
+        return { kind: "thinking", delta: ev.delta };
+      }
       return null;
     }
     case "tool_execution_start":
-      return { kind: "tool_start", id: event.toolCallId, name: event.toolName, args: preview(event.args) };
+      return {
+        kind: "tool_start",
+        id: event.toolCallId,
+        name: event.toolName,
+        args: preview(event.args),
+      };
     case "tool_execution_end":
       return {
         kind: "tool_end",
@@ -74,12 +107,17 @@ import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
 import { inheritedExtensionFiles } from "../extensions/local.ts";
-import { profileAuthoringTools } from "../profiles/agent-tools.ts";
-import { resolveBasePrompt, resolveProfile } from "../profiles/service.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
-import { ensureScopeDirs, ROOT, type ScopeId, scopeAgentDir, scopeSessionsDir } from "../scope/paths.ts";
+import { resolveBasePrompt } from "../scope/prompt.ts";
+import {
+  ensureScopeDirs,
+  ROOT,
+  scopeAgentDir,
+  type ScopeId,
+  scopeSessionsDir,
+} from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -96,16 +134,17 @@ const FALLBACK_MODEL = "google/gemma-4-e4b";
 // inherits root's thinking level.
 export function resolveChatDefaults(
   config: unknown,
-): { provider: string; modelId: string; thinking: ThinkingLevel; profile: string } {
-  const chat = (config as { chat?: Record<string, unknown> } | null)?.chat ?? {};
-  const str = (v: unknown, fallback: string): string => (typeof v === "string" ? v : fallback);
+): { provider: string; modelId: string; thinking: ThinkingLevel } {
+  const chat = (config as { chat?: Record<string, unknown> } | null)?.chat ??
+    {};
+  const str = (
+    v: unknown,
+    fallback: string,
+  ): string => (typeof v === "string" ? v : fallback);
   return {
     provider: str(chat.defaultProvider, FALLBACK_PROVIDER),
     modelId: str(chat.defaultModel, FALLBACK_MODEL),
     thinking: str(chat.defaultThinkingLevel, "off") as ThinkingLevel,
-    // "" is a real value here, not a missing one: it is the picker's "base" — the scope's
-    // base prompt with no profile appended.
-    profile: str(chat.defaultProfile, ""),
   };
 }
 
@@ -140,7 +179,7 @@ export async function ensureRuntime() {
 // defaults, working directory, Kanban board — is resolved against it. By default it
 // picks the conversation back up where it was left; `fresh` starts a new one.
 export async function startAgent(
-  opts: { cwd?: string; scope?: ScopeId; profile?: string; fresh?: boolean } = {},
+  opts: { cwd?: string; scope?: ScopeId; fresh?: boolean } = {},
 ): Promise<string> {
   const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
@@ -148,21 +187,15 @@ export async function startAgent(
   // with the workspace's); fall back to the consts when unset or when the configured
   // model isn't available.
   const config = await resolveScopeConfig(scope);
-  const { provider, modelId, thinking, profile: defaultProfile } = resolveChatDefaults(config);
+  const { provider, modelId, thinking } = resolveChatDefaults(config);
   const cwd = resolveModuleDir(opts.cwd, await readJson("settings"));
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
-  // Absent `profile` means "use the scope's default"; an explicit "" means "no profile",
-  // which is why this uses ?? and not ||. A name that no longer resolves degrades to no
-  // profile, the same way an unavailable model falls back to the const above.
-  const profileName = opts.profile ?? defaultProfile;
-  const profile = profileName ? await resolveProfile(scope, profileName) : null;
   // Tools compiled into pique, all bound to this scope: define_extension and
-  // define_profile quarantine into it, and the Kanban tools address its board. Tools
+  // define_prompt quarantine into it, and the Kanban tools address its board. Tools
   // from extensions the user has *enabled* don't appear here — those load below.
   const customTools = [
     ...extensionAuthoringTools(scope),
-    ...profileAuthoringTools(scope),
     ...promptAuthoringTools(scope),
     ...kanbanTools(scope),
   ];
@@ -184,11 +217,9 @@ export async function startAgent(
     // are handed over. pi loads its own agentDir's dir first and its expander takes the
     // first match, so a workspace template shadows a root one of the same name.
     additionalPromptTemplatePaths: inheritedPromptDirs(scope),
-    // The two prompt layers (docs/profiles.md). The base is the nearest SYSTEM.md on the
-    // scope chain — undefined when there is none, which is what leaves pi's own preamble
-    // in place. The profile's body is appended to whichever base won.
+    // The scope's base prompt: the nearest SYSTEM.md on the chain (scope/prompt.ts),
+    // undefined when there is none — which is what leaves pi's own preamble in place.
     systemPrompt: await resolveBasePrompt(scope),
-    appendSystemPrompt: profile?.body ? [profile.body] : undefined,
   });
   // createAgentSession only reloads a loader it creates itself, so ours must be
   // reloaded by hand or it yields no extensions at all.
@@ -203,10 +234,6 @@ export async function startAgent(
     // sessionManager below is given its dir explicitly rather than deriving it here.
     agentDir,
     resourceLoader,
-    // The profile's allowlist, filtering builtins, extension tools and the customTools
-    // above alike. undefined (no profile, or a profile with no `tools:` key) means no
-    // allowlist; [] means no tools at all — do NOT coalesce the two.
-    tools: profile?.tools,
     // The conversation is written to <scope>/sessions as pi JSONL, appended as it
     // happens, so quitting mid-stream still leaves everything up to that point on disk.
     // continueRecent reopens the newest session recorded for THIS cwd — passing an
@@ -255,9 +282,11 @@ export function toHistory(messages: any[]): Item[] {
     } else if (message.role === "assistant") {
       // deno-lint-ignore no-explicit-any
       for (const block of (message.content ?? []) as any[]) {
-        if (block.type === "text") items.push({ role: "assistant", text: block.text });
-        else if (block.type === "thinking") items.push({ role: "thinking", text: block.thinking });
-        else if (block.type === "toolCall") {
+        if (block.type === "text") {
+          items.push({ role: "assistant", text: block.text });
+        } else if (block.type === "thinking") {
+          items.push({ role: "thinking", text: block.thinking });
+        } else if (block.type === "toolCall") {
           items.push({
             role: "tool",
             id: block.id,
@@ -272,7 +301,9 @@ export function toHistory(messages: any[]): Item[] {
     } else if (message.role === "toolResult") {
       // The call was pushed by the assistant message before it; a tool still running when
       // the app closed simply has no result, and stays `done: false` the way it renders live.
-      const call = items.find((i) => i.role === "tool" && i.id === message.toolCallId);
+      const call = items.find((i) =>
+        i.role === "tool" && i.id === message.toolCallId
+      );
       if (call?.role === "tool") {
         call.result = preview(textOf(message.content));
         call.isError = Boolean(message.isError);
@@ -305,7 +336,10 @@ export function promptAgent(id: string, text: string): void {
       );
     })
     .catch((err: unknown) => {
-      queue.push({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      queue.push({
+        kind: "error",
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
 }
 
@@ -348,7 +382,11 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
   }));
 }
 
-export async function setModel(id: string, provider: string, modelId: string): Promise<void> {
+export async function setModel(
+  id: string,
+  provider: string,
+  modelId: string,
+): Promise<void> {
   const agent = agents.get(id);
   if (!runtime || !agent) return;
   const model = runtime.getModel(provider, modelId);
@@ -367,17 +405,17 @@ export function activeToolNames(id: string): string[] {
   return agents.get(id)?.session.getActiveToolNames() ?? [];
 }
 
-// The prompt this agent actually runs with: the scope's base (pi's own, or its SYSTEM.md)
-// plus the profile's body. Assembled by pi at session creation and fixed for its lifetime,
-// which is why switching profile restarts the agent rather than mutating it.
+// The prompt this agent actually runs with: the scope's base — pi's own preamble, or the
+// SYSTEM.md that replaced it — plus what pi appends itself (project context, skills, cwd).
+// Assembled at session creation and fixed for its lifetime; pi exposes no setter.
 export function systemPromptOf(id: string): string {
   return agents.get(id)?.session.systemPrompt ?? "";
 }
 
 // Re-read the resource loader so prompt templates saved or approved in Settings become
-// invocable in a conversation that is already running. Unlike a profile — which pi bakes
-// into the system prompt at session creation — templates are read from the loader on every
-// prompt(), so refreshing the loader is enough and the transcript survives.
+// invocable in a conversation that is already running. Unlike the system prompt — which pi
+// bakes in at session creation — templates are read from the loader on every prompt(), so
+// refreshing the loader is enough and the transcript survives.
 export async function reloadPrompts(id: string): Promise<void> {
   await agents.get(id)?.resourceLoader.reload();
 }
@@ -391,11 +429,12 @@ export function listCommands(id: string): CommandInfo[] {
   const session = agents.get(id)?.session;
   if (!session) return [];
   // deno-lint-ignore no-explicit-any
-  const ext: CommandInfo[] = session.extensionRunner.getRegisteredCommands().map((c: any) => ({
-    name: c.invocationName,
-    description: c.description ?? "",
-    source: "extension",
-  }));
+  const ext: CommandInfo[] = session.extensionRunner.getRegisteredCommands()
+    .map((c: any) => ({
+      name: c.invocationName,
+      description: c.description ?? "",
+      source: "extension",
+    }));
   // A template inherited from root and one defined in this workspace can share a name;
   // pi's loader collapses that itself, first path wins, so this list holds no twins. The
   // load order chat/agent.ts sets up is what makes the workspace's the survivor
@@ -408,7 +447,9 @@ export function listCommands(id: string): CommandInfo[] {
     argumentHint: t.argumentHint,
   }));
   // deno-lint-ignore no-explicit-any
-  const skills: CommandInfo[] = session.resourceLoader.getSkills().skills.map((s: any) => ({
+  const skills: CommandInfo[] = session.resourceLoader.getSkills().skills.map((
+    s: any,
+  ) => ({
     name: `skill:${s.name}`,
     description: s.description ?? "",
     source: "skill",

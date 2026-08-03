@@ -5,7 +5,12 @@ export interface ModuleRef {
   id: string;
   title: string;
   kind: string; // key into the module registry
-  props?: { argv?: string[]; autoCloseOnExit?: boolean; autoFocus?: boolean; path?: string }; // per-tab payload, spread into the module
+  props?: {
+    argv?: string[];
+    autoCloseOnExit?: boolean;
+    autoFocus?: boolean;
+    path?: string;
+  }; // per-tab payload, spread into the module
 }
 
 export interface ColumnState {
@@ -68,10 +73,20 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function resizeBoundary(v: ViewState, b: Boundary, newFirstPct: number): ViewState {
+export function resizeBoundary(
+  v: ViewState,
+  b: Boundary,
+  newFirstPct: number,
+): ViewState {
   if (b === "explorer-tabs") {
     // The explorer and tabs split the pane's width (their fractions sum to 100).
-    return { ...v, explorer: { ...v.explorer, widthPct: clamp(newFirstPct, MIN_WIDTH_PCT, 100 - MIN_WIDTH_PCT) } };
+    return {
+      ...v,
+      explorer: {
+        ...v.explorer,
+        widthPct: clamp(newFirstPct, MIN_WIDTH_PCT, 100 - MIN_WIDTH_PCT),
+      },
+    };
   }
   // center-right: chat vs the pane. The two always fill the row, so their sum is fixed.
   const combined = v.center.widthPct + v.right.widthPct;
@@ -102,7 +117,12 @@ function collapse(v: ViewState): ViewState {
   return {
     ...v,
     center: { ...v.center, widthPct: v.center.widthPct + v.right.widthPct },
-    right: { ...v.right, collapsed: true, savedWidthPct: v.right.widthPct, widthPct: 0 },
+    right: {
+      ...v.right,
+      collapsed: true,
+      savedWidthPct: v.right.widthPct,
+      widthPct: 0,
+    },
   };
 }
 
@@ -168,7 +188,12 @@ export function addEditorTab(v: ViewState, path: string): ViewState {
 // Add a right-column tab showing the git diff of a single file (called by the file-tree module).
 export function addDiffTab(v: ViewState, path: string): ViewState {
   const id = nextRightId(v.right.rows);
-  const tab: ModuleRef = { id, title: basename(path), kind: "gitdiff", props: { path } };
+  const tab: ModuleRef = {
+    id,
+    title: basename(path),
+    kind: "gitdiff",
+    props: { path },
+  };
   return {
     ...v,
     right: { ...v.right, rows: [...v.right.rows, tab], activeTabId: id },
@@ -204,13 +229,15 @@ function isModuleRef(r: unknown): boolean {
 function isColumnState(c: unknown): boolean {
   if (typeof c !== "object" || c === null) return false;
   const col = c as Record<string, unknown>;
-  return typeof col.widthPct === "number" && typeof col.collapsed === "boolean" &&
+  return typeof col.widthPct === "number" &&
+    typeof col.collapsed === "boolean" &&
     typeof col.savedWidthPct === "number" &&
     typeof col.activeTabId === "string" &&
     Array.isArray(col.rows) && col.rows.every(isModuleRef) &&
     // The center may hold zero tabs (all closed); sides always have rows. When the
     // column is non-empty the active id must point at one of them.
-    (col.rows.length === 0 || (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId));
+    (col.rows.length === 0 ||
+      (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId));
 }
 
 function isExplorerState(e: unknown): boolean {
@@ -225,5 +252,6 @@ export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
   return typeof obj.id === "string" &&
-    isColumnState(obj.center) && isColumnState(obj.right) && isExplorerState(obj.explorer);
+    isColumnState(obj.center) && isColumnState(obj.right) &&
+    isExplorerState(obj.explorer);
 }

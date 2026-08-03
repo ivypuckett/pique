@@ -4,14 +4,13 @@
 
 Make the chat agent's model and thinking level persist across launches. The
 `chat.*` fields already exist in the settings schema (`settings/bindings.ts`)
-but nothing reads or writes them. Wire both halves: apply the persisted
-defaults when the agent starts, and persist the user's runtime choices.
+but nothing reads or writes them. Wire both halves: apply the persisted defaults
+when the agent starts, and persist the user's runtime choices.
 
 ## Background
 
-- `startAgent()` in `src/lib/chat/agent.ts` hardcodes the model
-  (`lmstudio` / `google/gemma-4-e4b`, the M1 pin) and never sets a thinking
-  level.
+- `startAgent()` in `src/lib/chat/agent.ts` hardcodes the model (`lmstudio` /
+  `google/gemma-4-e4b`, the M1 pin) and never sets a thinking level.
 - `src/lib/chat/Chat.svelte` already changes both at runtime via the
   `chatSetModel` / `chatSetThinking` bindings (`pickModel` / `pickLevel`), but
   the choices are lost on the next launch.
@@ -26,9 +25,9 @@ defaults when the agent starts, and persist the user's runtime choices.
   it applies live (unchanged) **and** is written to the settings store, which
   debounce-persists to `settings.json` — so the next launch starts there.
 - Fallbacks: if no model default is persisted, or the persisted model isn't
-  available in the runtime (e.g. LM Studio not running), the agent falls back
-  to the hardcoded consts. If no thinking default is persisted, it is `"off"`.
-  A bad persisted model degrades silently to the fallback rather than erroring.
+  available in the runtime (e.g. LM Studio not running), the agent falls back to
+  the hardcoded consts. If no thinking default is persisted, it is `"off"`. A
+  bad persisted model degrades silently to the fallback rather than erroring.
 
 **Consequence:** the agent's startup model becomes user-controlled; the former
 M1 pin in `startAgent` is now only the fallback. This is intended.
@@ -70,16 +69,16 @@ M1 pin in `startAgent` is now only the fallback. This is intended.
 
 ### `src/lib/settings/bindings.ts` (modify)
 
-- Seed `DEFAULT_SETTINGS.chat = { defaultThinkingLevel: "off" }` so the
-  frontend default matches the backend `"off"` fallback.
+- Seed `DEFAULT_SETTINGS.chat = { defaultThinkingLevel: "off" }` so the frontend
+  default matches the backend `"off"` fallback.
 
 ## Testing / Verification
 
 - **Unit** (`src/lib/chat/agent_test.ts`, extend the existing file): cover
   `resolveChatDefaults` for: null input; empty object; missing `chat`; full
-  `chat` with all three fields; partial `chat` (only one field set);
-  non-string field values (e.g. numbers) falling back. `resolveChatDefaults`
-  is pure and imports no agent runtime, so it tests without the pi SDK.
+  `chat` with all three fields; partial `chat` (only one field set); non-string
+  field values (e.g. numbers) falling back. `resolveChatDefaults` is pure and
+  imports no agent runtime, so it tests without the pi SDK.
 - **Build / typecheck:** `deno task test`, `vite build`, and the `deno desktop`
   bundle stay green.
 - **Manual end-to-end (user):** needs the desktop app AND a running LM Studio.

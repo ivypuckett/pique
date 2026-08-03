@@ -19,7 +19,9 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
 // Tool.execute has extra pi-runtime params (signal/onUpdate/ctx) unused here.
 // deno-lint-ignore no-explicit-any
 function defineExtTool(scope: ScopeId): any {
-  return extensionAuthoringTools(scope).find((t) => t.name === "define_extension");
+  return extensionAuthoringTools(scope).find((t) =>
+    t.name === "define_extension"
+  );
 }
 // deno-lint-ignore no-explicit-any
 const run = (tool: any, params: unknown) =>
@@ -69,7 +71,10 @@ Deno.test("define_extension records the rationale alongside the source for the r
 
     const src = await readLocalSource("ws-1", "lookup_weather", "pending");
     // Newlines flattened so the rationale cannot break out of its comment line.
-    assertStringIncludes(src.split("\n")[0], "Rationale: user keeps asking about the forecast");
+    assertStringIncludes(
+      src.split("\n")[0],
+      "Rationale: user keeps asking about the forecast",
+    );
     assertStringIncludes(src, "export default function (pi) {}");
   });
 });
@@ -77,7 +82,12 @@ Deno.test("define_extension records the rationale alongside the source for the r
 Deno.test("define_extension rejects a name that would escape the pending dir", async () => {
   await withTempHome(async () => {
     await assertRejects(
-      () => run(defineExtTool("ws-1"), { name: "../evil", rationale: "r", source: "x" }),
+      () =>
+        run(defineExtTool("ws-1"), {
+          name: "../evil",
+          rationale: "r",
+          source: "x",
+        }),
       Error,
       "invalid extension name",
     );

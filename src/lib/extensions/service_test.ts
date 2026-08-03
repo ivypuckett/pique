@@ -1,8 +1,8 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   enableExtension,
-  extensionId,
   type Extension,
+  extensionId,
   listExtensions,
   listVisibleExtensions,
   parseId,
@@ -11,7 +11,11 @@ import {
   revokeExtension,
 } from "./service.ts";
 import { enableLocal } from "./local.ts";
-import { ensureExtensionDirs, pendingPackagePath, pendingPath } from "./paths.ts";
+import {
+  ensureExtensionDirs,
+  pendingPackagePath,
+  pendingPath,
+} from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -26,14 +30,21 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-async function seedLocal(scope: ScopeId, name: string, source = "// src"): Promise<void> {
+async function seedLocal(
+  scope: ScopeId,
+  name: string,
+  source = "// src",
+): Promise<void> {
   await ensureExtensionDirs(scope);
   await Deno.writeTextFile(pendingPath(scope, name), source);
 }
 
 // Seed the quarantine record directly rather than fetching: listing must not care how
 // the bytes got there, and this keeps the test off the network.
-async function seedPendingPackage(scope: ScopeId, source: string): Promise<void> {
+async function seedPendingPackage(
+  scope: ScopeId,
+  source: string,
+): Promise<void> {
   await ensureExtensionDirs(scope);
   await Deno.writeTextFile(
     pendingPackagePath(scope, source),
@@ -42,14 +53,22 @@ async function seedPendingPackage(scope: ScopeId, source: string): Promise<void>
 }
 
 const summary = (list: Extension[]) =>
-  list.map((e) => ({ id: e.id, origin: e.origin, state: e.state, scope: e.scope }));
+  list.map((e) => ({
+    id: e.id,
+    origin: e.origin,
+    state: e.state,
+    scope: e.scope,
+  }));
 
 Deno.test("ids split on the first colon, so a package source keeps its own", () => {
   assertEquals(parseId(extensionId("package", "npm:pi-crew")), {
     origin: "package",
     key: "npm:pi-crew",
   });
-  assertEquals(parseId(extensionId("local", "my_ext")), { origin: "local", key: "my_ext" });
+  assertEquals(parseId(extensionId("local", "my_ext")), {
+    origin: "local",
+    key: "my_ext",
+  });
   assertThrows(() => parseId("my_ext"), Error, "invalid extension id");
   assertThrows(() => parseId("bogus:x"), Error, "invalid extension id");
 });
@@ -68,9 +87,19 @@ Deno.test("both origins appear in one list, pending before enabled", async () =>
     await enableLocal("ws-1", "live_one");
 
     assertEquals(summary(await listExtensions("ws-1")), [
-      { id: "package:npm:pi-crew", origin: "package", state: "pending", scope: "ws-1" },
+      {
+        id: "package:npm:pi-crew",
+        origin: "package",
+        state: "pending",
+        scope: "ws-1",
+      },
       { id: "local:mine", origin: "local", state: "pending", scope: "ws-1" },
-      { id: "local:live_one", origin: "local", state: "enabled", scope: "ws-1" },
+      {
+        id: "local:live_one",
+        origin: "local",
+        state: "enabled",
+        scope: "ws-1",
+      },
     ]);
   });
 });
@@ -137,11 +166,19 @@ Deno.test("root's packages are NOT inherited by a workspace", async () => {
 Deno.test("a malformed pending record is skipped, not fatal", async () => {
   await withTempHome(async () => {
     await ensureExtensionDirs("ws-1");
-    await Deno.writeTextFile(pendingPackagePath("ws-1", "npm:broken"), "{ not json");
+    await Deno.writeTextFile(
+      pendingPackagePath("ws-1", "npm:broken"),
+      "{ not json",
+    );
     await seedPendingPackage("ws-1", "npm:fine");
 
     assertEquals(summary(await listExtensions("ws-1")), [
-      { id: "package:npm:fine", origin: "package", state: "pending", scope: "ws-1" },
+      {
+        id: "package:npm:fine",
+        origin: "package",
+        state: "pending",
+        scope: "ws-1",
+      },
     ]);
   });
 });
@@ -149,7 +186,10 @@ Deno.test("a malformed pending record is skipped, not fatal", async () => {
 Deno.test("a pending record that lost its source falls back to the filename", async () => {
   await withTempHome(async () => {
     await ensureExtensionDirs("ws-1");
-    await Deno.writeTextFile(pendingPackagePath("ws-1", "npm:@scope/pkg"), "{}");
+    await Deno.writeTextFile(
+      pendingPackagePath("ws-1", "npm:@scope/pkg"),
+      "{}",
+    );
     assertEquals((await listExtensions("ws-1"))[0].source, "npm:@scope/pkg");
   });
 });

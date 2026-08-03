@@ -36,8 +36,14 @@ Deno.test("addWorkspace seeds the new workspace's cwd when given one", () => {
   const s = addWorkspace(createInitialSession(), "/proj/x");
   assertEquals(s.workspaces[0].cwd, "/proj/x");
   // No cwd, or a blank one, leaves the override unset.
-  assertEquals(addWorkspace(createInitialSession()).workspaces[0].cwd, undefined);
-  assertEquals(addWorkspace(createInitialSession(), "  ").workspaces[0].cwd, undefined);
+  assertEquals(
+    addWorkspace(createInitialSession()).workspaces[0].cwd,
+    undefined,
+  );
+  assertEquals(
+    addWorkspace(createInitialSession(), "  ").workspaces[0].cwd,
+    undefined,
+  );
 });
 
 Deno.test("addWorkspace picks the smallest free ws-N id", () => {
@@ -138,7 +144,10 @@ Deno.test("isSessionState accepts a real session and rejects malformed shapes", 
 });
 
 Deno.test("migrateSession adopts a pre-root layout under a fresh root", () => {
-  const old = { workspaces: addWorkspace(createInitialSession()).workspaces, activeId: "ws-1" };
+  const old = {
+    workspaces: addWorkspace(createInitialSession()).workspaces,
+    activeId: "ws-1",
+  };
   const s = migrateSession(old, "~/workspace")!;
   assertEquals(s.root.id, "root");
   assertEquals(s.root.cwd, "~/workspace"); // the old global defaultDir becomes root's

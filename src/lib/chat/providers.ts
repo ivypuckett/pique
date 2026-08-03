@@ -44,8 +44,14 @@ const PROVIDER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 // --- Pure helpers (unit-tested; no runtime/filesystem) -----------------------
 
 // deno-lint-ignore no-explicit-any
-export function toProviderInfo(provider: any, configured: boolean, isCustom: boolean): ProviderInfo {
-  const name = typeof provider?.name === "string" && provider.name ? provider.name : String(provider?.id);
+export function toProviderInfo(
+  provider: any,
+  configured: boolean,
+  isCustom: boolean,
+): ProviderInfo {
+  const name = typeof provider?.name === "string" && provider.name
+    ? provider.name
+    : String(provider?.id);
   return {
     id: String(provider?.id),
     name,
@@ -58,7 +64,9 @@ export function toProviderInfo(provider: any, configured: boolean, isCustom: boo
 // The models.json provider entry for a custom endpoint. `openai-completions` is
 // the broadly-compatible API (the same one LM Studio uses here); the per-model
 // fields are conservative defaults the user can refine by editing the file.
-export function buildCustomEntry(input: CustomProviderInput): Record<string, unknown> {
+export function buildCustomEntry(
+  input: CustomProviderInput,
+): Record<string, unknown> {
   const apiKey = input.apiKey?.trim();
   return {
     baseUrl: input.baseUrl.trim(),
@@ -74,18 +82,32 @@ export function buildCustomEntry(input: CustomProviderInput): Record<string, unk
 }
 
 // Immutably add/replace one provider entry, preserving other keys in the file.
-export function upsertCustomProvider(config: unknown, input: CustomProviderInput): ModelsJson {
-  const base: ModelsJson = config && typeof config === "object" && !Array.isArray(config)
-    ? { ...(config as ModelsJson) }
-    : {};
-  return { ...base, providers: { ...(base.providers ?? {}), [input.id]: buildCustomEntry(input) } };
+export function upsertCustomProvider(
+  config: unknown,
+  input: CustomProviderInput,
+): ModelsJson {
+  const base: ModelsJson =
+    config && typeof config === "object" && !Array.isArray(config)
+      ? { ...(config as ModelsJson) }
+      : {};
+  return {
+    ...base,
+    providers: {
+      ...(base.providers ?? {}),
+      [input.id]: buildCustomEntry(input),
+    },
+  };
 }
 
 // Immutably drop one provider entry, preserving other keys in the file.
-export function removeProviderFromConfig(config: unknown, id: string): ModelsJson {
-  const base: ModelsJson = config && typeof config === "object" && !Array.isArray(config)
-    ? { ...(config as ModelsJson) }
-    : {};
+export function removeProviderFromConfig(
+  config: unknown,
+  id: string,
+): ModelsJson {
+  const base: ModelsJson =
+    config && typeof config === "object" && !Array.isArray(config)
+      ? { ...(config as ModelsJson) }
+      : {};
   const providers = { ...(base.providers ?? {}) };
   delete providers[id];
   return { ...base, providers };
@@ -95,13 +117,19 @@ export function removeProviderFromConfig(config: unknown, id: string): ModelsJso
 // missing/blank/non-object config yields none.
 export function customProviderIds(config: unknown): Set<string> {
   const providers = (config as ModelsJson | null)?.providers;
-  return new Set(providers && typeof providers === "object" ? Object.keys(providers) : []);
+  return new Set(
+    providers && typeof providers === "object" ? Object.keys(providers) : [],
+  );
 }
 
 export function validateCustomInput(input: CustomProviderInput): void {
-  if (!PROVIDER_ID_RE.test(input.id)) throw new Error(`invalid provider id: ${input.id}`);
+  if (!PROVIDER_ID_RE.test(input.id)) {
+    throw new Error(`invalid provider id: ${input.id}`);
+  }
   if (input.baseUrl.trim() === "") throw new Error("base URL is required");
-  if (input.models.length === 0) throw new Error("at least one model id is required");
+  if (input.models.length === 0) {
+    throw new Error("at least one model id is required");
+  }
 }
 
 // The pi login flow drives an interaction to collect credentials. For an API
@@ -113,7 +141,9 @@ export function apiKeyInteraction(apiKey: string) {
     prompt: (p: { type: string }): Promise<string> =>
       p.type === "secret" || p.type === "text"
         ? Promise.resolve(apiKey)
-        : Promise.reject(new Error(`unsupported auth prompt for API-key login: ${p.type}`)),
+        : Promise.reject(
+          new Error(`unsupported auth prompt for API-key login: ${p.type}`),
+        ),
     notify: () => {},
   };
 }
@@ -146,12 +176,19 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   const runtime = await ensureRuntime();
   const custom = customProviderIds(await readModelsJson());
   return runtime.getProviders().map((p: { id: string }) =>
-    toProviderInfo(p, runtime.getProviderAuthStatus(p.id).configured, custom.has(p.id))
+    toProviderInfo(
+      p,
+      runtime.getProviderAuthStatus(p.id).configured,
+      custom.has(p.id),
+    )
   );
 }
 
 // Persist an API key for a built-in provider via pi's login flow (→ auth.json).
-export async function connectProvider(id: string, apiKey: string): Promise<void> {
+export async function connectProvider(
+  id: string,
+  apiKey: string,
+): Promise<void> {
   if (apiKey.trim() === "") throw new Error("API key is required");
   const runtime = await ensureRuntime();
   await runtime.login(id, "api_key", apiKeyInteraction(apiKey.trim()));
@@ -163,7 +200,9 @@ export async function disconnectProvider(id: string): Promise<void> {
 }
 
 // Write the endpoint to models.json, then reload so the live runtime serves it.
-export async function addCustomProvider(input: CustomProviderInput): Promise<void> {
+export async function addCustomProvider(
+  input: CustomProviderInput,
+): Promise<void> {
   validateCustomInput(input);
   await writeModelsJson(upsertCustomProvider(await readModelsJson(), input));
   await (await ensureRuntime()).reloadConfig();
@@ -171,7 +210,9 @@ export async function addCustomProvider(input: CustomProviderInput): Promise<voi
 
 export async function removeCustomProvider(id: string): Promise<void> {
   const config = await readModelsJson();
-  if (!customProviderIds(config).has(id)) throw new Error(`not a custom provider: ${id}`);
+  if (!customProviderIds(config).has(id)) {
+    throw new Error(`not a custom provider: ${id}`);
+  }
   await writeModelsJson(removeProviderFromConfig(config, id));
   await (await ensureRuntime()).reloadConfig();
 }

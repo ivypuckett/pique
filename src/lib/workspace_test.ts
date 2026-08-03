@@ -97,8 +97,14 @@ Deno.test("setWorkspaceDir sets the override and clears it on blank input", () =
   assertEquals(w.cwd, undefined);
   assertEquals(setWorkspaceDir(w, "/proj/x").cwd, "/proj/x");
   // Blank/whitespace clears back to "use the default".
-  assertEquals(setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "").cwd, undefined);
-  assertEquals(setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "   ").cwd, undefined);
+  assertEquals(
+    setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "").cwd,
+    undefined,
+  );
+  assertEquals(
+    setWorkspaceDir(setWorkspaceDir(w, "/proj/x"), "   ").cwd,
+    undefined,
+  );
 });
 
 Deno.test("isWorkspaceState accepts an optional string cwd and rejects a non-string", () => {

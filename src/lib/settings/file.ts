@@ -4,7 +4,9 @@
 // Deno-side only. Each named config is one file: ~/.pique/<name>.json.
 
 // A parsed JSON value — the boundary type carried over win.bind (see desktop.ts).
-export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
+export type Json = null | boolean | number | string | Json[] | {
+  [k: string]: Json;
+};
 
 // Config names key a filename, so constrain them — no path separators / traversal.
 const NAME_RE = /^[a-z][a-z0-9-]*$/;
@@ -72,7 +74,9 @@ export function resolveGitScanDepth(settings: Json): number {
     const ws = (settings as { [k: string]: Json }).workspace;
     if (ws && typeof ws === "object" && !Array.isArray(ws)) {
       const d = (ws as { [k: string]: Json }).gitScanDepth;
-      if (typeof d === "number" && Number.isInteger(d) && d >= 0) return Math.min(d, 10);
+      if (typeof d === "number" && Number.isInteger(d) && d >= 0) {
+        return Math.min(d, 10);
+      }
     }
   }
   return fallback;
@@ -82,7 +86,10 @@ export function resolveGitScanDepth(settings: Json): number {
 // (leading `~` expanded), else the root workspace's, else $HOME — the cwd half of
 // the scope inheritance chain. The override is a raw string threaded down from the
 // workspace state; a blank or absent one means "inherit".
-export function resolveModuleDir(override: string | undefined, layout: Json): string {
+export function resolveModuleDir(
+  override: string | undefined,
+  layout: Json,
+): string {
   if (typeof override === "string" && override.trim() !== "") {
     return expandTilde(override, Deno.env.get("HOME") ?? "/");
   }

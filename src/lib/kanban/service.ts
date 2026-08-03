@@ -6,7 +6,12 @@
 // board: a workspace can address it (scope "root"), while root has no way to name a
 // workspace's — the visibility rule from scope/paths.ts `chain`. Runs Deno-side only.
 import { type BoardHandle, openBoard } from "./board.ts";
-import { ROOT, type ScopeId, scopeBoardPath, scopeDir } from "../scope/paths.ts";
+import {
+  ROOT,
+  scopeBoardPath,
+  scopeDir,
+  type ScopeId,
+} from "../scope/paths.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
 import type { Json } from "../settings/file.ts";
 
@@ -49,7 +54,10 @@ export function resolveKanbanDefaults(config: Json): { name: string }[] {
 // downward reference, so a workspace board is unreachable from root by construction.
 export type BoardRef = "own" | "root";
 
-export function resolveBoardScope(scope: ScopeId, ref: BoardRef | undefined): ScopeId {
+export function resolveBoardScope(
+  scope: ScopeId,
+  ref: BoardRef | undefined,
+): ScopeId {
   return ref === "root" ? ROOT : scope;
 }
 

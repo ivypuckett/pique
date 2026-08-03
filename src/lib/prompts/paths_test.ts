@@ -1,5 +1,11 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { assertPromptName, pendingDir, pendingPromptPath, promptPath, promptsDir } from "./paths.ts";
+import {
+  assertPromptName,
+  pendingDir,
+  pendingPromptPath,
+  promptPath,
+  promptsDir,
+} from "./paths.ts";
 import { ROOT } from "../scope/paths.ts";
 
 function withHome(home: string, fn: () => void): void {
@@ -12,12 +18,18 @@ function withHome(home: string, fn: () => void): void {
   }
 }
 
-// The live dir is INSIDE the scope's agentDir, unlike profiles: pi auto-discovers
-// <agentDir>/prompts, and here that discovery is the whole point.
+// The live dir is INSIDE the scope's agentDir: pi auto-discovers <agentDir>/prompts,
+// and here that discovery is the whole point.
 Deno.test("prompts live in the scope's agent dir, where pi looks for them", () => {
   withHome("/tmp/home", () => {
-    assertEquals(promptsDir(ROOT), "/tmp/home/.pique/scopes/root/agent/prompts");
-    assertEquals(pendingDir("ws-2"), "/tmp/home/.pique/scopes/ws-2/agent/prompts/pending");
+    assertEquals(
+      promptsDir(ROOT),
+      "/tmp/home/.pique/scopes/root/agent/prompts",
+    );
+    assertEquals(
+      pendingDir("ws-2"),
+      "/tmp/home/.pique/scopes/ws-2/agent/prompts/pending",
+    );
   });
 });
 

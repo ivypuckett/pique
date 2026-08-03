@@ -11,23 +11,19 @@
   // fixed for this instance (the tree is keyed by it) and cwd only seeds a new session,
   // so we deliberately read both once at creation — untrack tells Svelte that's intended.
   const session = untrack(() => chatSession(workspaceId, cwd));
-  const { items, input, ready, streaming, models, level, profile, profiles } = session;
+  const { items, input, ready, streaming, models, level } = session;
   const commands = session.commands;
 
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
 
-  // Both of these leave the current conversation behind — switching profile because pi
-  // fixes the system prompt at session creation, a new chat because that is the point —
-  // so each is held here until confirmed. Held here rather than in the store: until it is
-  // confirmed, nothing about the conversation has changed. The profile select shows the
-  // pending choice, so cancelling visibly puts it back.
-  let pending = $state<{ kind: "profile"; profile: string } | { kind: "new" } | null>(null);
+  // A new chat leaves the current conversation behind, so it is held here until
+  // confirmed. Held here rather than in the store: until it is confirmed, nothing about
+  // the conversation has changed.
+  let pending = $state<{ kind: "new" } | null>(null);
 
   function confirmPending() {
-    const p = pending;
     pending = null;
-    if (p?.kind === "profile") session.pickProfile(p.profile);
-    else if (p?.kind === "new") session.newChat();
+    session.newChat();
   }
 
   // `/` command menu (skills / prompt templates / extension commands). Loaded once
@@ -171,37 +167,13 @@
 
   {#if pending !== null}
     <div class="flex items-center gap-2 border-t border-base-300 bg-base-200 p-2 text-sm">
-      <span class="flex-1">
-        {#if pending.kind === "profile"}
-          Switching to <strong>{pending.profile === "" ? "base" : pending.profile}</strong>
-          starts a new conversation.
-        {:else}
-          Starting a new chat leaves this conversation behind.
-        {/if}
-      </span>
-      <button class="btn btn-sm btn-primary" onclick={confirmPending}>
-        {pending.kind === "profile" ? "Switch" : "New chat"}
-      </button>
+      <span class="flex-1">Starting a new chat leaves this conversation behind.</span>
+      <button class="btn btn-sm btn-primary" onclick={confirmPending}>New chat</button>
       <button class="btn btn-sm btn-ghost" onclick={() => (pending = null)}>Cancel</button>
     </div>
   {/if}
 
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
-    <select
-      class="select select-bordered select-sm"
-      value={pending?.kind === "profile" ? pending.profile : $profile}
-      onchange={(e) => {
-        const value = (e.target as HTMLSelectElement).value;
-        pending = value === $profile ? null : { kind: "profile", profile: value };
-      }}
-      disabled={!$ready || $streaming}
-    >
-      <!-- "" is the absence of a profile: the scope's base prompt and nothing appended. -->
-      <option value="">base</option>
-      {#each $profiles as p}
-        <option value={p.name} title={p.description ?? ""}>{p.name}</option>
-      {/each}
-    </select>
     <select class="select select-bordered select-sm" onchange={(e) => session.pickModel((e.target as HTMLSelectElement).value)} disabled={!$ready}>
       {#each $models as m}
         <option value={`${m.provider}/${m.id}`} selected={m.current}>{m.name}</option>

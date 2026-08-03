@@ -24,9 +24,16 @@ export function dirDialogCommand(picker: Picker, startDir: string): {
 // Run one picker. Cancel (non-zero exit) or empty selection → null. A missing
 // binary makes Deno.Command().output() throw, which propagates so pickDirectory
 // can try the next picker.
-async function runPicker(picker: Picker, startDir: string): Promise<string | null> {
+async function runPicker(
+  picker: Picker,
+  startDir: string,
+): Promise<string | null> {
   const { cmd, args } = dirDialogCommand(picker, startDir);
-  const out = await new Deno.Command(cmd, { args, stdout: "piped", stderr: "null" }).output();
+  const out = await new Deno.Command(cmd, {
+    args,
+    stdout: "piped",
+    stderr: "null",
+  }).output();
   if (!out.success) return null;
   const path = new TextDecoder().decode(out.stdout).trim();
   return path === "" ? null : path;

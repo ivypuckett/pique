@@ -1,5 +1,10 @@
 import { writable } from "svelte/store";
-import { DEFAULT_SETTINGS, readConfig, type Settings, writeConfig } from "./bindings.ts";
+import {
+  DEFAULT_SETTINGS,
+  readConfig,
+  type Settings,
+  writeConfig,
+} from "./bindings.ts";
 
 // The daisyui themes compiled in app.css, in picker order. This list and the
 // `themes:` list in src/app.css must stay in lockstep — one is the UI, the

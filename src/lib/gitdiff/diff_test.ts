@@ -38,7 +38,11 @@ rename to docs/new.md
 Deno.test("splitDiff separates each file", () => {
   const files = splitDiff(MODIFY + ADD + DELETE);
   assertEquals(files.length, 3);
-  assertEquals(files.map((f) => f.newName), ["src/foo.ts", "new.py", "/dev/null"]);
+  assertEquals(files.map((f) => f.newName), [
+    "src/foo.ts",
+    "new.py",
+    "/dev/null",
+  ]);
 });
 
 Deno.test("splitDiff keeps the full per-file diff as the hunk", () => {

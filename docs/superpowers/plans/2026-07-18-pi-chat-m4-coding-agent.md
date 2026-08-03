@@ -1,22 +1,55 @@
 # Pi Chat M4: Coding Agent Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade the M1 chat module from a text chatbot into a real coding agent: enable pi's full tool set, render tool executions and thinking in the UI, add an abort/stop control, and a model picker for the local LM Studio models.
+**Goal:** Upgrade the M1 chat module from a text chatbot into a real coding
+agent: enable pi's full tool set, render tool executions and thinking in the UI,
+add an abort/stop control, and a model picker for the local LM Studio models.
 
-**Architecture:** Same in-process design as M1 — pi runs in the Deno desktop process (`src/lib/chat/agent.ts`), streaming JSON-safe events to `Chat.svelte` over `win.bind`. M4 widens the `ChatEvent` union (tool + thinking blocks), adds backend functions for model listing / model + thinking-level control, exposes them as new `chat*` bindings, and extends the Svelte UI. The frontend↔backend binding contract stays hand-synced (as documented in `bindings.ts`).
+**Architecture:** Same in-process design as M1 — pi runs in the Deno desktop
+process (`src/lib/chat/agent.ts`), streaming JSON-safe events to `Chat.svelte`
+over `win.bind`. M4 widens the `ChatEvent` union (tool + thinking blocks), adds
+backend functions for model listing / model + thinking-level control, exposes
+them as new `chat*` bindings, and extends the Svelte UI. The frontend↔backend
+binding contract stays hand-synced (as documented in `bindings.ts`).
 
-**Tech Stack:** Deno 2.9.2, `@earendil-works/pi-coding-agent@^0.80`, Svelte 5 runes, Tailwind 4 + daisyUI 5, `deno test`. Verified against a local LM Studio server.
+**Tech Stack:** Deno 2.9.2, `@earendil-works/pi-coding-agent@^0.80`, Svelte 5
+runes, Tailwind 4 + daisyUI 5, `deno test`. Verified against a local LM Studio
+server.
 
 **Prerequisite context:**
-- M1 is merged on `main`. Existing files: `src/lib/chat/{agent.ts,bindings.ts,Chat.svelte,agent_test.ts,bindings_test.ts}`, `chat*` binds in `src/desktop.ts`, `chat` entry in `src/lib/modules/registry.ts`.
-- `agent.ts` currently: `ChatEvent` union {text,thinking,done,error}; pure `toFrontendEvent`; `startAgent/promptAgent/readAgent/abortAgent`; `startAgent` pins `modelRuntime.getModel("lmstudio","google/gemma-4-e4b")`, `thinkingLevel:"off"`, `tools:[]`.
-- **cwd caveat (accepted):** the agent runs in `process.cwd()` = the pique repo, so `bash`/`edit`/`write` act on this project. Per-workspace cwd scoping is out of scope for M4.
+
+- M1 is merged on `main`. Existing files:
+  `src/lib/chat/{agent.ts,bindings.ts,Chat.svelte,agent_test.ts,bindings_test.ts}`,
+  `chat*` binds in `src/desktop.ts`, `chat` entry in
+  `src/lib/modules/registry.ts`.
+- `agent.ts` currently: `ChatEvent` union {text,thinking,done,error}; pure
+  `toFrontendEvent`; `startAgent/promptAgent/readAgent/abortAgent`; `startAgent`
+  pins `modelRuntime.getModel("lmstudio","google/gemma-4-e4b")`,
+  `thinkingLevel:"off"`, `tools:[]`.
+- **cwd caveat (accepted):** the agent runs in `process.cwd()` = the pique repo,
+  so `bash`/`edit`/`write` act on this project. Per-workspace cwd scoping is out
+  of scope for M4.
 
 **Authoritative pi types (from installed `dist/core/extensions/types.d.ts`):**
+
 ```typescript
-interface ToolExecutionStartEvent { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any; }
-interface ToolExecutionEndEvent   { type: "tool_execution_end";   toolCallId: string; toolName: string; result: any; isError: boolean; }
+interface ToolExecutionStartEvent {
+  type: "tool_execution_start";
+  toolCallId: string;
+  toolName: string;
+  args: any;
+}
+interface ToolExecutionEndEvent {
+  type: "tool_execution_end";
+  toolCallId: string;
+  toolName: string;
+  result: any;
+  isError: boolean;
+}
 // AgentSession methods: setModel(model), setThinkingLevel(level), model, thinkingLevel
 // ModelRuntime: getAvailable(): Promise<Model[]>, getModel(provider, id): Model | undefined
 // Model: { provider: string; id: string; name: string; reasoning: boolean }
@@ -27,24 +60,52 @@ interface ToolExecutionEndEvent   { type: "tool_execution_end";   toolCallId: st
 
 ## File Structure (M4)
 
-- Modify `src/lib/chat/agent.ts` — widen `ChatEvent`; extend `toFrontendEvent` for tool + (existing) thinking events; enable tools; add `listModels`/`setModel`/`setThinkingLevel`; export a `ModelInfo`/`ThinkingLevel` type for the frontend.
-- Modify `src/lib/chat/agent_test.ts` — add translator cases for tool_start/tool_end.
-- Modify `src/lib/chat/bindings.ts` — add `chatListModels`/`chatSetModel`/`chatSetThinking` to the interface + re-export the shared types.
-- Modify `src/desktop.ts` — bind the three new handlers (before the top-level await, per the file's rule).
-- Modify `src/lib/chat/Chat.svelte` — render tool/thinking blocks, add Stop button, model picker, thinking-level select.
+- Modify `src/lib/chat/agent.ts` — widen `ChatEvent`; extend `toFrontendEvent`
+  for tool + (existing) thinking events; enable tools; add
+  `listModels`/`setModel`/`setThinkingLevel`; export a
+  `ModelInfo`/`ThinkingLevel` type for the frontend.
+- Modify `src/lib/chat/agent_test.ts` — add translator cases for
+  tool_start/tool_end.
+- Modify `src/lib/chat/bindings.ts` — add
+  `chatListModels`/`chatSetModel`/`chatSetThinking` to the interface + re-export
+  the shared types.
+- Modify `src/desktop.ts` — bind the three new handlers (before the top-level
+  await, per the file's rule).
+- Modify `src/lib/chat/Chat.svelte` — render tool/thinking blocks, add Stop
+  button, model picker, thinking-level select.
 
 No new files. `chatAbort` already exists (M1) and is reused for the Stop button.
 
-**Extended `ChatEvent` (defined in `agent.ts`, imported by `bindings.ts` + `Chat.svelte`):**
+**Extended `ChatEvent` (defined in `agent.ts`, imported by `bindings.ts` +
+`Chat.svelte`):**
+
 ```typescript
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export type ModelInfo = { provider: string; id: string; name: string; current: boolean };
+export type ThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+export type ModelInfo = {
+  provider: string;
+  id: string;
+  name: string;
+  current: boolean;
+};
 
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "thinking"; delta: string }
   | { kind: "tool_start"; id: string; name: string; args: string }
-  | { kind: "tool_end"; id: string; name: string; result: string; isError: boolean }
+  | {
+    kind: "tool_end";
+    id: string;
+    name: string;
+    result: string;
+    isError: boolean;
+  }
   | { kind: "done" }
   | { kind: "error"; message: string };
 ```
@@ -54,7 +115,9 @@ export type ChatEvent =
 ## Task 1: Widen event translation for tools (TDD)
 
 **Files:**
-- Modify: `src/lib/chat/agent.ts` (the `ChatEvent` type + `toFrontendEvent`, near the top; leave session code below untouched for now)
+
+- Modify: `src/lib/chat/agent.ts` (the `ChatEvent` type + `toFrontendEvent`,
+  near the top; leave session code below untouched for now)
 - Modify: `src/lib/chat/agent_test.ts`
 
 - [ ] **Step 1: Add failing tests** — append to `src/lib/chat/agent_test.ts`:
@@ -67,7 +130,12 @@ Deno.test("toFrontendEvent maps a tool start", () => {
     toolName: "bash",
     args: { command: "ls" },
   });
-  assertEquals(out, { kind: "tool_start", id: "c1", name: "bash", args: '{"command":"ls"}' });
+  assertEquals(out, {
+    kind: "tool_start",
+    id: "c1",
+    name: "bash",
+    args: '{"command":"ls"}',
+  });
 });
 
 Deno.test("toFrontendEvent maps a tool end", () => {
@@ -78,7 +146,13 @@ Deno.test("toFrontendEvent maps a tool end", () => {
     result: "file.txt",
     isError: false,
   });
-  assertEquals(out, { kind: "tool_end", id: "c1", name: "bash", result: "file.txt", isError: false });
+  assertEquals(out, {
+    kind: "tool_end",
+    id: "c1",
+    name: "bash",
+    result: "file.txt",
+    isError: false,
+  });
 });
 
 Deno.test("toFrontendEvent stringifies non-string tool results", () => {
@@ -89,18 +163,27 @@ Deno.test("toFrontendEvent stringifies non-string tool results", () => {
     result: { lines: 3 },
     isError: false,
   });
-  assertEquals(out, { kind: "tool_end", id: "c2", name: "read", result: '{"lines":3}', isError: false });
+  assertEquals(out, {
+    kind: "tool_end",
+    id: "c2",
+    name: "read",
+    result: '{"lines":3}',
+    isError: false,
+  });
 });
 ```
 
 - [ ] **Step 2: Run, verify new tests FAIL**
 
-Run: `deno test -A src/lib/chat/agent_test.ts`
-Expected: the 3 new tests fail (unhandled event types return `null`); the original 3 still pass.
+Run: `deno test -A src/lib/chat/agent_test.ts` Expected: the 3 new tests fail
+(unhandled event types return `null`); the original 3 still pass.
 
-- [ ] **Step 3: Widen `ChatEvent` and `toFrontendEvent`** in `src/lib/chat/agent.ts`.
+- [ ] **Step 3: Widen `ChatEvent` and `toFrontendEvent`** in
+      `src/lib/chat/agent.ts`.
 
-Replace the existing `ChatEvent` type with the extended union (and add `ThinkingLevel`/`ModelInfo`) shown in the File Structure section above. Then replace the body of `toFrontendEvent` with:
+Replace the existing `ChatEvent` type with the extended union (and add
+`ThinkingLevel`/`ModelInfo`) shown in the File Structure section above. Then
+replace the body of `toFrontendEvent` with:
 
 ```typescript
 // deno-lint-ignore no-explicit-any
@@ -115,11 +198,18 @@ export function toFrontendEvent(event: any): ChatEvent | null {
     case "message_update": {
       const ev = event.assistantMessageEvent;
       if (ev?.type === "text_delta") return { kind: "text", delta: ev.delta };
-      if (ev?.type === "thinking_delta") return { kind: "thinking", delta: ev.delta };
+      if (ev?.type === "thinking_delta") {
+        return { kind: "thinking", delta: ev.delta };
+      }
       return null;
     }
     case "tool_execution_start":
-      return { kind: "tool_start", id: event.toolCallId, name: event.toolName, args: preview(event.args) };
+      return {
+        kind: "tool_start",
+        id: event.toolCallId,
+        name: event.toolName,
+        args: preview(event.args),
+      };
     case "tool_execution_end":
       return {
         kind: "tool_end",
@@ -136,8 +226,7 @@ export function toFrontendEvent(event: any): ChatEvent | null {
 
 - [ ] **Step 4: Run, verify all pass**
 
-Run: `deno test -A src/lib/chat/agent_test.ts`
-Expected: 6 tests pass.
+Run: `deno test -A src/lib/chat/agent_test.ts` Expected: 6 tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -151,29 +240,42 @@ git commit -m "feat(chat): translate tool execution events to frontend"
 ## Task 2: Enable tools + model/thinking control (backend)
 
 **Files:**
+
 - Modify: `src/lib/chat/agent.ts` (the session-lifecycle section)
 
-- [ ] **Step 1: Enable the full tool set.** In `startAgent`, remove the `tools: []` line and the `thinkingLevel: "off"` line so pi uses its default coding tools and default thinking level. The `createAgentSession` call becomes:
+- [ ] **Step 1: Enable the full tool set.** In `startAgent`, remove the
+      `tools: []` line and the `thinkingLevel: "off"` line so pi uses its
+      default coding tools and default thinking level. The `createAgentSession`
+      call becomes:
 
 ```typescript
-  const created = await createAgentSession({
-    model,
-    sessionManager: SessionManager.inMemory(),
-    modelRuntime,
-  });
+const created = await createAgentSession({
+  model,
+  sessionManager: SessionManager.inMemory(),
+  modelRuntime,
+});
 ```
 
-Keep the existing pinned-model line (`const model = modelRuntime.getModel("lmstudio", "google/gemma-4-e4b");`) and the comment above it. Also keep a module reference to `modelRuntime` for the new functions — change `const modelRuntime = await ModelRuntime.create();` so the value is stored at module scope:
+Keep the existing pinned-model line
+(`const model = modelRuntime.getModel("lmstudio", "google/gemma-4-e4b");`) and
+the comment above it. Also keep a module reference to `modelRuntime` for the new
+functions — change `const modelRuntime = await ModelRuntime.create();` so the
+value is stored at module scope:
 
-At the top of the lifecycle section (near `let session: Session | undefined;`), add:
+At the top of the lifecycle section (near `let session: Session | undefined;`),
+add:
+
 ```typescript
 // deno-lint-ignore no-explicit-any
 let runtime: any | undefined;
 ```
-and in `startAgent` replace `const modelRuntime = await ModelRuntime.create();` with:
+
+and in `startAgent` replace `const modelRuntime = await ModelRuntime.create();`
+with:
+
 ```typescript
-  runtime = await ModelRuntime.create();
-  const modelRuntime = runtime;
+runtime = await ModelRuntime.create();
+const modelRuntime = runtime;
 ```
 
 - [ ] **Step 2: Add the control functions.** Append to `src/lib/chat/agent.ts`:
@@ -205,8 +307,8 @@ export function setThinkingLevel(level: ThinkingLevel): void {
 
 - [ ] **Step 3: Verify existing tests still pass and the module type-checks**
 
-Run: `deno test -A src/lib/chat/agent_test.ts` — expect 6 pass (unchanged).
-Run: `deno check src/lib/chat/agent.ts` — expect no type errors.
+Run: `deno test -A src/lib/chat/agent_test.ts` — expect 6 pass (unchanged). Run:
+`deno check src/lib/chat/agent.ts` — expect no type errors.
 
 - [ ] **Step 4: Commit**
 
@@ -220,9 +322,11 @@ git commit -m "feat(chat): enable coding tools and model/thinking control"
 ## Task 3: Bind the new backend handlers
 
 **Files:**
+
 - Modify: `src/desktop.ts`
 
-- [ ] **Step 1: Add three binds.** Alongside the existing `win.bind("chat...")` calls (still BEFORE the first top-level `await`), add:
+- [ ] **Step 1: Add three binds.** Alongside the existing `win.bind("chat...")`
+      calls (still BEFORE the first top-level `await`), add:
 
 ```typescript
 win.bind("chatListModels", async () => await chat.listModels());
@@ -257,9 +361,12 @@ git commit -m "feat(chat): expose model/thinking control bindings"
 ## Task 4: Extend the frontend bindings interface
 
 **Files:**
+
 - Modify: `src/lib/chat/bindings.ts`
 
-- [ ] **Step 1: Add the new methods + shared types.** Update `bindings.ts` so the type import includes the new shared types and the interface gains three methods:
+- [ ] **Step 1: Add the new methods + shared types.** Update `bindings.ts` so
+      the type import includes the new shared types and the interface gains
+      three methods:
 
 ```typescript
 import type { ChatEvent, ModelInfo, ThinkingLevel } from "./agent.ts";
@@ -294,9 +401,12 @@ git commit -m "feat(chat): extend bindings for model/thinking control"
 ## Task 5: Chat.svelte — tools, thinking, abort, model picker, thinking toggle
 
 **Files:**
+
 - Modify: `src/lib/chat/Chat.svelte`
 
-This is the largest task. The message list becomes a list of typed items (text bubbles, thinking blocks, tool blocks). A header bar holds the model picker + thinking-level select; a Stop button appears while streaming.
+This is the largest task. The message list becomes a list of typed items (text
+bubbles, thinking blocks, tool blocks). A header bar holds the model picker +
+thinking-level select; a Stop button appears while streaming.
 
 - [ ] **Step 1: Replace `Chat.svelte`** with:
 
@@ -428,8 +538,8 @@ This is the largest task. The message list becomes a list of typed items (text b
 
 - [ ] **Step 2: Build**
 
-Run: `deno task build`
-Expected: Vite build succeeds with no Svelte/TypeScript errors.
+Run: `deno task build` Expected: Vite build succeeds with no Svelte/TypeScript
+errors.
 
 - [ ] **Step 3: Commit**
 
@@ -442,19 +552,31 @@ git commit -m "feat(chat): render tools/thinking, add stop, model picker, thinki
 
 ## Task 6: End-to-end manual verification (LM Studio)
 
-Small local models vary in tool-calling ability; use a stronger one for the tool test.
+Small local models vary in tool-calling ability; use a stronger one for the tool
+test.
 
 - [ ] **Step 1: Launch** with LM Studio serving: `deno task dev`.
 
-- [ ] **Step 2: Model picker** — open a chat module; confirm the dropdown lists the LM Studio models (`google/gemma-4-e4b`, `google/gemma-4-26b-a4b`, `qwen/qwen3.6-27b`). Select `qwen/qwen3.6-27b`.
+- [ ] **Step 2: Model picker** — open a chat module; confirm the dropdown lists
+      the LM Studio models (`google/gemma-4-e4b`, `google/gemma-4-26b-a4b`,
+      `qwen/qwen3.6-27b`). Select `qwen/qwen3.6-27b`.
 
-- [ ] **Step 3: Tool use** — send: "List the files in the current directory, then tell me what this project is." Expected: one or more tool blocks appear (e.g. `bash`/`list`) showing args and a `✓`/`✗` result, followed by an assistant summary. Tool executions run against the pique repo (expected — see cwd caveat).
+- [ ] **Step 3: Tool use** — send: "List the files in the current directory,
+      then tell me what this project is." Expected: one or more tool blocks
+      appear (e.g. `bash`/`list`) showing args and a `✓`/`✗` result, followed by
+      an assistant summary. Tool executions run against the pique repo (expected
+      — see cwd caveat).
 
-- [ ] **Step 4: Abort** — send a prompt that triggers a longer run; click **Stop** mid-stream. Expected: streaming halts, input re-enables, no crash.
+- [ ] **Step 4: Abort** — send a prompt that triggers a longer run; click
+      **Stop** mid-stream. Expected: streaming halts, input re-enables, no
+      crash.
 
-- [ ] **Step 5: Thinking** — set the thinking select to `high`, send a question. Expected: a dimmed italic thinking block streams before the answer (model-dependent; qwen supports reasoning).
+- [ ] **Step 5: Thinking** — set the thinking select to `high`, send a question.
+      Expected: a dimmed italic thinking block streams before the answer
+      (model-dependent; qwen supports reasoning).
 
-- [ ] **Step 6: Regression** — confirm `deno test -A src/` is green and a terminal module still opens alongside chat.
+- [ ] **Step 6: Regression** — confirm `deno test -A src/` is green and a
+      terminal module still opens alongside chat.
 
 **M4 done when:** Steps 1–6 pass and `deno test -A src/` is green.
 
@@ -462,7 +584,17 @@ Small local models vary in tool-calling ability; use a stronger one for the tool
 
 ## Self-Review Notes
 
-- **Spec coverage:** tool scope = full tools (Task 2); tool-call rendering (Tasks 1 + 5); abort button (Task 5, reuses M1 `chatAbort`); model picker (Tasks 2/3/4/5); thinking display + level toggle (Tasks 1/2/3/4/5). All four requested M4 features covered.
-- **Type consistency:** `ChatEvent`, `ModelInfo`, `ThinkingLevel` defined once in `agent.ts`, re-exported through `bindings.ts`, consumed by `Chat.svelte`. New bindings `chatListModels`/`chatSetModel`/`chatSetThinking` match names/shapes across `agent.ts` → `desktop.ts` → `bindings.ts`.
-- **JSON boundary:** tool `args`/`result` are stringified via `preview()` before crossing `win.bind` (they are typed `any` in pi); `ModelInfo` is plain strings/bool. No `Uint8Array`-style trap.
-- **Deferred:** `tool_execution_update`/`partialResult` streaming (only start/end rendered — YAGNI); per-workspace cwd; persistent credentials (M2/M3); the RPC-subprocess migration (tracked separately as the napi fix).
+- **Spec coverage:** tool scope = full tools (Task 2); tool-call rendering
+  (Tasks 1 + 5); abort button (Task 5, reuses M1 `chatAbort`); model picker
+  (Tasks 2/3/4/5); thinking display + level toggle (Tasks 1/2/3/4/5). All four
+  requested M4 features covered.
+- **Type consistency:** `ChatEvent`, `ModelInfo`, `ThinkingLevel` defined once
+  in `agent.ts`, re-exported through `bindings.ts`, consumed by `Chat.svelte`.
+  New bindings `chatListModels`/`chatSetModel`/`chatSetThinking` match
+  names/shapes across `agent.ts` → `desktop.ts` → `bindings.ts`.
+- **JSON boundary:** tool `args`/`result` are stringified via `preview()` before
+  crossing `win.bind` (they are typed `any` in pi); `ModelInfo` is plain
+  strings/bool. No `Uint8Array`-style trap.
+- **Deferred:** `tool_execution_update`/`partialResult` streaming (only
+  start/end rendered — YAGNI); per-workspace cwd; persistent credentials
+  (M2/M3); the RPC-subprocess migration (tracked separately as the napi fix).

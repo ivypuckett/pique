@@ -36,7 +36,10 @@ export function parsePorcelain(out: string, top: string): ChangedPath[] {
     const xy = rec.slice(0, 2);
     const rel = rec.slice(3);
     if (xy[0] === "R" || xy[0] === "C") i++; // rename/copy: consume the trailing origin path
-    changes.push({ path: `${top.replace(/\/$/, "")}/${rel}`, untracked: xy === "??" });
+    changes.push({
+      path: `${top.replace(/\/$/, "")}/${rel}`,
+      untracked: xy === "??",
+    });
   }
   return changes;
 }
@@ -52,7 +55,12 @@ async function repoChanges(dir: string): Promise<ChangedPath[] | null> {
 
 // Run git in `dir`, returning stdout, or null on a non-zero exit (e.g. not a repo).
 async function run(dir: string, args: string[]): Promise<string | null> {
-  const cmd = new Deno.Command("git", { args, cwd: dir, stdout: "piped", stderr: "null" });
+  const cmd = new Deno.Command("git", {
+    args,
+    cwd: dir,
+    stdout: "piped",
+    stderr: "null",
+  });
   const { code, stdout } = await cmd.output();
   if (code !== 0) return null;
   return new TextDecoder().decode(stdout);
@@ -62,7 +70,10 @@ async function run(dir: string, args: string[]): Promise<string | null> {
 // (a workspace holding many repos) we descend through non-repo subdirs to find the repos
 // inside and union their changes, so their folders can be highlighted. Depth-capped and
 // skipping hidden dirs / node_modules to keep the scan cheap.
-export async function changedPaths(root: string, depth = 3): Promise<ChangedPath[]> {
+export async function changedPaths(
+  root: string,
+  depth = 3,
+): Promise<ChangedPath[]> {
   const direct = await repoChanges(root);
   if (direct !== null) return direct;
   if (depth <= 0) return [];
@@ -75,14 +86,26 @@ export async function changedPaths(root: string, depth = 3): Promise<ChangedPath
     return [];
   }
   for (const e of subs) {
-    if (!e.isDirectory || e.name.startsWith(".") || e.name === "node_modules") continue;
-    out.push(...await changedPaths(`${root.replace(/\/$/, "")}/${e.name}`, depth - 1));
+    if (!e.isDirectory || e.name.startsWith(".") || e.name === "node_modules") {
+      continue;
+    }
+    out.push(
+      ...await changedPaths(`${root.replace(/\/$/, "")}/${e.name}`, depth - 1),
+    );
   }
   return out;
 }
 
-export async function gitDiff(cwd: string, staged: boolean, path?: string): Promise<string> {
-  const args = ["diff", ...(staged ? ["--cached"] : []), ...(path ? ["--", path] : [])];
+export async function gitDiff(
+  cwd: string,
+  staged: boolean,
+  path?: string,
+): Promise<string> {
+  const args = [
+    "diff",
+    ...(staged ? ["--cached"] : []),
+    ...(path ? ["--", path] : []),
+  ];
   const cmd = new Deno.Command("git", {
     args,
     cwd: await runDir(cwd, path),
