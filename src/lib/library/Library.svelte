@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ROOT } from "../scope/paths.ts";
+  import Extensions from "../extensions/Extensions.svelte";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
     $props();
@@ -76,7 +77,7 @@
 
   <div class="min-h-0 flex-1 overflow-y-auto p-4">
     {#if section === "extensions"}
-      <div class="text-xs opacity-60">Extensions — scope {scope}, refresh {refreshKey}, root {scopeIsRoot}</div>
+      <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
     {:else}
       <div class="text-xs opacity-60">Prompts — scope {scope}, refresh {refreshKey}, root {scopeIsRoot}</div>
     {/if}
