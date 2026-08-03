@@ -58,6 +58,53 @@
     else if (e.key === "Escape") { e.preventDefault(); dismissed = true; }
   }
 
+  // Terminal-style transcript: new output pushes older lines up rather than landing
+  // below the fold. The pane stays pinned to the bottom until the reader scrolls away
+  // from it, and re-pins as soon as they scroll back down.
+  let scroller = $state<HTMLDivElement>();
+  let content = $state<HTMLDivElement>();
+  let pinned = true;
+  let lastTop = 0;
+
+  function onScroll() {
+    // A background tab is display:none rather than unmounted, and reports every metric
+    // as 0 — which reads as "at the bottom". Ignore it, so switching tabs cannot
+    // silently re-pin a reader who had scrolled up.
+    if (scroller!.clientHeight === 0) return;
+    const top = scroller!.scrollTop;
+    // Landing at the bottom always pins — including after the transcript is cleared, or
+    // shrinks under us. The tolerance survives subpixel rounding at the true bottom and
+    // lets a flick that stops just short of it count as coming back.
+    if (scroller!.scrollHeight - top - scroller!.clientHeight < 24) pinned = true;
+    // Unpinning cannot ask "am I at the bottom?", because a scroll event is delivered a
+    // frame after the scroll it reports and streaming has grown the transcript again by
+    // then — mid-stream that test reads false even for our own re-pin, so the pin would
+    // drop on the first token of a long answer and never come back. Direction is not
+    // ambiguous that way: re-pinning only ever moves the position down, so only the
+    // reader can have moved it up.
+    else if (top < lastTop) pinned = false;
+    lastTop = top;
+  }
+
+  // Everything that can change the distance to the bottom arrives here: a streamed token
+  // growing the last bubble, a tool <details> opening, a splitter drag resizing the pane,
+  // or this tab becoming visible again. Re-pinning from a ResizeObserver is what makes it
+  // steady — its callbacks run after layout and before paint, so the intermediate
+  // position is never painted, and they run after scroll events, so a scroll up during
+  // streaming unpins before the next token could yank it back. Assigning scrollTop keeps
+  // it instant; a smooth scroll would be restarted by every delta and trail the output
+  // forever. An $effect rather than onMount because bind:this lands after onMount runs.
+  $effect(() => {
+    if (!scroller || !content) return;
+    const el = scroller;
+    const ro = new ResizeObserver(() => {
+      if (pinned) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    ro.observe(content);
+    return () => ro.disconnect();
+  });
+
   // Retain the shared session while any pane is mounted; the agent stops when the last
   // one (the workspace's final view) releases.
   onMount(() => {
@@ -67,23 +114,25 @@
 </script>
 
 <div class="flex h-full w-full flex-col" aria-label={title}>
-  <div class="flex-1 space-y-2 overflow-y-auto p-3">
-    {#each $items as item}
-      {#if item.role === "user" || item.role === "assistant"}
-        <div class="chat {item.role === 'user' ? 'chat-end' : 'chat-start'}">
-          <div class="chat-bubble whitespace-pre-wrap">{item.text}</div>
-        </div>
-      {:else if item.role === "thinking"}
-        <div class="whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
-      {:else}
-        <details class="rounded border border-base-300 p-2 text-xs">
-          <summary class="cursor-pointer font-mono">
-            {item.done ? (item.isError ? "✗" : "✓") : "…"} {item.name}
-          </summary>
-          <pre class="mt-1 overflow-x-auto whitespace-pre-wrap opacity-80">{item.args}{item.result ? "\n→ " + item.result : ""}</pre>
-        </details>
-      {/if}
-    {/each}
+  <div class="flex-1 overflow-y-auto p-3" bind:this={scroller} onscroll={onScroll}>
+    <div class="space-y-2" bind:this={content}>
+      {#each $items as item}
+        {#if item.role === "user" || item.role === "assistant"}
+          <div class="chat {item.role === 'user' ? 'chat-end' : 'chat-start'}">
+            <div class="chat-bubble whitespace-pre-wrap">{item.text}</div>
+          </div>
+        {:else if item.role === "thinking"}
+          <div class="whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
+        {:else}
+          <details class="rounded border border-base-300 p-2 text-xs">
+            <summary class="cursor-pointer font-mono">
+              {item.done ? (item.isError ? "✗" : "✓") : "…"} {item.name}
+            </summary>
+            <pre class="mt-1 overflow-x-auto whitespace-pre-wrap opacity-80">{item.args}{item.result ? "\n→ " + item.result : ""}</pre>
+          </details>
+        {/if}
+      {/each}
+    </div>
   </div>
 
   <div class="relative">
