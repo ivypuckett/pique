@@ -183,6 +183,19 @@ profiles were removed. pi still takes an `allowedToolNames` allowlist at session
 creation and exposes `setActiveToolsByName` on a live session, so the mechanism
 is there — what is missing is anything in pique that decides what to pass.
 
+**Choosing what loads is not the same as containment, and cannot substitute for
+it.** `DefaultResourceLoader` takes `noExtensions` / `noSkills` /
+`noPromptTemplates`, and with one of those set the corresponding resource set
+becomes exactly the `additional*Paths` it was handed (verified against the SDK
+at 0.83 — `includeDefaults` is already always `false`, so nothing auto-scans
+back in). That composes a session's **extension and skill** surface precisely,
+and it is a real boundary for anything an extension registers. It does nothing
+about pi's own builtins: `read`, `write`, `edit`, `bash` and `grep` are present
+in every session regardless. So a session that cannot modify the filesystem is
+not expressible by resource selection alone — that needs the allowlist above,
+and any UI built on `no*` should avoid language ("sandbox", "restricted") that
+would claim otherwise.
+
 ### 2. Live reload into running sessions
 
 Enable and revoke take effect only in Chat modules opened afterwards, and the UI
