@@ -55,8 +55,7 @@ async function read(
   return { ...parsePrompt(name, await Deno.readTextFile(path)), scope, state };
 }
 
-// One scope's own templates, both states in one call — the Library module's Prompts tab
-// shows them together.
+// One scope's own templates, both states in one call — Library → Prompts shows them together.
 export async function listPrompts(scope: ScopeId): Promise<PromptInfo[]> {
   const [pending, live] = await Promise.all([
     namesIn(pendingDir(scope)),

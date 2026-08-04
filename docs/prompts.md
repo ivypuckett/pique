@@ -142,7 +142,7 @@ menu:
 ### 1. Collision diagnostics
 
 pi's loader records a `collision` diagnostic naming the winning and losing file
-whenever two templates share a name. The Prompts tab marks a shadowed root
+whenever two templates share a name. Library → Prompts marks a shadowed root
 template from its own listing instead; surfacing pi's diagnostics would also
 catch collisions with package- and project-supplied templates, which pique
 cannot see from disk alone.

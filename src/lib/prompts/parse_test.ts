@@ -18,9 +18,9 @@ Deno.test("a template with no frontmatter is prompt text alone, not an error", (
   assertEquals(p.error, undefined);
 });
 
-// pi falls back to the body's first line, truncated at 60 with an ellipsis. The Library
-// module's Prompts tab and the `/` menu read the same file through different parsers, so
-// this reproduces pi's rule exactly rather than approximating it.
+// pi falls back to the body's first line, truncated at 60 with an ellipsis. The Library → Prompts
+// list and the `/` menu read the same file through different parsers, so this reproduces
+// pi's rule exactly rather than approximating it.
 Deno.test("a missing description falls back to the first line, truncated at 60", () => {
   assertEquals(
     parsePrompt("a", "\n\nfirst line\nsecond line").description,

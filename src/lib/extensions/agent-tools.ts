@@ -1,8 +1,8 @@
 // The agent half of extension authoring: one pi tool that lets an agent write another
 // extension. Written source lands in the quarantine dir ONLY (paths.ts) — it cannot
-// execute until a human reviews and enables it in the Library module's Extensions tab,
-// which moves it into the auto-discovered extensions dir. Passed to createAgentSession
-// as customTools (see chat/agent.ts). Runs Deno-side only.
+// execute until a human reviews and enables it in Library → Extensions, which moves it
+// into the auto-discovered extensions dir. Passed to createAgentSession as customTools
+// (see chat/agent.ts). Runs Deno-side only.
 import { Type } from "typebox";
 import {
   defineTool,
@@ -40,8 +40,7 @@ export function extensionAuthoringTools(scope: ScopeId): ToolDefinition[] {
         "TypeScript with a default-exported function taking pi: ExtensionAPI, which calls " +
         "pi.registerTool() one or more times. The tools it registers do NOT become callable " +
         "immediately: the module is written to a quarantine directory and only runs after the " +
-        "user reviews and enables it in the Library module's Extensions tab, and then " +
-        "only in chat sessions " +
+        "user reviews and enables it in Library → Extensions, and then only in chat sessions " +
         "started afterwards. Say so when reporting back. " + reach,
       parameters: Type.Object({
         name: Type.String({
@@ -68,8 +67,7 @@ export function extensionAuthoringTools(scope: ScopeId): ToolDefinition[] {
             type: "text",
             text:
               `Wrote ${p.name} to the pending directory. It is not active yet — the user ` +
-              `must enable it in the Library module's Extensions tab, and it loads in ` +
-              `chat sessions started ` +
+              `must enable it in Library → Extensions, and it loads in chat sessions started ` +
               `after that.`,
           }],
           details: null,
