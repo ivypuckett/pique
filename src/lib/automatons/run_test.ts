@@ -6,7 +6,8 @@ import {
   runHistory,
   writeRunRecord,
 } from "./run.ts";
-import { ensureAutomatonDirs, runsDir } from "./paths.ts";
+import { ensureAutomatonDirs, runsDir, sessionsDir } from "./paths.ts";
+import { saveAutomaton } from "./service.ts";
 import { scopeDir, scopesDir } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -162,6 +163,41 @@ Deno.test("a launch refused for an unknown automaton throws AND records why", as
     assertEquals(run.error, "automaton not found: nope");
     assertEquals(run.trigger, "manual");
     assertEquals(typeof run.endedAt, "string");
+  });
+});
+
+// Reachable as a unit test only because the loader and this check sit ABOVE
+// ensureRuntime(): no model is involved in deciding that `prompt:` names nothing.
+// pi's expander returns the text unchanged when no template matches, so without this
+// check the run would start and send the model the literal string `/nosuchtemplate`.
+Deno.test("an automaton whose prompt names no template is refused before a session exists", async () => {
+  await withTempHome(async () => {
+    const cwd = await Deno.makeTempDir();
+    try {
+      await saveAutomaton("ws-1", "triage", {
+        description: "",
+        prompt: "nosuchtemplate",
+        extensions: [],
+        skills: [],
+      });
+
+      await assertRejects(
+        () => launchAutomaton({ scope: "ws-1", name: "triage", cwd }),
+        Error,
+        'prompt template not found: "nosuchtemplate"',
+      );
+
+      const [run] = await listRuns("ws-1");
+      assertEquals(run.status, "failed");
+      assertEquals(run.error, 'prompt template not found: "nosuchtemplate"');
+      // Refused before createAgentSession, so no session file was ever opened for it.
+      assertEquals(
+        await Array.fromAsync(Deno.readDir(sessionsDir("ws-1"))),
+        [],
+      );
+    } finally {
+      await Deno.remove(cwd, { recursive: true });
+    }
   });
 });
 

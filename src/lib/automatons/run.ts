@@ -90,13 +90,19 @@ export async function writeRunRecord(
   await Deno.rename(tmp, path);
 }
 
+// One record, or undefined when there is none. Same posture as patchRunRecord and for
+// the same reason: a missing record is ordinary, but a PermissionDenied — or a runPath
+// validation throw — is not, and returning undefined for it would hand runHistory a
+// silently empty transcript, which is exactly the failure this module keeps eliminating.
 async function readRunRecord(
   scope: ScopeId,
   id: string,
 ): Promise<RunRecord | undefined> {
   try {
     return JSON.parse(await Deno.readTextFile(runPath(scope, id))) as RunRecord;
-  } catch {
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return undefined;
+    console.error(`automaton run ${id}: could not read its record:`, err);
     return undefined;
   }
 }
@@ -258,26 +264,18 @@ export async function launchAutomaton(
     return await fail(err instanceof Error ? err.message : String(err));
   }
 
-  // Everything from here to a subscribed session is inside one try. Every step of it
-  // can throw on its own — most likely resourceLoader.reload(), which is where pi
-  // actually resolves and imports a package that resolveExtensionRefs only checked was
-  // ENABLED, so a broken source dies here rather than there. Without this, a launch
-  // that died in that stretch left no record at all: not even a stranded `running` one,
-  // since that write comes after. An unattended trigger has nobody to throw at, so a
-  // cron launch failing here would have been completely invisible.
-  let session: Session;
-  let queue: ChatEvent[];
-  let unsubscribe: () => void;
+  // The loader is built and checked BEFORE the model runtime is touched, because it
+  // needs nothing the runtime provides — only cwd, the scope's dirs and the ref paths
+  // resolved just above (which it consumes, hence the order). Two payoffs: a typo'd
+  // `prompt:` is refused without spinning up a whole ModelRuntime first, and this whole
+  // stretch — the most defect-prone part of a launch — becomes reachable from a unit
+  // test with nothing but a temp HOME.
+  //
+  // reload() is the likeliest thrower in the function: it is where pi actually resolves
+  // and IMPORTS a package that resolveExtensionRefs only checked was ENABLED, so a
+  // broken source dies here rather than there.
+  let resourceLoader: DefaultResourceLoader;
   try {
-    const modelRuntime = await ensureRuntime();
-    const { provider, modelId, thinking } = resolveChatDefaults(
-      await resolveScopeConfig(scope),
-    );
-    const model = modelRuntime.getModel(provider, modelId);
-    // No fallback model, unlike chat: a run that quietly used a different model than
-    // the scope configured would be discovered long after it finished.
-    if (!model) return await fail(`model unavailable: ${provider}/${modelId}`);
-
     // The capability set. `noExtensions` and `noSkills` make the loaded set EXACTLY the
     // additional* paths — nothing from the scope's own agentDir, nothing from packages
     // it enabled for chat. That is the whole point of an automaton. Verified in the SDK:
@@ -295,7 +293,7 @@ export async function launchAutomaton(
     // dirs are passed here, exactly as chat/agent.ts does. Adding the scope's own dir
     // would load every one of its templates twice, as a dir alongside pi's per-file
     // entries, which pi's mergePaths cannot dedupe.
-    const resourceLoader = new DefaultResourceLoader({
+    resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir: scopeAgentDir(scope),
       noExtensions: true,
@@ -308,27 +306,51 @@ export async function launchAutomaton(
     // createAgentSession only reloads a loader it creates itself, so ours must be
     // reloaded by hand or it yields no extensions at all.
     await resourceLoader.reload();
+  } catch (err) {
+    return await fail(err instanceof Error ? err.message : String(err));
+  }
 
-    // The last unchecked reference in the file. pi's expandPromptTemplate matches on
-    // `name` and returns the text UNCHANGED when nothing matches, so a typo'd `prompt:`
-    // would not fail — it would send the model the literal string `/nosuchthing`. That
-    // is the silent-underdelivery failure resolve.ts exists to prevent, so it is
-    // checked here on the same terms. It also catches `prompt: "foo bar"`, which
-    // parse.ts trims but permits and which would otherwise run template `foo` with
-    // `bar` as its argument.
-    //
-    // Deliberately narrower than pi's own `/` resolution, which also matches extension
-    // commands and `skill:` prefixes: `prompt:` names a prompt template (docs), and
-    // accepting the others here would make the field mean something the UI's picker
-    // cannot show. Checked before createAgentSession so a run that cannot work leaves
-    // no session file behind.
-    if (
-      !resourceLoader.getPrompts().prompts.some((p) => p.name === def.prompt)
-    ) {
-      return await fail(
-        `prompt template not found: ${JSON.stringify(def.prompt)}`,
-      );
-    }
+  // The last unchecked reference in the file. pi's expandPromptTemplate matches on
+  // `name` and returns the text UNCHANGED when nothing matches, so a typo'd `prompt:`
+  // would not fail — it would send the model the literal string `/nosuchthing`. That
+  // is the silent-underdelivery failure resolve.ts exists to prevent, so it is
+  // checked here on the same terms. It also catches `prompt: "foo bar"`, which
+  // parse.ts trims but permits and which would otherwise run template `foo` with
+  // `bar` as its argument.
+  //
+  // Deliberately narrower than pi's own `/` resolution, which also matches extension
+  // commands and `skill:` prefixes: `prompt:` names a prompt template (docs), and
+  // accepting the others here would make the field mean something the UI's picker
+  // cannot show. Checked before createAgentSession so a run that cannot work leaves
+  // no session file behind.
+  if (!resourceLoader.getPrompts().prompts.some((p) => p.name === def.prompt)) {
+    return await fail(
+      `prompt template not found: ${JSON.stringify(def.prompt)}`,
+    );
+  }
+
+  // The session, and the `running` record that makes it visible, in ONE try: nothing
+  // enters the Map until that record is durable. If the write threw with the run
+  // already registered, the throw would escape with a live subscribed session in the
+  // Map that nothing could ever evict — prompt() was never called, so finish() never
+  // runs, and with no record there is no UI row to stop it. A permanent session leak is
+  // worse than a lost row, so teardown here is complete rather than best-effort.
+  //
+  // Every failure inside is a bare throw handled by the single catch below, never a
+  // direct fail(): fail() throws, so calling it inside its own try would run it twice
+  // and write the record twice.
+  let session: Session;
+  let queue: ChatEvent[];
+  let unsubscribe: (() => void) | undefined;
+  try {
+    const modelRuntime = await ensureRuntime();
+    const { provider, modelId, thinking } = resolveChatDefaults(
+      await resolveScopeConfig(scope),
+    );
+    const model = modelRuntime.getModel(provider, modelId);
+    // No fallback model, unlike chat: a run that quietly used a different model than
+    // the scope configured would be discovered long after it finished.
+    if (!model) throw new Error(`model unavailable: ${provider}/${modelId}`);
 
     const created = await createAgentSession({
       model,
@@ -343,33 +365,41 @@ export async function launchAutomaton(
     });
     session = created.session;
     queue = [];
-    const q = queue;
     unsubscribe = session.subscribe((event: unknown) => {
       const mapped = toFrontendEvent(event);
-      if (mapped) q.push(mapped);
+      if (mapped) queue.push(mapped);
     });
     session.setThinkingLevel(thinking);
+
+    await writeRunRecord(scope, {
+      id,
+      automaton: name,
+      status: "running",
+      startedAt,
+      trigger,
+      args,
+      sessionFile: session.sessionFile,
+    });
   } catch (err) {
     // A session created before a later step threw would otherwise leak: nothing else
     // holds it, because it never reached the Map.
     try {
+      unsubscribe?.();
       session?.dispose();
-    } catch { /* disposing a half-built session is best-effort */ }
+    } catch { /* tearing down a half-built session is best-effort */ }
     return await fail(err instanceof Error ? err.message : String(err));
   }
 
-  const run: Run = { scope, session, unsubscribe, queue, stopped: false };
+  // Optional only so the catch above can tear down a subscription made before a later
+  // step threw; reaching here means the try completed and it is set.
+  const run: Run = {
+    scope,
+    session,
+    unsubscribe: unsubscribe!,
+    queue,
+    stopped: false,
+  };
   runs.set(id, run);
-
-  await writeRunRecord(scope, {
-    id,
-    automaton: name,
-    status: "running",
-    startedAt,
-    trigger,
-    args,
-    sessionFile: session.sessionFile,
-  });
 
   // Not awaited: the launch returns as soon as the run is under way, and completion is
   // reported by the record plus a terminal event on the queue. session.prompt() runs
