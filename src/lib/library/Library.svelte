@@ -23,10 +23,9 @@
 
   let section = $state<"extensions" | "prompts">("extensions");
 
-  // A module tab stays mounted when it is not the active one (Column.svelte hides it
-  // with a class), so there is no re-open to re-list on the way the modal had. Bumping
-  // this counter is how the shell asks the sections to re-read; they also re-read when
-  // the scope changes.
+  // A module tab stays mounted when it is not active (Column.svelte hides it with a
+  // class), so nothing re-lists on its own — bumping this counter is how the shell asks
+  // the sections to re-read; they also re-read when the scope changes.
   let refreshKey = $state(0);
 </script>
 
@@ -78,12 +77,11 @@
 
   <!-- Both sections stay mounted and the inactive one is hidden, the way Column.svelte
        hides inactive module tabs. Tearing one down on every sub-tab switch would discard
-       an in-progress prompt draft — the modal never had that problem, because both
-       sections lived in one long-lived script. -->
-  <div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "extensions"}>
-    <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
+       an in-progress prompt draft. -->
+  <div class="min-h-0 flex-1 overflow-y-auto" class:hidden={section !== "extensions"}>
+    <Extensions {scope} {scopeIsRoot} {refreshKey} />
   </div>
-  <div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "prompts"}>
-    <Prompts {scope} inRoot={scopeIsRoot} {refreshKey} />
+  <div class="min-h-0 flex-1 overflow-y-auto" class:hidden={section !== "prompts"}>
+    <Prompts {scope} {scopeIsRoot} {refreshKey} />
   </div>
 </div>
