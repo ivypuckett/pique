@@ -86,6 +86,7 @@ Do not try to fix them; just don't add more.
 | `src/lib/scope/store.ts`                | Modify | Delete `editing` / `editScope`; trim `patchScopeChat` |
 | `src/lib/extensions/agent-tools.ts`     | Modify | Retarget three "Settings → Extensions" strings        |
 | `src/lib/prompts/agent-tools.ts`        | Modify | Retarget three "Settings → Prompts" strings           |
+| 11 other `src/**/*.ts`                  | Modify | Retarget code comments naming the old location        |
 | `docs/*.md`                             | Modify | Retarget human-facing references                      |
 
 ---
@@ -933,7 +934,44 @@ approve it in Settings → Prompts.` `` with:
 `invocable yet — the user must approve it in the Library module's Prompts tab.`,
 ```
 
-- [ ] **Step 3: Verify no stale references remain in source**
+- [ ] **Step 3: Update the code comments that still point at Settings**
+
+The two files above hold the _agent-facing_ strings. Eleven code comments
+elsewhere still tell a reader that extensions and prompt templates are managed
+in Settings. They became wrong when Task 4 deleted those sections, so they
+belong to this change.
+
+Retarget each of these to name the Library module instead. Keep each comment's
+existing shape and wording — only the location changes:
+
+| File:line                                    | The clause to fix                                           |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| `src/desktop.ts:133`                         | "approved in Settings can be invoked without restarting"    |
+| `src/lib/chat/agent.ts:415`                  | "prompt templates saved or approved in Settings become…"    |
+| `src/lib/chat/store.ts:196`                  | "after Settings edits one, so a template becomes invocable" |
+| `src/lib/chat/store.ts:245`                  | "Settings edits prompt templates for a…"                    |
+| `src/lib/chat/prompt_integration_test.ts:71` | "Why Settings can edit a template without restarting"       |
+| `src/lib/chat/prompt_integration_test.ts:73` | "the Settings copy about immediate effect is wrong too"     |
+| `src/lib/prompts/parse.ts:6`                 | "to show a template in Settings the way pi will read it"    |
+| `src/lib/prompts/parse.ts:34`                | "would make Settings disagree with the `/` menu"            |
+| `src/lib/prompts/parse_test.ts:21`           | "The Settings list and the `/` menu read the same file"     |
+| `src/lib/prompts/service.ts:58`              | "the Settings UI shows them together"                       |
+| `src/lib/extensions/service.ts:2`            | "Settings UI and the extensions\* win.bind handlers"        |
+| `src/lib/extensions/packages.ts:284`         | "(Settings UI) surfaces failures and falls back to…"        |
+
+**Do NOT run a blanket replace.** These other "Settings" mentions are correct
+and must not change:
+
+- `src/lib/chat/providers.ts:19,28` — Providers **stayed** in the settings
+  modal, so these are still accurate.
+- `src/main.ts:5,18,19,22` — the app-level settings store, unrelated.
+- `src/lib/scope/bindings.ts:9` — contrasts with the app-level settings store's
+  merge behaviour, still accurate.
+- Every `SettingsManager` / `addSourceToSettings` / `removeSourceFromSettings` /
+  `setPackages` / `settings.json` mention in `src/lib/extensions/*` and
+  `src/lib/scope/migrate.ts` — that is **pi's** settings, not pique's modal.
+
+- [ ] **Step 4: Verify no stale references remain in source**
 
 Run:
 
@@ -942,6 +980,15 @@ grep -rn "Settings → Extensions\|Settings → Prompts" src/
 ```
 
 Expected: no output.
+
+Then the wider sweep, which is what actually catches the comments above:
+
+```bash
+grep -rn "Settings" src/ --include="*.ts" | grep -viE "settingsmanager|addSourceToSettings|removeSourceFromSettings|setPackages|getSourceMatchKeyForSettings|normalizePackageSourceForSettings|settings\.json" | grep -vE "^src/lib/settings/|^src/main.ts|providers\.ts|scope/bindings\.ts:9"
+```
+
+Expected: no output. Any line that remains is either a comment you missed or a
+new exception you must justify — do not widen the filter to silence it.
 
 Run:
 
@@ -957,11 +1004,11 @@ Run:
 deno fmt
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/extensions/agent-tools.ts src/lib/prompts/agent-tools.ts
-git commit -m "Point agent-facing copy at the Library module"
+git add src/lib/extensions/agent-tools.ts src/lib/prompts/agent-tools.ts src/desktop.ts src/lib/chat/agent.ts src/lib/chat/store.ts src/lib/chat/prompt_integration_test.ts src/lib/prompts/parse.ts src/lib/prompts/parse_test.ts src/lib/prompts/service.ts src/lib/extensions/service.ts src/lib/extensions/packages.ts
+git commit -m "Point agent-facing copy and comments at the Library module"
 ```
 
 ---
@@ -1160,6 +1207,7 @@ defect, not the task number.
 - `deno task test` passes, including the two new `layout_test.ts` cases.
 - `deno task build` is clean.
 - `grep -rn "Settings → Extensions\|Settings → Prompts" src/ docs/` is empty.
+- Task 5 Step 4's wider sweep over `src/**/*.ts` is empty.
 - `grep -rn "editScope\|SCOPED_SECTIONS\|updateScopeConfig" src/` is empty.
 - `deno lint` still reports 30 problems — no more.
 - Library opens from the `+` menu, both sub-tabs work, and the scope toggle is
