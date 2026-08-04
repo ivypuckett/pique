@@ -32,6 +32,8 @@ What _does_ work in web mode, and is worth testing here:
   `ctrl+e`).
 - Settings modal UI and the theme switcher (applies live to
   `<html data-theme>`).
+- The Library module's chrome — the `+` menu entry, the Extensions/Prompts
+  sub-tabs, the scope toggle. The lists themselves need the desktop app.
 
 ## The one big gotcha: `computer` actions hang
 
