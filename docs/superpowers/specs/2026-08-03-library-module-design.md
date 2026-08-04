@@ -139,8 +139,11 @@ with the modal's use of them. `patchScopeChat` stays — `chat/store.ts` calls i
 when a user picks a model — minus its trailing `editing.update`, which existed
 only to keep the modal's copy in sync and now syncs nothing.
 
-`updateScopeConfig` is **already unused** before this change and is left alone;
-noted here so it is not mistaken for an orphan this work created.
+`updateScopeConfig` goes too. It was **already unused** before this change — so
+it is not an orphan this work created — but it is built entirely out of
+`editing` (`get(editing)`, `editing.set`), so it cannot survive the writable's
+removal. That strips the last uses of the `get`, `writable` and `ROOT` imports
+in the file, which go with it, leaving `patchScopeChat` as the only export.
 
 ### Text that names the old location
 

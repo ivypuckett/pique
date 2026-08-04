@@ -682,9 +682,22 @@ Delete these ranges, again **bottom-up**:
 - [ ] **Step 5: Delete `editing` and `editScope` from the scope store**
 
 In `src/lib/scope/store.ts`, delete the `Editing` interface, the `editing`
-writable, and the `editScope` function. Update the file's opening comment, which
-describes machinery that no longer exists — replace the whole header comment
-with:
+writable, the `editScope` function, **and `updateScopeConfig`**.
+
+`updateScopeConfig` has to go too, even though it was already unused before this
+change: it is built entirely out of `editing` (`get(editing)`, `editing.set`),
+so deleting the writable while keeping the function leaves two dangling
+references and fails the build. It has zero callers repo-wide — confirm with
+`grep -rn "updateScopeConfig" src/` before deleting.
+
+Removing it also strips the last uses of three imports in this file. Delete
+`get` and `writable` from the `svelte/store` import (the whole line goes — no
+other use), and delete the `ROOT` import. Keep `scopeBindings` and
+`ScopeConfig`, which `patchScopeChat` still needs. Leaving dead imports behind
+would push `deno lint` past the 30 problems this plan pins.
+
+Update the file's opening comment, which describes machinery that no longer
+exists — replace the whole header comment with:
 
 ```ts
 // Per-scope config helpers.
@@ -698,8 +711,7 @@ Then trim `patchScopeChat`: delete its trailing `editing.update(...)` call and
 the comment above it ("Keep the modal in sync…"), which now syncs nothing. The
 function keeps its read-modify-write body and its `chat/store.ts` caller.
 
-Leave `updateScopeConfig` alone. It is **already** unused before this change and
-is not an orphan this work created; the spec records it as pre-existing.
+After this step, `patchScopeChat` is the only export left in the file.
 
 - [ ] **Step 6: Verify the deletions left nothing dangling**
 
@@ -715,7 +727,7 @@ fails here.
 Run:
 
 ```bash
-grep -rn "editScope\|SCOPED_SECTIONS\|\$editing" src/
+grep -rn "editScope\|SCOPED_SECTIONS\|updateScopeConfig\|\$editing" src/
 ```
 
 Expected: no output. If `editing` still appears in `scope/store.ts`, step 5 is
@@ -756,6 +768,10 @@ gone, clean up. **This task changes no behaviour.**
 - Modify: `src/lib/extensions/Extensions.svelte`
 - Modify: `src/lib/prompts/Prompts.svelte`
 - Modify: `src/lib/library/Library.svelte`
+- Modify: `src/App.svelte`
+
+Step 3 is a genuine bug fix, not cosmetics — it is here because the regression
+it fixes was caused by Task 3's always-mounted restructure.
 
 - [ ] **Step 1: Rename the `inRoot` prop to `scopeIsRoot`**
 
@@ -782,7 +798,36 @@ already formatted. Do **not** add `--unstable-component` to the repo's fmt
 config to force it; that would rewrite every `.svelte` file in the tree, far
 outside this plan's blast radius.
 
-- [ ] **Step 3: Verify nothing but whitespace and the rename changed**
+- [ ] **Step 3: Fix the focus regression the always-mounted sections caused**
+
+`App.svelte:69-77` picks the first focusable control in a pane:
+
+```ts
+if (pane.offsetParent === null) continue;
+pane.querySelector<HTMLElement>(
+  'textarea, input, [tabindex]:not([tabindex="-1"])',
+)?.focus();
+return;
+```
+
+The `offsetParent` guard is on the _pane_, not on the element it then picks, and
+`querySelector` ignores `display: none`. With a Library tab showing and the
+Prompts sub-tab active, the first match in document order is now the hidden
+Extensions search input, so `.focus()` is a silent no-op and the loop returns.
+Reachable via `ctrl+e` and after closing a workspace. Replace with:
+
+```ts
+[...pane.querySelectorAll<HTMLElement>(
+  'textarea, input, [tabindex]:not([tabindex="-1"])',
+)]
+  .find((el) => el.offsetParent !== null)?.focus();
+```
+
+Tab order needs no `inert` — `display: none` already removes hidden controls
+from it.
+
+- [ ] **Step 4: Verify nothing but whitespace, the rename and the focus fix
+      changed**
 
 Run:
 
@@ -809,11 +854,11 @@ deno task test
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/extensions/Extensions.svelte src/lib/prompts/Prompts.svelte src/lib/library/Library.svelte
-git commit -m "Tidy the moved sections: prop name and indentation"
+git add src/lib/extensions/Extensions.svelte src/lib/prompts/Prompts.svelte src/lib/library/Library.svelte src/App.svelte
+git commit -m "Tidy the moved sections: prop name, indentation, focus"
 ```
 
 ---
@@ -1115,7 +1160,8 @@ defect, not the task number.
 - `deno task test` passes, including the two new `layout_test.ts` cases.
 - `deno task build` is clean.
 - `grep -rn "Settings → Extensions\|Settings → Prompts" src/ docs/` is empty.
-- `grep -rn "editScope\|SCOPED_SECTIONS" src/` is empty.
+- `grep -rn "editScope\|SCOPED_SECTIONS\|updateScopeConfig" src/` is empty.
+- `deno lint` still reports 30 problems — no more.
 - Library opens from the `+` menu, both sub-tabs work, and the scope toggle is
   hidden in root.
 - Settings has three sections and no scope strip.
