@@ -29,6 +29,9 @@ let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
+let automatons: typeof import("./lib/automatons/run.ts");
+let automatonService: typeof import("./lib/automatons/service.ts");
+let skills: typeof import("./lib/skills/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
@@ -520,6 +523,88 @@ win.bind("promptsDelete", async (arg) => {
   return true;
 });
 
+// Automatons — named agents that run unattended, each naming exactly the extensions
+// and skills its run may load. automatonsList returns the scope's own definitions
+// (what it can edit or delete); automatonsVisible adds what it inherits from root.
+win.bind("automatonsList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await automatonService.listAutomatons(scope);
+});
+
+win.bind("automatonsVisible", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await automatonService.listVisibleAutomatons(scope);
+});
+
+win.bind("automatonsSave", async (arg) => {
+  const { scope, name, description, prompt, extensions, skills } = arg as {
+    scope: string;
+    name: string;
+    description: string;
+    prompt: string;
+    extensions: string[];
+    skills: string[];
+  };
+  await automatonService.saveAutomaton(scope, name, {
+    description,
+    prompt,
+    extensions,
+    skills,
+  });
+  return true;
+});
+
+win.bind("automatonsDelete", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await automatonService.deleteAutomaton(scope, name);
+  return true;
+});
+
+win.bind("automatonsLaunch", async (arg) => {
+  const { scope, name, args, cwd: override } = arg as {
+    scope: string;
+    name: string;
+    args?: string;
+    cwd?: string;
+  };
+  return {
+    id: await automatons.launchAutomaton({
+      scope,
+      name,
+      cwd: await moduleDir(override),
+      args,
+    }),
+  };
+});
+
+win.bind("automatonsRuns", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await automatons.listRuns(scope);
+});
+
+win.bind("automatonsHistory", async (arg) => {
+  const { scope, id } = arg as { scope: string; id: string };
+  return await automatons.runHistory(scope, id);
+});
+
+win.bind("automatonsRead", async (arg) => {
+  const { id } = arg as { id: string };
+  return await automatons.readRun(id);
+});
+
+win.bind("automatonsStop", async (arg) => {
+  const { id } = arg as { id: string };
+  await automatons.stopRun(id);
+  return true;
+});
+
+// Skills — read-only listing (docs/automatons.md); the Library sub-tab shows this
+// list and the automaton editor picks from it.
+win.bind("skillsVisible", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await skills.listVisibleSkills(scope);
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -537,9 +622,15 @@ git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
+automatons = await import("./lib/automatons/run.ts");
+automatonService = await import("./lib/automatons/service.ts");
+skills = await import("./lib/skills/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.
 await (await import("./lib/scope/migrate.ts")).migrateToScopes();
+// A run lives in this process's memory, so every `running` record on disk belongs to a
+// process that is gone. Turn those into `failed` before anything lists them.
+await automatons.reconcileRuns();
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
