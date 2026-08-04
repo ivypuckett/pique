@@ -115,3 +115,36 @@ Deno.test("resolveSkillPath prefers the nearest scope and returns undefined when
     assertEquals(await resolveSkillPath("ws-1", "nope"), undefined);
   });
 });
+
+// The directory shape wins because `<name>/SKILL.md` is what pi itself treats as a
+// skill root; a loose `<name>.md` sharing that name is the accident. Pinned here so
+// a future edit can't accidentally flip it and make listVisibleSkills (last insert
+// wins) and resolveSkillPath (first match wins) disagree again.
+Deno.test("when both shapes share a name, the directory form wins and the loose file is dropped", async () => {
+  await withTempHome(async () => {
+    await writeDirSkill("ws-1", "foo", "---\ndescription: from dir\n---\nb");
+    await writeFileSkill("ws-1", "foo", "---\ndescription: from file\n---\nb");
+
+    const skills = await listSkills("ws-1");
+    assertEquals(skills.length, 1);
+    assertEquals(skills[0].description, "from dir");
+    assertEquals(skills[0].path, `${skillsDir("ws-1")}/foo`);
+  });
+});
+
+// Absent frontmatter is normal (a skill may be prompt text alone); malformed
+// frontmatter is not, and parsePrompt's precedent (../prompts/parse.ts) is to report
+// it via `error` rather than blend the two into the same blank description.
+Deno.test("malformed frontmatter still lists the skill, with its name, and carries the error", async () => {
+  await withTempHome(async () => {
+    await writeDirSkill(
+      "ws-1",
+      "broken",
+      "---\ndescription: [unclosed\n---\nbody",
+    );
+
+    const [skill] = await listSkills("ws-1");
+    assertEquals(skill.name, "broken");
+    assertEquals(skill.error?.startsWith("frontmatter:"), true);
+  });
+});

@@ -17,33 +17,47 @@ export type SkillInfo = {
   // The frontmatter `name:` when it disagrees with the basename. Shown in the UI so
   // the divergence is visible rather than mysterious; never used for resolution.
   frontmatterName?: string;
+  // Set only when frontmatter is PRESENT but malformed (parsePrompt's precedent, in
+  // ../prompts/parse.ts). A file with no frontmatter at all is normal and leaves this
+  // unset — the two are not the same thing, and collapsing them would hide a typo'd
+  // YAML block behind a silently blank description.
+  error?: string;
 };
+
+type Meta = { description: string; frontmatterName?: string; error?: string };
 
 const str = (v: unknown): string | undefined =>
   typeof v === "string" ? v : undefined;
 
 // Frontmatter only; the body is the skill's text and is not needed for a listing.
-// A file with no frontmatter, or malformed frontmatter, still lists — with an empty
-// description — because the dir is user-editable, and one bad file must not blank the
-// whole list.
-function meta(text: string): { description: string; frontmatterName?: string } {
+// A file with no frontmatter still lists, with an empty description, because a
+// skill may legitimately be prompt text alone. Malformed frontmatter also still
+// lists — one bad file must not blank the whole dir — but is reported via `error`
+// rather than silently treated the same as "none".
+function meta(text: string): Meta {
   try {
     const attrs = extract(text).attrs as Record<string, unknown>;
     return {
       description: str(attrs.description) ?? "",
       frontmatterName: str(attrs.name),
     };
-  } catch {
+  } catch (err) {
+    if (text.trimStart().startsWith("---")) {
+      return {
+        description: "",
+        error: `frontmatter: ${(err as Error).message}`,
+      };
+    }
     return { description: "" };
   }
 }
 
-async function readMeta(
-  path: string,
-): Promise<{ description: string; frontmatterName?: string }> {
+async function readMeta(path: string): Promise<Meta> {
   try {
     return meta(await Deno.readTextFile(path));
   } catch {
+    // The file vanished between readDir and here (a real race, not a parse
+    // problem) — list it with what we know rather than dropping it.
     return { description: "" };
   }
 }
@@ -53,19 +67,30 @@ async function readMeta(
 // is skipped rather than raising.
 export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
   const dir = skillsDir(scope);
-  const out: SkillInfo[] = [];
-  let entries: Deno.DirEntry[] = [];
+  const entries: Deno.DirEntry[] = [];
   try {
     for await (const entry of Deno.readDir(dir)) entries.push(entry);
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) return [];
     throw err;
   }
-  entries = entries.sort((a, b) => a.name.localeCompare(b.name));
+
+  // The two shapes can share a basename — `foo/SKILL.md` next to a stray `foo.md`.
+  // They MUST collapse to one entry here: listVisibleSkills' Map keeps the last
+  // insert while resolveSkillPath's .find() takes the first, so without this a
+  // duplicate would make the two consumers disagree about which file "foo" even is
+  // — the Library UI showing one skill's description while an automaton launches
+  // the other. The directory form wins: `<name>/SKILL.md` is the shape pi itself
+  // treats as a skill root, so a loose `<name>.md` beside it is the accident, and
+  // the loser is dropped silently rather than surfaced as a conflict.
+  const dirs = new Map<string, SkillInfo>();
+  const files = new Map<string, SkillInfo>();
+
   for (const entry of entries) {
     let name: string;
     let path: string;
     let metaPath: string;
+    let target: Map<string, SkillInfo>;
     if (entry.isDirectory) {
       name = entry.name;
       path = `${dir}/${entry.name}`;
@@ -77,10 +102,12 @@ export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
         // looking for one, but a nested skill is not nameable here.
         continue;
       }
+      target = dirs;
     } else if (entry.isFile && entry.name.endsWith(".md")) {
       name = entry.name.slice(0, -3);
       path = `${dir}/${entry.name}`;
       metaPath = path;
+      target = files;
     } else continue;
 
     try {
@@ -88,9 +115,13 @@ export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
     } catch {
       continue;
     }
-    out.push({ name, path, scope, ...await readMeta(metaPath) });
+    target.set(name, { name, path, scope, ...await readMeta(metaPath) });
   }
-  return out;
+
+  for (const [name, info] of files) {
+    if (!dirs.has(name)) dirs.set(name, info);
+  }
+  return [...dirs.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Every skill nameable in `scope`: its own plus each ancestor's, nearest winning. The
