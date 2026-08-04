@@ -537,7 +537,18 @@ win.bind("automatonsVisible", async (arg) => {
 });
 
 win.bind("automatonsSave", async (arg) => {
-  const { scope, name, description, prompt, extensions, skills } = arg as {
+  // Renamed on the way out of the destructure: `extensions` and `skills` are also the
+  // names of two module-level service imports at the top of this file, and shadowing
+  // them here would make any later service call inside this handler resolve to a
+  // string[] instead.
+  const {
+    scope,
+    name,
+    description,
+    prompt,
+    extensions: extensionRefs,
+    skills: skillRefs,
+  } = arg as {
     scope: string;
     name: string;
     description: string;
@@ -548,8 +559,8 @@ win.bind("automatonsSave", async (arg) => {
   await automatonService.saveAutomaton(scope, name, {
     description,
     prompt,
-    extensions,
-    skills,
+    extensions: extensionRefs,
+    skills: skillRefs,
   });
   return true;
 });
