@@ -21,9 +21,10 @@ import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
-import { listEnabledPackages } from "../extensions/packages.ts";
+import { isValidSource, listEnabledPackages } from "../extensions/packages.ts";
 import { livePath } from "../extensions/paths.ts";
 import { resolveSkillPath } from "../skills/service.ts";
+import { skillsDir } from "../skills/paths.ts";
 import { chain, type ScopeId } from "../scope/paths.ts";
 
 // pique's compiled-in tool groups, nameable exactly as extensions are. Every group is
@@ -53,6 +54,13 @@ export type ResolvedRefs = {
 // The live path of a local extension, nearest scope first, or undefined. Only the
 // LIVE dir is consulted: a pending or revoked module is not nameable, which is what
 // keeps the review gate meaningful.
+//
+// Deno.stat follows symlinks, so a symlinked file in the live dir resolves here even
+// though extensions/local.ts's namesIn (entry.isFile off Deno.readDir, which does not
+// follow symlinks) would not list it — such an extension would be loadable by name but
+// invisible in the review UI. Accepted: anyone who can write into the live dir already
+// has code execution via pi's own discovery of that dir, so this widens no trust
+// boundary; it is recorded here rather than changed.
 async function resolveLocal(
   scope: ScopeId,
   name: string,
@@ -61,8 +69,12 @@ async function resolveLocal(
     const path = livePath(s, name);
     try {
       if ((await Deno.stat(path)).isFile) return path;
-    } catch {
-      continue;
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) continue;
+      // Anything else (e.g. a permission error) is a real failure, not "not found" —
+      // reporting it as the latter would tell the user to enable something that is
+      // already enabled. service.ts's read() and packages.ts draw the same line.
+      throw err;
     }
   }
   return undefined;
@@ -77,17 +89,26 @@ export async function resolveExtensionRefs(
   // Fetched once rather than per ref: listing packages builds a pi package manager.
   let enabled: string[] | undefined;
 
-  for (const ref of refs) {
+  // Deduped, first-occurrence order kept: parse.ts does not dedupe upstream, and a
+  // name repeated in the file is not a second reference — without this, repeating
+  // "pique:kanban" registers its tools twice on the same session.
+  for (const ref of new Set(refs)) {
     if (ref.startsWith("pique:")) {
-      const group = BUILTIN_GROUPS[ref.slice("pique:".length)];
-      if (!group) {
+      const name = ref.slice("pique:".length);
+      // hasOwn, not a bare index: BUILTIN_GROUPS is a plain object, so an unguarded
+      // lookup walks the prototype chain — "pique:toString" would silently resolve
+      // to Object.prototype.toString, called with this === undefined, and its
+      // one-character return value would spread into bogus "tools" rather than
+      // raising. That is exactly the silent-underdelivery failure this module exists
+      // to prevent.
+      if (!Object.hasOwn(BUILTIN_GROUPS, name)) {
         throw new Error(
-          `unknown built-in group: ${ref} (known: ${
+          `unknown built-in group: ${JSON.stringify(ref)} (known: ${
             Object.keys(BUILTIN_GROUPS).map((g) => `pique:${g}`).join(", ")
           })`,
         );
       }
-      customTools.push(...group(scope));
+      customTools.push(...BUILTIN_GROUPS[name](scope));
       continue;
     }
 
@@ -95,17 +116,38 @@ export async function resolveExtensionRefs(
       const path = await resolveLocal(scope, ref);
       if (!path) {
         throw new Error(
-          `extension not found or not enabled: ${ref} (enable it in Library → Extensions)`,
+          `extension not found or not enabled: ${
+            JSON.stringify(ref)
+          } (enable it in Library → Extensions)`,
         );
       }
       extensionPaths.push(path);
       continue;
     }
 
+    // Not a `pique:` group and not a legal local name (extensions/paths.ts's NAME_RE),
+    // so this must be a package source to mean anything at all. Checked against
+    // isValidSource's shape first so a plain typo — a hyphenated name is the natural
+    // one, since hyphens are legal in skill and scope names but not extension names —
+    // reports the right problem instead of "package not enabled", which points the
+    // user at Library → Extensions for something that could never appear there.
+    if (!isValidSource(ref)) {
+      throw new Error(
+        `not a valid extension name or package source: ${JSON.stringify(ref)}`,
+      );
+    }
+
+    // Packages canonicalize a local source to an absolute path (packages.ts), so only
+    // that canonical form is ever nameable here — a relative source like "../../mypkg"
+    // is rejected even when its absolute equivalent is enabled. Fails closed, not a
+    // bug: it means an automaton file can't rely on a path that depends on where a
+    // pique process happens to be running from.
     enabled ??= (await listEnabledPackages(scope)).map((p) => p.source);
     if (!enabled.includes(ref)) {
       throw new Error(
-        `package not enabled in this scope: ${ref} (enable it in Library → Extensions)`,
+        `package not enabled in this scope: ${
+          JSON.stringify(ref)
+        } (enable it in Library → Extensions)`,
       );
     }
     extensionPaths.push(ref);
@@ -122,7 +164,13 @@ export async function resolveSkillRefs(
   const paths: string[] = [];
   for (const ref of refs) {
     const path = await resolveSkillPath(scope, ref);
-    if (!path) throw new Error(`skill not found: ${ref}`);
+    if (!path) {
+      throw new Error(
+        `skill not found: ${JSON.stringify(ref)} (not in ${
+          skillsDir(scope)
+        } or an ancestor scope)`,
+      );
+    }
     paths.push(path);
   }
   return paths;

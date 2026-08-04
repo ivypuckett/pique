@@ -9,6 +9,7 @@ import {
   livePath,
   pendingPath,
 } from "../extensions/paths.ts";
+import { enablePackage } from "../extensions/packages.ts";
 import { skillsDir } from "../skills/paths.ts";
 import type { ScopeId } from "../scope/paths.ts";
 
@@ -72,6 +73,21 @@ Deno.test("an unknown pique: group raises", async () => {
   });
 });
 
+// BUILTIN_GROUPS is a plain object; an unguarded `BUILTIN_GROUPS[name]` lookup walks
+// the prototype chain, and "toString" is an own property of Object.prototype. Without
+// the hasOwn guard this resolves instead of raising, and Object.prototype.toString
+// called with this === undefined returns "[object Undefined]" — 18 single-character
+// "tools" spread into customTools.
+Deno.test("a prototype-chain name like pique:toString is not a known group", async () => {
+  await withTempHome(async () => {
+    await assertRejects(
+      () => resolveExtensionRefs("ws-1", ["pique:toString"]),
+      Error,
+      "pique:toString",
+    );
+  });
+});
+
 Deno.test("a local extension name resolves to its live file path", async () => {
   await withTempHome(async () => {
     await writeExt("ws-1", "kanban_notes");
@@ -130,6 +146,63 @@ Deno.test("a package source that is not enabled in the scope raises", async () =
       Error,
       "npm:pi-crew",
     );
+  });
+});
+
+// A source that IS enabled must actually resolve — without this test, a regression
+// that rejected every package source (e.g. an inverted `!enabled.includes`) would
+// still pass every other test in this file.
+Deno.test("an enabled package source resolves into extensionPaths", async () => {
+  await withTempHome(async () => {
+    await enablePackage("ws-1", "npm:test-positive-pkg");
+
+    const r = await resolveExtensionRefs("ws-1", ["npm:test-positive-pkg"]);
+    assertEquals(r.extensionPaths, ["npm:test-positive-pkg"]);
+    assertEquals(r.customTools, []);
+  });
+});
+
+// A path-shaped ref is neither a `pique:` group nor a legal local name (extensions
+// names never contain "/" or "."), so it falls to the package-source check — and
+// isValidSource accepts bare paths, so it is rejected as an unenabled package rather
+// than silently treated as something else.
+Deno.test("a path-shaped ref is treated as a package source and rejected unenabled", async () => {
+  await withTempHome(async () => {
+    for (const ref of ["/etc/evil.ts", "./x.ts", "../../x.ts"]) {
+      await assertRejects(
+        () => resolveExtensionRefs("ws-1", [ref]),
+        Error,
+        "package not enabled",
+      );
+    }
+  });
+});
+
+// A name that is neither a legal local extension name (no hyphens) nor a plausible
+// package source shape gets its own error, rather than being told to enable it in
+// Library → Extensions — a tab where a bare hyphenated name could never appear.
+Deno.test("a hyphenated name is neither a legal local name nor a package source shape", async () => {
+  await withTempHome(async () => {
+    await assertRejects(
+      () => resolveExtensionRefs("ws-1", ["my-ext"]),
+      Error,
+      "not a valid extension name or package source",
+    );
+  });
+});
+
+Deno.test("mixed refs split across output arrays, local order preserved", async () => {
+  await withTempHome(async () => {
+    await writeExt("ws-1", "local");
+    await enablePackage("ws-1", "npm:x");
+
+    const r = await resolveExtensionRefs("ws-1", [
+      "pique:kanban",
+      "local",
+      "npm:x",
+    ]);
+    assertEquals(r.extensionPaths, [livePath("ws-1", "local"), "npm:x"]);
+    assertEquals(r.customTools.length > 0, true);
   });
 });
 
