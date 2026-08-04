@@ -17,7 +17,8 @@ export interface ScopeConfig {
 }
 
 export interface ScopeBindings {
-  // A scope's own config, with nothing inherited — what the settings UI edits.
+  // A scope's own config, with nothing inherited — written by a Chat module's model
+  // and thinking pickers (scope/store.ts).
   scopeConfigRead(arg: { scope: string }): Promise<ScopeConfig | null>;
   scopeConfigWrite(arg: { scope: string; data: ScopeConfig }): Promise<unknown>;
   // Root's config overlaid with the scope's — what an agent there actually sees.

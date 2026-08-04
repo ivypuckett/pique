@@ -1,8 +1,8 @@
 <script lang="ts">
   import { promptBindings, type PromptInfo } from "./bindings.ts";
   import { refreshChatCommands } from "../chat/store.ts";
-  // The copied `refreshPrompts()` reads root's list directly (modal line 285), so this
-  // section needs ROOT even though the Extensions one did not.
+  // The copied refreshPrompts() reads root's list directly, so this section needs ROOT even
+  // though the Extensions one did not.
   import { ROOT } from "../scope/paths.ts";
 
   // Same three props as the Extensions section: the scope the module points at, whether
