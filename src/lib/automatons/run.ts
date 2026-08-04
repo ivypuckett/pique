@@ -52,6 +52,10 @@ export type RunRecord = {
   // first run so the record shape does not change when they land.
   trigger: string;
   args?: string;
+  // The pi session JSONL this run streamed into, recorded at launch. It is what makes
+  // a FINISHED run's transcript readable (runHistory): the live session is evicted the
+  // moment it ends, so after that the file is the only copy.
+  sessionFile?: string;
 };
 
 // deno-lint-ignore no-explicit-any
@@ -62,22 +66,39 @@ interface Run {
   session: Session;
   unsubscribe: () => void;
   queue: ChatEvent[];
-  // Set by stopRun BEFORE it awaits anything. session.prompt()'s promise settles when
-  // the abort lands, and its handler would otherwise patch `done`/`failed` over the
-  // `stopped` this flag's owner is about to write — or, if it settles first, before it.
-  // Either way the last write would win and a stopped run would claim it finished.
+  // The single-shot latch on a run's terminal transition, set by whichever of finish()
+  // and stopRun() gets there first and never cleared. It is what stops the loser from
+  // writing a second terminal status over the winner's — without it, aborting settles
+  // prompt()'s promise and its handler patches `done` over the `stopped` that caused
+  // it. Both writers set it BEFORE their first await, so neither can interleave.
   stopped: boolean;
 }
 const runs = new Map<string, Run>();
 
+// Write a record whole or not at all: a temp file in the same dir, then a rename, which
+// POSIX guarantees is atomic within a directory. A half-written record would be
+// permanently invisible AND unrepairable — listRuns skips what it cannot parse, so
+// reconcileRuns would never see it and a poll waiting for a terminal status would never
+// finish. listRuns filters to `.json`, so the temp file is never listed even mid-write.
 export async function writeRunRecord(
   scope: ScopeId,
   record: RunRecord,
 ): Promise<void> {
-  await Deno.writeTextFile(
-    runPath(scope, record.id),
-    JSON.stringify(record, null, 2),
-  );
+  const path = runPath(scope, record.id);
+  const tmp = `${path}.tmp`;
+  await Deno.writeTextFile(tmp, JSON.stringify(record, null, 2));
+  await Deno.rename(tmp, path);
+}
+
+async function readRunRecord(
+  scope: ScopeId,
+  id: string,
+): Promise<RunRecord | undefined> {
+  try {
+    return JSON.parse(await Deno.readTextFile(runPath(scope, id))) as RunRecord;
+  } catch {
+    return undefined;
+  }
 }
 
 // Update one record in place. Callers are the terminal handlers of a detached
@@ -156,13 +177,21 @@ export async function reconcileRuns(): Promise<void> {
     throw err;
   }
   for (const scope of scopes) {
-    for (const run of await listRuns(scope)) {
-      if (run.status !== "running") continue;
-      await patchRunRecord(scope, run.id, {
-        status: "failed",
-        endedAt: new Date().toISOString(),
-        error: "interrupted by shutdown",
-      });
+    // Per scope, not around the loop: listRuns rethrows anything that is not NotFound —
+    // a `runs/` that is a regular file gives NotADirectory, an unreadable one gives
+    // PermissionDenied — and one such scope must not abort the repair for every scope
+    // after it. desktop.ts calls this at boot, so an escaping throw is a boot failure.
+    try {
+      for (const run of await listRuns(scope)) {
+        if (run.status !== "running") continue;
+        await patchRunRecord(scope, run.id, {
+          status: "failed",
+          endedAt: new Date().toISOString(),
+          error: "interrupted by shutdown",
+        });
+      }
+    } catch (err) {
+      console.error(`automaton runs: could not reconcile scope ${scope}:`, err);
     }
   }
 }
@@ -229,64 +258,106 @@ export async function launchAutomaton(
     return await fail(err instanceof Error ? err.message : String(err));
   }
 
-  const modelRuntime = await ensureRuntime();
-  const { provider, modelId, thinking } = resolveChatDefaults(
-    await resolveScopeConfig(scope),
-  );
-  const model = modelRuntime.getModel(provider, modelId);
-  // No fallback model, unlike chat: a run that quietly used a different model than the
-  // scope configured would be discovered long after it finished.
-  if (!model) return await fail(`model unavailable: ${provider}/${modelId}`);
+  // Everything from here to a subscribed session is inside one try. Every step of it
+  // can throw on its own — most likely resourceLoader.reload(), which is where pi
+  // actually resolves and imports a package that resolveExtensionRefs only checked was
+  // ENABLED, so a broken source dies here rather than there. Without this, a launch
+  // that died in that stretch left no record at all: not even a stranded `running` one,
+  // since that write comes after. An unattended trigger has nobody to throw at, so a
+  // cron launch failing here would have been completely invisible.
+  let session: Session;
+  let queue: ChatEvent[];
+  let unsubscribe: () => void;
+  try {
+    const modelRuntime = await ensureRuntime();
+    const { provider, modelId, thinking } = resolveChatDefaults(
+      await resolveScopeConfig(scope),
+    );
+    const model = modelRuntime.getModel(provider, modelId);
+    // No fallback model, unlike chat: a run that quietly used a different model than
+    // the scope configured would be discovered long after it finished.
+    if (!model) return await fail(`model unavailable: ${provider}/${modelId}`);
 
-  // The capability set. `noExtensions` and `noSkills` make the loaded set EXACTLY the
-  // additional* paths — nothing from the scope's own agentDir, nothing from packages
-  // it enabled for chat. That is the whole point of an automaton. Verified in the SDK:
-  // DefaultResourceLoader.reload() takes `noExtensions ? cliEnabledExtensions : merge(...)`,
-  // and cliEnabledExtensions derives solely from additionalExtensionPaths, so passing
-  // agentDir does NOT re-admit its extensions/ dir or its settings.json packages.
-  //
-  // These govern extension- and skill-provided capability only. pi's builtins (read,
-  // write, edit, bash) are in every session regardless — see docs/extensions.md
-  // deferred #1. This is not a sandbox and must not be described as one.
-  //
-  // noPromptTemplates stays OFF, because that is how `prompt:` resolves: the first
-  // message is `/<template> <args>` and pi's own expander does the rest. With it off,
-  // pi auto-discovers this scope's OWN agent/prompts itself — so only the ANCESTOR
-  // dirs are passed here, exactly as chat/agent.ts does. Adding the scope's own dir
-  // would load every one of its templates twice, as a dir alongside pi's per-file
-  // entries, which pi's mergePaths cannot dedupe.
-  const resourceLoader = new DefaultResourceLoader({
-    cwd,
-    agentDir: scopeAgentDir(scope),
-    noExtensions: true,
-    noSkills: true,
-    additionalExtensionPaths: extensionPaths,
-    additionalSkillPaths: skillPaths,
-    additionalPromptTemplatePaths: inheritedPromptDirs(scope),
-    systemPrompt: await resolveBasePrompt(scope),
-  });
-  // createAgentSession only reloads a loader it creates itself, so ours must be
-  // reloaded by hand or it yields no extensions at all.
-  await resourceLoader.reload();
+    // The capability set. `noExtensions` and `noSkills` make the loaded set EXACTLY the
+    // additional* paths — nothing from the scope's own agentDir, nothing from packages
+    // it enabled for chat. That is the whole point of an automaton. Verified in the SDK:
+    // DefaultResourceLoader.reload() takes `noExtensions ? cliEnabledExtensions : merge(...)`,
+    // and cliEnabledExtensions derives solely from additionalExtensionPaths, so passing
+    // agentDir does NOT re-admit its extensions/ dir or its settings.json packages.
+    //
+    // These govern extension- and skill-provided capability only. pi's builtins (read,
+    // write, edit, bash) are in every session regardless — see docs/extensions.md
+    // deferred #1. This is not a sandbox and must not be described as one.
+    //
+    // noPromptTemplates stays OFF, because that is how `prompt:` resolves: the first
+    // message is `/<template> <args>` and pi's own expander does the rest. With it off,
+    // pi auto-discovers this scope's OWN agent/prompts itself — so only the ANCESTOR
+    // dirs are passed here, exactly as chat/agent.ts does. Adding the scope's own dir
+    // would load every one of its templates twice, as a dir alongside pi's per-file
+    // entries, which pi's mergePaths cannot dedupe.
+    const resourceLoader = new DefaultResourceLoader({
+      cwd,
+      agentDir: scopeAgentDir(scope),
+      noExtensions: true,
+      noSkills: true,
+      additionalExtensionPaths: extensionPaths,
+      additionalSkillPaths: skillPaths,
+      additionalPromptTemplatePaths: inheritedPromptDirs(scope),
+      systemPrompt: await resolveBasePrompt(scope),
+    });
+    // createAgentSession only reloads a loader it creates itself, so ours must be
+    // reloaded by hand or it yields no extensions at all.
+    await resourceLoader.reload();
 
-  const created = await createAgentSession({
-    model,
-    cwd,
-    customTools,
-    agentDir: scopeAgentDir(scope),
-    resourceLoader,
-    // Every run is its own session file — `create`, never `continueRecent`. A run is a
-    // job with a beginning, not a conversation to pick back up.
-    sessionManager: SessionManager.create(cwd, sessionsDir(scope)),
-    modelRuntime,
-  });
-  const session = created.session;
-  const queue: ChatEvent[] = [];
-  const unsubscribe = session.subscribe((event: unknown) => {
-    const mapped = toFrontendEvent(event);
-    if (mapped) queue.push(mapped);
-  });
-  session.setThinkingLevel(thinking);
+    // The last unchecked reference in the file. pi's expandPromptTemplate matches on
+    // `name` and returns the text UNCHANGED when nothing matches, so a typo'd `prompt:`
+    // would not fail — it would send the model the literal string `/nosuchthing`. That
+    // is the silent-underdelivery failure resolve.ts exists to prevent, so it is
+    // checked here on the same terms. It also catches `prompt: "foo bar"`, which
+    // parse.ts trims but permits and which would otherwise run template `foo` with
+    // `bar` as its argument.
+    //
+    // Deliberately narrower than pi's own `/` resolution, which also matches extension
+    // commands and `skill:` prefixes: `prompt:` names a prompt template (docs), and
+    // accepting the others here would make the field mean something the UI's picker
+    // cannot show. Checked before createAgentSession so a run that cannot work leaves
+    // no session file behind.
+    if (
+      !resourceLoader.getPrompts().prompts.some((p) => p.name === def.prompt)
+    ) {
+      return await fail(
+        `prompt template not found: ${JSON.stringify(def.prompt)}`,
+      );
+    }
+
+    const created = await createAgentSession({
+      model,
+      cwd,
+      customTools,
+      agentDir: scopeAgentDir(scope),
+      resourceLoader,
+      // Every run is its own session file — `create`, never `continueRecent`. A run is
+      // a job with a beginning, not a conversation to pick back up.
+      sessionManager: SessionManager.create(cwd, sessionsDir(scope)),
+      modelRuntime,
+    });
+    session = created.session;
+    queue = [];
+    const q = queue;
+    unsubscribe = session.subscribe((event: unknown) => {
+      const mapped = toFrontendEvent(event);
+      if (mapped) q.push(mapped);
+    });
+    session.setThinkingLevel(thinking);
+  } catch (err) {
+    // A session created before a later step threw would otherwise leak: nothing else
+    // holds it, because it never reached the Map.
+    try {
+      session?.dispose();
+    } catch { /* disposing a half-built session is best-effort */ }
+    return await fail(err instanceof Error ? err.message : String(err));
+  }
+
   const run: Run = { scope, session, unsubscribe, queue, stopped: false };
   runs.set(id, run);
 
@@ -297,6 +368,7 @@ export async function launchAutomaton(
     startedAt,
     trigger,
     args,
+    sessionFile: session.sessionFile,
   });
 
   // Not awaited: the launch returns as soon as the run is under way, and completion is
@@ -307,12 +379,31 @@ export async function launchAutomaton(
     // stopRun already wrote the terminal status; abort is what settled this promise, so
     // its outcome describes the abort rather than the run.
     if (run.stopped) return;
-    queue.push(error ? { kind: "error", message: error } : { kind: "done" });
+    run.stopped = true;
+    run.queue.push(
+      error ? { kind: "error", message: error } : { kind: "done" },
+    );
     await patchRunRecord(scope, id, {
       status,
       endedAt: new Date().toISOString(),
       error,
     });
+    // Eviction, and it is not merely hygiene. A finished run left in the Map keeps a pi
+    // session and a subscription alive for the life of the process, keeps appending
+    // undrained events to a queue nobody reads — the normal case for an unattended run
+    // — and stays STOPPABLE, so a later stopRun would rewrite `done` into `stopped`, or
+    // `failed` into `stopped` while leaving the stale `error` beside it.
+    //
+    // The cost is that events queued since the frontend's last drain are dropped. That
+    // is the right trade: the record has already gone non-`running`, which is the UI's
+    // cue to call runHistory and re-render the whole transcript from the JSONL.
+    runs.delete(id);
+    run.unsubscribe();
+    try {
+      run.session.dispose();
+    } catch (err) {
+      console.error(`automaton run ${id}: could not dispose its session:`, err);
+    }
   };
   session
     .prompt(message)
@@ -342,23 +433,60 @@ export async function readRun(id: string): Promise<ChatEvent[]> {
   return [];
 }
 
-// The transcript of a live run, for the frontend to render before any new event
-// arrives. A finished run's transcript is read from its session JSONL instead.
-export function runHistory(id: string): Item[] {
-  return toHistory(runs.get(id)?.session.messages ?? []);
+// A run's transcript, live or finished, which is why it needs the scope: a finished run
+// is gone from the Map (finish() evicts it) and its only remaining copy is the session
+// JSONL named by its record. pi appends that file as the run happens, so it is complete
+// the moment prompt() resolves — the two sources agree and the caller need not know
+// which one answered.
+export async function runHistory(scope: ScopeId, id: string): Promise<Item[]> {
+  const live = runs.get(id);
+  if (live) return toHistory(live.session.messages ?? []);
+
+  const record = await readRunRecord(scope, id);
+  if (!record?.sessionFile) return [];
+  try {
+    // getEntries() is a union of entry types, not messages: thinking-level changes,
+    // model changes, compaction and branch summaries all live in the same stream. Only
+    // `message` entries carry the AgentMessage that toHistory consumes.
+    const entries = SessionManager.open(record.sessionFile).getEntries();
+    return toHistory(
+      entries
+        .filter((e) => e.type === "message")
+        // deno-lint-ignore no-explicit-any
+        .map((e) => (e as any).message),
+    );
+  } catch (err) {
+    // A run whose session file was deleted or is unreadable still has a record and a
+    // row in the UI; an empty transcript is a better answer there than a raised error.
+    console.error(`automaton run ${id}: could not read its transcript:`, err);
+    return [];
+  }
 }
 
 export async function stopRun(id: string): Promise<void> {
   const run = runs.get(id);
-  if (!run) return;
-  // Before the await, not after: abort() settles prompt()'s promise, and finish() must
-  // already be able to see that this run was stopped by the time it does.
+  // `stopped` already set means finish() or an earlier stopRun owns the outcome.
+  if (!run || run.stopped) return;
+  // The durable outcome is committed BEFORE the unbounded wait below. session.abort()
+  // awaits waitForIdle(), which a tool call that never settles never resolves — and if
+  // the teardown lived after it, the run would keep its `running` record forever while
+  // `stopped` permanently suppressed finish() from writing any terminal status. That is
+  // unrepairable short of a restart. Ordered this way, abort is the last thing and its
+  // hanging costs only the session's memory.
   run.stopped = true;
-  await run.session.abort();
-  run.unsubscribe();
   runs.delete(id);
+  run.unsubscribe();
   await patchRunRecord(run.scope, id, {
     status: "stopped",
     endedAt: new Date().toISOString(),
   });
+  try {
+    await run.session.abort();
+  } finally {
+    try {
+      run.session.dispose();
+    } catch (err) {
+      console.error(`automaton run ${id}: could not dispose its session:`, err);
+    }
+  }
 }

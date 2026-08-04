@@ -1,6 +1,13 @@
-import { assertEquals } from "@std/assert";
-import { listRuns, reconcileRuns, writeRunRecord } from "./run.ts";
-import { ensureAutomatonDirs } from "./paths.ts";
+import { assertEquals, assertRejects } from "@std/assert";
+import {
+  launchAutomaton,
+  listRuns,
+  reconcileRuns,
+  runHistory,
+  writeRunRecord,
+} from "./run.ts";
+import { ensureAutomatonDirs, runsDir } from "./paths.ts";
+import { scopeDir, scopesDir } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const prev = Deno.env.get("HOME");
@@ -85,5 +92,91 @@ Deno.test("reconcileRuns leaves finished records alone", async () => {
 Deno.test("reconcileRuns with no scopes dir is a no-op rather than a failure", async () => {
   await withTempHome(async () => {
     await reconcileRuns();
+  });
+});
+
+// reconcileRuns runs at boot, so a scope it cannot read must not take the others down
+// with it — nor the app. A `runs/` that is a regular file is the cheap way to provoke
+// the NotADirectory that listRuns rethrows.
+Deno.test("one unreadable scope does not stop reconcileRuns repairing the rest", async () => {
+  await withTempHome(async () => {
+    await Deno.mkdir(`${scopeDir("ws-1")}/automatons`, { recursive: true });
+    await Deno.writeTextFile(runsDir("ws-1"), "not a directory");
+
+    await ensureAutomatonDirs("ws-2");
+    await writeRunRecord("ws-2", {
+      id: "aaa",
+      automaton: "triage",
+      status: "running",
+      startedAt: "2026-08-04T10:00:00.000Z",
+      trigger: "cron",
+    });
+
+    await reconcileRuns();
+
+    assertEquals((await listRuns("ws-2"))[0].status, "failed");
+  });
+});
+
+// The record is the only durable statement of what a run did, and listRuns skips what
+// it cannot parse — so a half-written one would be invisible to the UI AND to
+// reconcileRuns. The write goes through a temp file; this pins that it does not leave
+// one lying around.
+Deno.test("writing a record is atomic and leaves no temp file behind", async () => {
+  await withTempHome(async () => {
+    await ensureAutomatonDirs("ws-1");
+    await writeRunRecord("ws-1", {
+      id: "aaa",
+      automaton: "triage",
+      status: "done",
+      startedAt: "2026-08-04T10:00:00.000Z",
+      trigger: "manual",
+      sessionFile: "/tmp/session.jsonl",
+    });
+
+    const names: string[] = [];
+    for await (const entry of Deno.readDir(runsDir("ws-1"))) {
+      names.push(entry.name);
+    }
+    assertEquals(names, ["aaa.json"]);
+    // sessionFile round-trips: it is what makes a finished run's transcript readable.
+    assertEquals((await listRuns("ws-1"))[0].sessionFile, "/tmp/session.jsonl");
+  });
+});
+
+// A launch refused before any session exists still owes the run list a row. This is the
+// path an unattended trigger depends on — it has nobody to throw at.
+Deno.test("a launch refused for an unknown automaton throws AND records why", async () => {
+  await withTempHome(async () => {
+    await Deno.mkdir(scopesDir(), { recursive: true });
+
+    await assertRejects(
+      () => launchAutomaton({ scope: "ws-1", name: "nope", cwd: "/tmp" }),
+      Error,
+      "automaton not found: nope",
+    );
+
+    const [run] = await listRuns("ws-1");
+    assertEquals(run.status, "failed");
+    assertEquals(run.automaton, "nope");
+    assertEquals(run.error, "automaton not found: nope");
+    assertEquals(run.trigger, "manual");
+    assertEquals(typeof run.endedAt, "string");
+  });
+});
+
+Deno.test("runHistory of a run with no session file is empty, not an error", async () => {
+  await withTempHome(async () => {
+    await ensureAutomatonDirs("ws-1");
+    await writeRunRecord("ws-1", {
+      id: "aaa",
+      automaton: "triage",
+      status: "failed",
+      startedAt: "2026-08-04T10:00:00.000Z",
+      trigger: "manual",
+    });
+
+    assertEquals(await runHistory("ws-1", "aaa"), []);
+    assertEquals(await runHistory("ws-1", "nosuchrun"), []);
   });
 });
