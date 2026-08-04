@@ -65,7 +65,7 @@ record, so no flag can drift from what is actually invocable.
 
 ```
 agent calls define_prompt  →  <scope>/agent/prompts/pending/<name>.md   (inert)
-user reads the text in Settings → Prompts
+user reads the text in Library → Prompts
   Approve  →  mv into prompts/  →  invocable as /<name>
   Reject   →  deleted
 ```
@@ -73,7 +73,7 @@ user reads the text in Settings → Prompts
 **A human editing a template writes straight to live.** There is no approval
 step for your own work, because there is nobody to approve it to: the gate
 exists so that an agent cannot put an entry in your `/` menu that you have not
-read. Settings → Prompts is a full editor — create, edit, delete — not just a
+read. Library → Prompts is a full editor — create, edit, delete — not just a
 review queue.
 
 ## Scope
@@ -142,10 +142,10 @@ menu:
 ### 1. Collision diagnostics
 
 pi's loader records a `collision` diagnostic naming the winning and losing file
-whenever two templates share a name. Settings marks a shadowed root template
-from its own listing instead; surfacing pi's diagnostics would also catch
-collisions with package- and project-supplied templates, which pique cannot see
-from disk alone.
+whenever two templates share a name. Library → Prompts marks a shadowed root
+template from its own listing instead; surfacing pi's diagnostics would also
+catch collisions with package- and project-supplied templates, which pique
+cannot see from disk alone.
 
 ### 2. Argument validation
 
@@ -160,6 +160,6 @@ and nothing records that a human already said no — the same gap
 
 ### 4. Editing project- and package-supplied templates
 
-Settings lists and edits a scope's own templates only. The ones pi finds in
-`.pi/prompts/` or inside a package are invocable but not editable here — the
-file belongs to the repo or the package, not to the scope.
+Library → Prompts lists and edits a scope's own templates only. The ones pi
+finds in `.pi/prompts/` or inside a package are invocable but not editable here
+— the file belongs to the repo or the package, not to the scope.

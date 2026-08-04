@@ -1,7 +1,7 @@
 // The agent half of prompt-template authoring: one pi tool that lets an agent write a
 // template the user can later invoke as `/name`. The file lands in the quarantine dir
 // ONLY (paths.ts) — pi's directory scan does not recurse, so nothing there is invocable
-// until a human approves it in Settings → Prompts, which moves it into the live dir.
+// until a human approves it in Library → Prompts, which moves it into the live dir.
 // Passed to createAgentSession as customTools (see chat/agent.ts). Runs Deno-side only.
 import { Type } from "typebox";
 import {
@@ -32,7 +32,7 @@ export function promptAuthoringTools(scope: ScopeId): ToolDefinition[] {
         "Author a prompt template: a reusable message the user invokes by typing /name in a " +
         "chat. The template does NOT take effect immediately: it is written to a quarantine " +
         "directory and only becomes invocable after the user reviews and approves it in " +
-        "Settings → Prompts. Say so when reporting back. A template is text that gets sent as " +
+        "Library → Prompts. Say so when reporting back. A template is text that gets sent as " +
         "the user's message, so it is the way to capture a task phrased the same way over and " +
         "over — including the standing instructions a run of that task should start from. " +
         reach,
@@ -76,7 +76,7 @@ export function promptAuthoringTools(scope: ScopeId): ToolDefinition[] {
             type: "text",
             text:
               `Wrote the prompt template ${p.name} to the pending directory. It is not ` +
-              `invocable yet — the user must approve it in Settings → Prompts.`,
+              `invocable yet — the user must approve it in Library → Prompts.`,
           }],
           details: null,
         };

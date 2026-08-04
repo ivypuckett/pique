@@ -4,6 +4,7 @@ import Chat from "../chat/Chat.svelte";
 import FileTree from "../filetree/FileTree.svelte";
 import GitDiff from "../gitdiff/GitDiff.svelte";
 import Kanban from "../kanban/Kanban.svelte";
+import Library from "../library/Library.svelte";
 
 export const registry: Record<
   string,
@@ -22,4 +23,5 @@ export const registry: Record<
   filetree: FileTree,
   gitdiff: GitDiff,
   kanban: Kanban,
+  library: Library,
 };

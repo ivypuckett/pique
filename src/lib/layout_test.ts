@@ -4,6 +4,7 @@ import {
   fixedPx,
   gridTemplateColumns,
   MIN_WIDTH_PCT,
+  moduleLabel,
   resizeBoundary,
   visibleIds,
 } from "./layout.ts";
@@ -236,4 +237,16 @@ Deno.test("addDiffTab adds an active right-column gitdiff tab scoped to the file
   assertEquals(tab.props, {
     path: "/home/ivy/workspace/pique/src/lib/layout.ts",
   });
+});
+
+Deno.test("library is a module kind with a capitalised label", () => {
+  assertEquals(moduleLabel("library"), "Library");
+});
+
+Deno.test("addTab opens a Library tab titled Library", () => {
+  const v = addTab(createInitialView(), "library");
+  const tab = v.right.rows[v.right.rows.length - 1];
+  assertEquals(tab.kind, "library");
+  assertEquals(tab.title, "Library");
+  assertEquals(v.right.activeTabId, tab.id);
 });

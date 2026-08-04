@@ -281,7 +281,7 @@ export async function removePackage(
 }
 
 // Browse pi packages via npm's public registry search. Networked; the caller
-// (Settings UI) surfaces failures and falls back to the manual source input.
+// (Library → Extensions) surfaces failures and falls back to the manual source input.
 export async function searchExtensions(
   query: string,
 ): Promise<ExtSearchResult[]> {

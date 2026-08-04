@@ -86,6 +86,7 @@ Do not try to fix them; just don't add more.
 | `src/lib/scope/store.ts`                | Modify | Delete `editing` / `editScope`; trim `patchScopeChat` |
 | `src/lib/extensions/agent-tools.ts`     | Modify | Retarget three "Settings → Extensions" strings        |
 | `src/lib/prompts/agent-tools.ts`        | Modify | Retarget three "Settings → Prompts" strings           |
+| 11 other `src/**/*.ts`                  | Modify | Retarget code comments naming the old location        |
 | `docs/*.md`                             | Modify | Retarget human-facing references                      |
 
 ---
@@ -455,6 +456,9 @@ Create `src/lib/prompts/Prompts.svelte`:
 <script lang="ts">
   import { promptBindings, type PromptInfo } from "./bindings.ts";
   import { refreshChatCommands } from "../chat/store.ts";
+  // The copied `refreshPrompts()` reads root's list directly (modal line 285), so this
+  // section needs ROOT even though the Extensions one did not.
+  import { ROOT } from "../scope/paths.ts";
 
   // Same three props as the Extensions section: the scope the module points at, whether
   // that scope is root, and the shell's refresh counter.
@@ -489,22 +493,38 @@ block, in order, keeping their comments:
 | `274-289` | the `pendingPrompts` / `livePrompts` / `inheritedPrompts` deriveds and `refreshPrompts()` |
 | `301-353` | `promptKey()`, `promptAction()`, `editPrompt()`, `newPrompt()`, `saveDraft()`             |
 
-Then add this effect in place of the modal's lines `291-299`:
+Then add **two** effects in place of the modal's single one at lines `291-299`:
 
 ```ts
+// Re-list when the scope changes or the shell asks for a refresh — both change what
+// this list should show.
 $effect(() => {
-  refreshKey;
+  void refreshKey;
   if (prompts && scope) {
     promptError = "";
     promptNotice = "";
     openPrompt = null;
-    draft = null;
     refreshPrompts();
   }
 });
+
+// A draft belongs to the scope it was started in — saving it after a switch would
+// write it into the wrong one. Refresh must NOT discard it: that button sits directly
+// above the editor, and a draft is unsaved user input.
+$effect(() => {
+  void scope;
+  draft = null;
+});
 ```
 
-As in Task 2, the bare `refreshKey;` is a deliberate dependency read.
+`void refreshKey;` and `void scope;` are deliberate dependency reads — Svelte 5
+tracks them so each effect re-runs when its own trigger changes. `void` marks
+them as intentionally discarded expressions. Do not delete them as dead code.
+
+The split matters: the modal cleared `draft` alongside everything else because
+that clear could only fire on modal-open or a scope switch. The module puts a
+one-click Refresh in a toolbar directly above the edit form, so folding the two
+together would silently discard a half-typed template.
 
 - [ ] **Step 3: Copy the markup**
 
@@ -530,13 +550,26 @@ In `src/lib/library/Library.svelte`, add the import:
 import Prompts from "../prompts/Prompts.svelte";
 ```
 
-and replace the prompts placeholder branch:
+Then **restructure the body so both sections stay mounted**, replacing the whole
+`{#if section === "extensions"} … {:else} … {/if}` body block with:
 
 ```svelte
-{:else}
+<!-- Both sections stay mounted and the inactive one is hidden, the way Column.svelte
+     hides inactive module tabs. Tearing one down on every sub-tab switch would discard
+     an in-progress prompt draft — the modal never had that problem, because both
+     sections lived in one long-lived script. -->
+<div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "extensions"}>
+  <Extensions {scope} inRoot={scopeIsRoot} {refreshKey} />
+</div>
+<div class="min-h-0 flex-1 overflow-y-auto p-4" class:hidden={section !== "prompts"}>
   <Prompts {scope} inRoot={scopeIsRoot} {refreshKey} />
-{/if}
+</div>
 ```
+
+This replaces the single wrapper
+`<div class="min-h-0 flex-1 overflow-y-auto p-4">` that Task 1 created — each
+section now carries its own scroll container, so switching sub-tabs preserves
+each one's scroll position as well as its state.
 
 - [ ] **Step 5: Verify**
 
@@ -650,9 +683,22 @@ Delete these ranges, again **bottom-up**:
 - [ ] **Step 5: Delete `editing` and `editScope` from the scope store**
 
 In `src/lib/scope/store.ts`, delete the `Editing` interface, the `editing`
-writable, and the `editScope` function. Update the file's opening comment, which
-describes machinery that no longer exists — replace the whole header comment
-with:
+writable, the `editScope` function, **and `updateScopeConfig`**.
+
+`updateScopeConfig` has to go too, even though it was already unused before this
+change: it is built entirely out of `editing` (`get(editing)`, `editing.set`),
+so deleting the writable while keeping the function leaves two dangling
+references and fails the build. It has zero callers repo-wide — confirm with
+`grep -rn "updateScopeConfig" src/` before deleting.
+
+Removing it also strips the last uses of three imports in this file. Delete
+`get` and `writable` from the `svelte/store` import (the whole line goes — no
+other use), and delete the `ROOT` import. Keep `scopeBindings` and
+`ScopeConfig`, which `patchScopeChat` still needs. Leaving dead imports behind
+would push `deno lint` past the 30 problems this plan pins.
+
+Update the file's opening comment, which describes machinery that no longer
+exists — replace the whole header comment with:
 
 ```ts
 // Per-scope config helpers.
@@ -666,8 +712,7 @@ Then trim `patchScopeChat`: delete its trailing `editing.update(...)` call and
 the comment above it ("Keep the modal in sync…"), which now syncs nothing. The
 function keeps its read-modify-write body and its `chat/store.ts` caller.
 
-Leave `updateScopeConfig` alone. It is **already** unused before this change and
-is not an orphan this work created; the spec records it as pre-existing.
+After this step, `patchScopeChat` is the only export left in the file.
 
 - [ ] **Step 6: Verify the deletions left nothing dangling**
 
@@ -683,7 +728,7 @@ fails here.
 Run:
 
 ```bash
-grep -rn "editScope\|SCOPED_SECTIONS\|\$editing" src/
+grep -rn "editScope\|SCOPED_SECTIONS\|updateScopeConfig\|\$editing" src/
 ```
 
 Expected: no output. If `editing` still appears in `scope/store.ts`, step 5 is
@@ -708,6 +753,113 @@ deno fmt
 ```bash
 git add src/lib/settings/SettingsModal.svelte src/lib/scope/store.ts
 git commit -m "Drop Extensions and Prompts from the settings modal"
+```
+
+---
+
+## Task 4b: Cosmetic cleanup of the moved sections
+
+Deliberately deferred until Task 4, because until the originals are deleted the
+moved files must stay byte-comparable against them — that comparison is what
+made the Task 2 and 3 reviews cheap and trustworthy. Now that the originals are
+gone, clean up. **This task changes no behaviour.**
+
+**Files:**
+
+- Modify: `src/lib/extensions/Extensions.svelte`
+- Modify: `src/lib/prompts/Prompts.svelte`
+- Modify: `src/lib/library/Library.svelte`
+- Modify: `src/App.svelte`
+
+Step 3 is a genuine bug fix, not cosmetics — it is here because the regression
+it fixes was caused by Task 3's always-mounted restructure.
+
+- [ ] **Step 1: Rename the `inRoot` prop to `scopeIsRoot`**
+
+`Library.svelte` carefully distinguishes `isRootWorkspace` (this module is in
+the root workspace) from `scopeIsRoot` (the scope being _viewed_ is root), then
+passes the latter under the name `inRoot` — which is what `Kanban.svelte:14`
+uses for the _former_. The prop name currently means the opposite of what the
+same name means one file over.
+
+In both section components, rename the prop in the `$props()` destructure, its
+type, and every use in the markup. In `Library.svelte`, both call sites collapse
+to `{scopeIsRoot}`.
+
+- [ ] **Step 2: Normalise the markup indentation**
+
+Both components carry the modal's original 6-space base indentation, because
+they were copied out of a doubly-nested block. Every other module in this repo
+starts its markup at column 0 (`Kanban.svelte:446`, `Chat.svelte:112`,
+`GitDiff.svelte:69`).
+
+Re-indent the markup in both files to start at column 0, preserving relative
+nesting. `deno fmt` will **not** do this for you — it reports these files as
+already formatted. Do **not** add `--unstable-component` to the repo's fmt
+config to force it; that would rewrite every `.svelte` file in the tree, far
+outside this plan's blast radius.
+
+- [ ] **Step 3: Fix the focus regression the always-mounted sections caused**
+
+`App.svelte:69-77` picks the first focusable control in a pane:
+
+```ts
+if (pane.offsetParent === null) continue;
+pane.querySelector<HTMLElement>(
+  'textarea, input, [tabindex]:not([tabindex="-1"])',
+)?.focus();
+return;
+```
+
+The `offsetParent` guard is on the _pane_, not on the element it then picks, and
+`querySelector` ignores `display: none`. With a Library tab showing and the
+Prompts sub-tab active, the first match in document order is now the hidden
+Extensions search input, so `.focus()` is a silent no-op and the loop returns.
+Reachable via `ctrl+e` and after closing a workspace. Replace with:
+
+```ts
+[...pane.querySelectorAll<HTMLElement>(
+  'textarea, input, [tabindex]:not([tabindex="-1"])',
+)]
+  .find((el) => el.offsetParent !== null)?.focus();
+```
+
+Tab order needs no `inert` — `display: none` already removes hidden controls
+from it.
+
+- [ ] **Step 4: Verify nothing but whitespace, the rename and the focus fix
+      changed**
+
+Run:
+
+```bash
+git diff -w --stat
+```
+
+Expected: the only non-whitespace differences are the `inRoot` → `scopeIsRoot`
+renames. Anything else means a line was lost or altered during re-indentation.
+
+Run:
+
+```bash
+deno task build
+```
+
+Expected: clean.
+
+Run:
+
+```bash
+deno task test
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/extensions/Extensions.svelte src/lib/prompts/Prompts.svelte src/lib/library/Library.svelte src/App.svelte
+git commit -m "Tidy the moved sections: prop name, indentation, focus"
 ```
 
 ---
@@ -782,7 +934,44 @@ approve it in Settings → Prompts.` `` with:
 `invocable yet — the user must approve it in the Library module's Prompts tab.`,
 ```
 
-- [ ] **Step 3: Verify no stale references remain in source**
+- [ ] **Step 3: Update the code comments that still point at Settings**
+
+The two files above hold the _agent-facing_ strings. Eleven code comments
+elsewhere still tell a reader that extensions and prompt templates are managed
+in Settings. They became wrong when Task 4 deleted those sections, so they
+belong to this change.
+
+Retarget each of these to name the Library module instead. Keep each comment's
+existing shape and wording — only the location changes:
+
+| File:line                                    | The clause to fix                                           |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| `src/desktop.ts:133`                         | "approved in Settings can be invoked without restarting"    |
+| `src/lib/chat/agent.ts:415`                  | "prompt templates saved or approved in Settings become…"    |
+| `src/lib/chat/store.ts:196`                  | "after Settings edits one, so a template becomes invocable" |
+| `src/lib/chat/store.ts:245`                  | "Settings edits prompt templates for a…"                    |
+| `src/lib/chat/prompt_integration_test.ts:71` | "Why Settings can edit a template without restarting"       |
+| `src/lib/chat/prompt_integration_test.ts:73` | "the Settings copy about immediate effect is wrong too"     |
+| `src/lib/prompts/parse.ts:6`                 | "to show a template in Settings the way pi will read it"    |
+| `src/lib/prompts/parse.ts:34`                | "would make Settings disagree with the `/` menu"            |
+| `src/lib/prompts/parse_test.ts:21`           | "The Settings list and the `/` menu read the same file"     |
+| `src/lib/prompts/service.ts:58`              | "the Settings UI shows them together"                       |
+| `src/lib/extensions/service.ts:2`            | "Settings UI and the extensions\* win.bind handlers"        |
+| `src/lib/extensions/packages.ts:284`         | "(Settings UI) surfaces failures and falls back to…"        |
+
+**Do NOT run a blanket replace.** These other "Settings" mentions are correct
+and must not change:
+
+- `src/lib/chat/providers.ts:19,28` — Providers **stayed** in the settings
+  modal, so these are still accurate.
+- `src/main.ts:5,18,19,22` — the app-level settings store, unrelated.
+- `src/lib/scope/bindings.ts:9` — contrasts with the app-level settings store's
+  merge behaviour, still accurate.
+- Every `SettingsManager` / `addSourceToSettings` / `removeSourceFromSettings` /
+  `setPackages` / `settings.json` mention in `src/lib/extensions/*` and
+  `src/lib/scope/migrate.ts` — that is **pi's** settings, not pique's modal.
+
+- [ ] **Step 4: Verify no stale references remain in source**
 
 Run:
 
@@ -791,6 +980,15 @@ grep -rn "Settings → Extensions\|Settings → Prompts" src/
 ```
 
 Expected: no output.
+
+Then the wider sweep, which is what actually catches the comments above:
+
+```bash
+grep -rn "Settings" src/ --include="*.ts" | grep -viE "settingsmanager|addSourceToSettings|removeSourceFromSettings|setPackages|getSourceMatchKeyForSettings|normalizePackageSourceForSettings|settings\.json" | grep -vE "^src/lib/settings/|^src/main.ts|providers\.ts|scope/bindings\.ts:9"
+```
+
+Expected: no output. Any line that remains is either a comment you missed or a
+new exception you must justify — do not widen the filter to silence it.
 
 Run:
 
@@ -806,11 +1004,11 @@ Run:
 deno fmt
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/extensions/agent-tools.ts src/lib/prompts/agent-tools.ts
-git commit -m "Point agent-facing copy at the Library module"
+git add src/lib/extensions/agent-tools.ts src/lib/prompts/agent-tools.ts src/desktop.ts src/lib/chat/agent.ts src/lib/chat/store.ts src/lib/chat/prompt_integration_test.ts src/lib/prompts/parse.ts src/lib/prompts/parse_test.ts src/lib/prompts/service.ts src/lib/extensions/service.ts src/lib/extensions/packages.ts
+git commit -m "Point agent-facing copy and comments at the Library module"
 ```
 
 ---
@@ -1009,7 +1207,9 @@ defect, not the task number.
 - `deno task test` passes, including the two new `layout_test.ts` cases.
 - `deno task build` is clean.
 - `grep -rn "Settings → Extensions\|Settings → Prompts" src/ docs/` is empty.
-- `grep -rn "editScope\|SCOPED_SECTIONS" src/` is empty.
+- Task 5 Step 4's wider sweep over `src/**/*.ts` is empty.
+- `grep -rn "editScope\|SCOPED_SECTIONS\|updateScopeConfig" src/` is empty.
+- `deno lint` still reports 30 problems — no more.
 - Library opens from the `+` menu, both sub-tabs work, and the scope toggle is
   hidden in root.
 - Settings has three sections and no scope strip.

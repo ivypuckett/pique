@@ -68,10 +68,10 @@ Deno.test("a quarantined template never reaches the menu", async () => {
   });
 });
 
-// Why Settings can edit a template without restarting the conversation, unlike anything
-// baked into the system prompt: pi reads templates from the loader on every prompt, so
-// refreshing the loader is enough. If this ever fails, the Settings copy about immediate
-// effect is wrong too.
+// Why Library → Prompts can edit a template without restarting the conversation, unlike
+// anything baked into the system prompt: pi reads templates from the loader on every
+// prompt, so refreshing the loader is enough. If this ever fails, the Library → Prompts
+// copy about immediate effect is wrong too.
 Deno.test("a template saved mid-conversation is invocable after a reload", async () => {
   await withTempHome(async () => {
     const id = await startAgent({ scope: "ws-1" });
