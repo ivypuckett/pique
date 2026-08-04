@@ -50,7 +50,13 @@ export function parseAutomaton(name: string, text: string): Automaton {
     // carries no `prompt:` and so cannot run either way; the distinction only changes
     // which error the UI shows.
     const extracted = extract(text);
-    attrs = extracted.attrs as Record<string, unknown>;
+    // extract() only throws on missing/malformed frontmatter — valid-but-non-object
+    // YAML (e.g. a bare `null` or scalar body) succeeds with attrs of that type, and
+    // reading a key off it below would throw outside this try/catch. Coerce it to {}
+    // so that case falls through to the ordinary "no prompt" report instead of a crash.
+    attrs = (extracted.attrs && typeof extracted.attrs === "object")
+      ? extracted.attrs as Record<string, unknown>
+      : {};
     body = extracted.body;
   } catch (err) {
     if (text.trimStart().startsWith("---")) {
@@ -62,7 +68,9 @@ export function parseAutomaton(name: string, text: string): Automaton {
     }
     return { ...empty, body: text.trim(), error: "prompt: required" };
   }
-  const prompt = str(attrs.prompt) ?? "";
+  // Trimmed so a whitespace-only value collapses to "" and reports the same error as
+  // an absent one, per the type comment above.
+  const prompt = (str(attrs.prompt) ?? "").trim();
   return {
     name,
     description: str(attrs.description) ?? "",

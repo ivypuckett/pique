@@ -68,16 +68,29 @@ Deno.test("unknown keys are ignored", () => {
   assertEquals(a.error, undefined);
 });
 
+// Adversarial on purpose: `a: b` (colon-space) and `- item` (leading dash-space) throw
+// under naive unquoted YAML, and `#hash` silently truncates to "" — a regression away
+// from per-value JSON.stringify would trip one of these, unlike a plain quotes-and-commas
+// fixture.
 Deno.test("automatonFile round-trips through parseAutomaton", () => {
   const text = automatonFile({
-    description: 'has "quotes" and, commas',
+    description: "a: b, - not a list, # not a comment",
     prompt: "daily-triage",
     extensions: ["pique:kanban"],
     skills: [],
   });
   const a = parseAutomaton("triage", text);
-  assertEquals(a.description, 'has "quotes" and, commas');
+  assertEquals(a.description, "a: b, - not a list, # not a comment");
   assertEquals(a.prompt, "daily-triage");
   assertEquals(a.extensions, ["pique:kanban"]);
   assertEquals(a.skills, []);
+});
+
+// The YAML is well-formed but not an object (a bare scalar/null document), so
+// extract() succeeds with attrs of that shape. This must fall through to the normal
+// "no prompt" report rather than throwing when the code reads attrs.prompt.
+Deno.test("valid but non-object frontmatter is reported, not thrown", () => {
+  const a = parseAutomaton("t", "---\nnull\n---\nbody\n");
+  assertEquals(a.prompt, "");
+  assertEquals(a.error, "prompt: required");
 });

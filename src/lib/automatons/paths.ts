@@ -43,12 +43,20 @@ export function automatonPath(scope: ScopeId, name: string): string {
 }
 
 // A run id is generated (crypto.randomUUID) rather than user-supplied, so it needs no
-// validation beyond the shape it is given in run.ts.
+// validation beyond the shape it is given in run.ts. Anchored the same way as NAME_RE
+// above, for the same kind of check: an all-dashes id like "--" is not a traversal
+// risk, but there's no reason for this pattern to be looser than its sibling.
 export function runPath(scope: ScopeId, runId: string): string {
-  if (!/^[a-z0-9-]+$/.test(runId)) throw new Error(`invalid run id: ${runId}`);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(runId)) {
+    throw new Error(`invalid run id: ${runId}`);
+  }
   return `${runsDir(scope)}/${runId}.json`;
 }
 
+// Creates pending/, runs/, and sessions/ — three siblings under automatonsDir, which
+// itself only ever comes into existence as their shared parent (mkdir recursive:true
+// creates it along the way). One call covers all three; nothing here writes to any
+// of them individually before this runs.
 export async function ensureAutomatonDirs(scope: ScopeId): Promise<void> {
   await Deno.mkdir(pendingDir(scope), { recursive: true });
   await Deno.mkdir(runsDir(scope), { recursive: true });
