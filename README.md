@@ -56,3 +56,5 @@ Notes:
 - Explorer: File explorer which opens into an $EDITOR terminal window.
 - Terminal: Terminal which opens with current $SHELL.
 - Diff: Git diff of highlighted item (or current workspace folder).
+- Library: Extensions and prompt templates for the current scope — review,
+  enable, edit.

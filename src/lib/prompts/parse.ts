@@ -3,8 +3,8 @@
 //
 // The format is pi's, not pique's: `description` and `argument-hint` frontmatter over a
 // markdown body, with the description falling back to the body's first line. This module
-// exists to show a template in Library → Prompts the way pi will read it, so the two must agree —
-// see prompts_pi_test.ts, which asserts that against the SDK's own loader.
+// exists to show a template in Library → Prompts the way pi will read it, so the two
+// must agree — see prompts_pi_test.ts, which asserts that against the SDK's own loader.
 import { extract } from "@std/front-matter/yaml";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
