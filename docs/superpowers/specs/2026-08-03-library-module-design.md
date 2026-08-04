@@ -85,8 +85,8 @@ prompt editor than the modal has today.
 | File                                    | Change | Responsibility                                                                                                                             |
 | --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib/library/Library.svelte`        | New    | Shell: sub-tab state, scope derivation and root/workspace toggle, refresh trigger                                                          |
-| `src/lib/extensions/Extensions.svelte`  | New    | The Extensions section, lifted from the modal; props `{ scope, inRoot, refreshKey }`                                                       |
-| `src/lib/prompts/Prompts.svelte`        | New    | The Prompts section, lifted from the modal; props `{ scope, inRoot, refreshKey }`                                                          |
+| `src/lib/extensions/Extensions.svelte`  | New    | The Extensions section, lifted from the modal; props `{ scope, scopeIsRoot, refreshKey }`                                                  |
+| `src/lib/prompts/Prompts.svelte`        | New    | The Prompts section, lifted from the modal; props `{ scope, scopeIsRoot, refreshKey }`                                                     |
 | `src/lib/modules/registry.ts`           | Modify | Register `library`                                                                                                                         |
 | `src/lib/layout.ts`                     | Modify | No change needed to `LABELS` — `moduleLabel("library")` already yields "Library"; pinned by a test                                         |
 | `src/lib/settings/SettingsModal.svelte` | Modify | Drop both sections, the scope-selector strip, `SCOPED_SECTIONS`, and the now-unused `editing`/`editScope`/`ROOT`/`activeWorkspace` imports |
@@ -105,7 +105,7 @@ and `filetree`, so `library` appears in the `+` menu by being registered.
 │ [Extensions] [Prompts]      [Root|WS-2]  ↻    │  ← sub-tabs, scope, refresh
 ├───────────────────────────────────────────────┤
 │                                               │
-│   <Extensions scope={…} inRoot={…} />         │
+│   <Extensions {scope} {scopeIsRoot} … />      │
 │                                               │
 └───────────────────────────────────────────────┘
 ```
@@ -113,20 +113,38 @@ and `filetree`, so `library` appears in the `+` menu by being registered.
 ```svelte
 let { workspaceId }: { title: string; workspaceId?: string; … } = $props();
 
-const inRoot = $derived(workspaceId === ROOT);
+// `workspaceId` is optional only because Column threads it through as optional.
+const workspace = $derived(workspaceId ?? ROOT);
+const isRootWorkspace = $derived(workspace === ROOT);
 let showRoot = $state(false);
-const scope = $derived(inRoot || showRoot ? ROOT : workspaceId);
-let tab = $state<"extensions" | "prompts">("extensions");
+const scope = $derived(showRoot ? ROOT : workspace);
+// NOT the same as isRootWorkspace: a workspace viewing root's list is editing root.
+const scopeIsRoot = $derived(scope === ROOT);
+let section = $state<"extensions" | "prompts">("extensions");
 let refreshKey = $state(0);
 ```
 
-The scope toggle is hidden when `inRoot` — root has no other scope to switch to,
-and a workspace can never configure a sibling. This is the same constraint the
-modal's `scopes` array encoded, expressed the way Kanban already expresses it.
+The scope toggle is hidden when `isRootWorkspace` — root has no other scope to
+switch to, and a workspace can never configure a sibling. This is the same
+constraint the modal's `scopes` array encoded, expressed the way Kanban already
+expresses it.
+
+**`isRootWorkspace` and `scopeIsRoot` are different**, and conflating them is
+the one real trap here. The first asks whether this module sits in the root
+workspace, and gates the toggle. The second asks whether the scope currently
+being _viewed_ is root, and drives the warning copy ("Enabling here grants it to
+every workspace"). They diverge exactly when a workspace views root's list.
+`Kanban.svelte` calls the first `inRoot` and the modal called the second
+`inRoot`, which is why neither name is reused.
 
 `refreshKey` is a counter the sections take as a prop and re-list on, so the
 shell can drive a refresh without reaching into either section's state. Each
 section also re-lists when `scope` changes.
+
+Both sections stay mounted, with the inactive one hidden by `class:hidden` the
+way `Column.svelte` hides inactive module tabs. Tearing one down on every
+sub-tab switch would discard an in-progress prompt draft — a problem the modal
+never had, because both sections lived in one long-lived script.
 
 ### What Settings becomes
 
@@ -147,6 +165,19 @@ in the file, which go with it, leaving `patchScopeChat` as the only export.
 
 ### Text that names the old location
 
+**One form everywhere: `Library → Extensions` and `Library → Prompts`.** That is
+a pure `Settings` → `Library` substitution, so it preserves the existing line
+wrapping in every string and comment it touches, and it keeps source and docs
+saying the same thing. A longer possessive form ("the Library module's
+Extensions tab") was tried first and reverted: it split the source away from the
+convention the docs kept, forced ragged rewraps in the concatenated tool
+strings, and named a sub-tab a "tab" while the module is itself a tab.
+
+Two deliberate exceptions: a reference to the _widget_ rather than the location
+stays a widget ("The Extensions list labels the inherited group"), and prose
+about the module's UI as a whole stays prose ("the Library module's chrome", in
+the verification checklist).
+
 Agent-facing (strings the agent repeats to the user, so they go stale on
 landing):
 
@@ -155,7 +186,20 @@ landing):
 - `prompts/agent-tools.ts` — the `define_prompt` description and its success
   message.
 
-No test asserts these strings, so the change is source-only.
+No test asserts these strings, so the change is source-only. They are
+concatenated at runtime, so re-read them end to end after any rewrap — the join
+points move.
+
+Code comments — twelve of them, in `desktop.ts`, `chat/agent.ts`,
+`chat/store.ts`, `chat/prompt_integration_test.ts`, `prompts/parse.ts`,
+`prompts/parse_test.ts`, `prompts/service.ts`, `extensions/service.ts` and
+`extensions/packages.ts`. Not agent-facing, but they went wrong the moment the
+sections left the modal.
+
+Text that must **not** change, and that a blanket replace would wrongly catch:
+`chat/providers.ts` (Providers stayed in Settings), `main.ts` and
+`scope/bindings.ts:9` (the app-level settings store), and every pi
+`SettingsManager` mention.
 
 Human-facing docs:
 
