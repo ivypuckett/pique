@@ -196,6 +196,29 @@ async function until(
   throw new Error(`timed out after ${ms}ms waiting for: ${what}`);
 }
 
+// The inverse of until(): hold a run's record under observation and fail the MOMENT it
+// changes, rather than sampling once at a guessed deadline. "A late writer never
+// overwrites this" is only provable over a window — and the sampling has to be
+// continuous, because a fixed sleep silently degrades into no assertion at all as soon
+// as the machine is slower than the number that was guessed.
+async function staysAt(
+  id: string,
+  expected: RunRecord,
+  ms = 3_000,
+): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const now = await recordOf(id);
+    assertEquals(
+      now.status,
+      expected.status,
+      `run ${id} was overwritten ${ms - (deadline - Date.now())}ms in`,
+    );
+    assertEquals(now.endedAt, expected.endedAt, "endedAt was rewritten");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 // The run's DURABLE outcome has settled. Generous, because a real prompt round trip
 // happens in between.
 async function awaitTerminal(id: string): Promise<RunRecord> {
@@ -371,10 +394,12 @@ Deno.test("a finished run is evicted, so readRun answers at once instead of long
 // otherwise rewrite `done` into `stopped` (or `failed` into `stopped`, keeping the stale
 // error beside it), so the run list would lie about what happened.
 //
-// Deliberately waits for the terminal RECORD only, not for eviction: the stop is meant
-// to be harmless whether it lands after finish() evicted the run or inside the window
-// where the run is still in the Map with its latch set. Waiting for eviction first would
-// only ever exercise the easy half.
+// Waits for the terminal RECORD only, not for eviction — but be honest about what that
+// buys: finish() patches the record and deletes from the Map in the same synchronous
+// stretch, and this polls at 20ms, so in practice the stop almost always lands AFTER
+// eviction and it is stopRun's `!run` guard doing the work. The `run.stopped` guard
+// covers the same call in the narrow window before the delete; both are `return`, so the
+// assertion holds either way, but only the post-eviction path is reliably exercised here.
 Deno.test("stopping an already-finished run does not rewrite its outcome", async () => {
   await withTempHome(async (cwd) => {
     await setUpAutomaton();
@@ -416,9 +441,12 @@ Deno.test("stopping a run mid-flight leaves exactly one stopped record", async (
     assertEquals(typeof stopped.endedAt, "string");
 
     // Let the request through: this is what settles prompt() and gives finish() its
-    // chance to overwrite the record.
+    // chance to overwrite the record. An overwrite can land at any point after that, so
+    // the record is WATCHED across the window rather than sampled once at its end — a
+    // single late sample passes on an unloaded machine and stops testing anything on a
+    // slow one, which is how this test previously reported ok with the latch removed.
     release();
-    await new Promise((r) => setTimeout(r, 500));
+    await staysAt(id, stopped);
 
     const after = await recordOf(id);
     assertEquals(
