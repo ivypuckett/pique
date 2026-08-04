@@ -493,6 +493,14 @@ export async function runHistory(scope: ScopeId, id: string): Promise<Item[]> {
   }
 }
 
+// Names of the tools this run can actually call — the counterpart of chat's
+// activeToolNames, and the only way to observe what the capability set actually
+// composed. Live runs only: finish() evicts the session, and the tool set is not
+// something the record or the JSONL preserves.
+export function activeToolNamesOfRun(id: string): string[] {
+  return runs.get(id)?.session.getActiveToolNames() ?? [];
+}
+
 export async function stopRun(id: string): Promise<void> {
   const run = runs.get(id);
   // `stopped` already set means finish() or an earlier stopRun owns the outcome.
