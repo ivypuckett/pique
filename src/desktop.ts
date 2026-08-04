@@ -130,7 +130,8 @@ win.bind("chatListCommands", async (arg) => {
 });
 
 // Re-read prompt templates from disk into a running agent, so a template saved or
-// approved in Settings can be invoked without restarting the conversation.
+// approved in the Library module's Prompts tab can be invoked without restarting the
+// conversation.
 win.bind("chatReloadPrompts", async (arg) => {
   const { id } = arg as { id: string };
   await chat.reloadPrompts(id);

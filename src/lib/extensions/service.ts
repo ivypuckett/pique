@@ -1,6 +1,7 @@
 // The merged extension surface: one list, one lifecycle, two origins. Everything the
-// Settings UI and the extensions* win.bind handlers (src/desktop.ts) call lives here;
-// local.ts and packages.ts hold the per-origin mechanics. Runs Deno-side only.
+// Library module's Extensions tab and the extensions* win.bind handlers (src/desktop.ts)
+// call lives here; local.ts and packages.ts hold the per-origin mechanics. Runs Deno-side
+// only.
 //
 // The invariant this module exists to preserve: an extension is `enabled` iff it is in
 // pi's OWN loading set for the scope — the extensions/ dir for a local module,

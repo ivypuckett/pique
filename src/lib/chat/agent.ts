@@ -412,10 +412,10 @@ export function systemPromptOf(id: string): string {
   return agents.get(id)?.session.systemPrompt ?? "";
 }
 
-// Re-read the resource loader so prompt templates saved or approved in Settings become
-// invocable in a conversation that is already running. Unlike the system prompt — which pi
-// bakes in at session creation — templates are read from the loader on every prompt(), so
-// refreshing the loader is enough and the transcript survives.
+// Re-read the resource loader so prompt templates saved or approved in the Library
+// module's Prompts tab become invocable in a conversation that is already running. Unlike
+// the system prompt — which pi bakes in at session creation — templates are read from the
+// loader on every prompt(), so refreshing the loader is enough and the transcript survives.
 export async function reloadPrompts(id: string): Promise<void> {
   await agents.get(id)?.resourceLoader.reload();
 }
