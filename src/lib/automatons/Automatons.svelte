@@ -146,6 +146,11 @@
     } catch (e) {
       error = message(e);
     }
+    // Outside the try on purpose. A refused launch — an unresolvable extension, a missing
+    // prompt template — still writes a durable `failed` record before it throws, and that
+    // record is the whole point of recording refusals for unattended triggers. Refreshing
+    // only on success would leave it invisible until the next manual refresh.
+    await refreshRuns();
     busy = false;
   }
 
@@ -187,6 +192,9 @@
     selectedRunId = null;
     history = [];
     historyStatus = "";
+    // Keyed by automaton name, which is not unique across scopes — a same-named automaton
+    // in the other scope would otherwise inherit whatever was typed for this one.
+    args = {};
     refresh();
   });
 </script>

@@ -69,16 +69,22 @@
         templates = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
       }
       if (exts) {
-        const out: Option[] = [];
+        // Keyed by the ref string rather than collected into a list, because a local
+        // extension of the same name can be enabled in root AND in this scope, and both
+        // come back from extensionsVisible. They are one nameable ref, so two rows would
+        // duplicate a keyed-each key and misattach checkbox state. The list arrives
+        // root-first, so setting as we go leaves the nearest scope's entry — which is
+        // also the one the resolver will pick.
+        const byValue = new Map<string, Option>();
         for (const x of await exts.extensionsVisible({ scope })) {
           if (x.state !== "enabled") continue;
           // A package is named by its source; a local module by its name.
           const value = x.origin === "package" ? x.source : x.name;
           if (!value) continue;
           const where = x.scope === scope ? "" : ` · from ${x.scope}`;
-          out.push({ value, hint: `${x.origin}${where}` });
+          byValue.set(value, { value, hint: `${x.origin}${where}` });
         }
-        extensionOptions = out;
+        extensionOptions = [...byValue.values()];
       }
       if (skills) {
         skillOptions = (await skills.skillsVisible({ scope })).map((s) => ({
