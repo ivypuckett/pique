@@ -5,6 +5,7 @@ import FileTree from "../filetree/FileTree.svelte";
 import GitDiff from "../gitdiff/GitDiff.svelte";
 import Kanban from "../kanban/Kanban.svelte";
 import Library from "../library/Library.svelte";
+import Automatons from "../automatons/Automatons.svelte";
 
 export const registry: Record<
   string,
@@ -24,4 +25,5 @@ export const registry: Record<
   gitdiff: GitDiff,
   kanban: Kanban,
   library: Library,
+  automatons: Automatons,
 };

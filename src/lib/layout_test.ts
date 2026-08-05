@@ -243,6 +243,10 @@ Deno.test("library is a module kind with a capitalised label", () => {
   assertEquals(moduleLabel("library"), "Library");
 });
 
+Deno.test("automatons gets a capitalized label from the fallback", () => {
+  assertEquals(moduleLabel("automatons"), "Automatons");
+});
+
 Deno.test("addTab opens a Library tab titled Library", () => {
   const v = addTab(createInitialView(), "library");
   const tab = v.right.rows[v.right.rows.length - 1];
