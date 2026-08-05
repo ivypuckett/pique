@@ -25,6 +25,7 @@ import {
   toHistory,
 } from "../chat/agent.ts";
 import { resolveAutomaton } from "./service.ts";
+import { splitModelRef } from "./parse.ts";
 import { resolveExtensionRefs, resolveSkillRefs } from "./resolve.ts";
 import { ensureAutomatonDirs, runPath, runsDir, sessionsDir } from "./paths.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
@@ -52,6 +53,11 @@ export type RunRecord = {
   // first run so the record shape does not change when they land.
   trigger: string;
   args?: string;
+  // The model the run actually used, as `provider/model-id`, recorded once it has been
+  // resolved — so a finished run says which model produced it rather than leaving the
+  // reader to guess from whatever the scope's default happens to be TODAY. Absent on a
+  // record for a launch refused before the model was chosen.
+  model?: string;
   // The pi session JSONL this run streamed into, recorded at launch. It is what makes
   // a FINISHED run's transcript readable (runHistory): the live session is evicted the
   // moment it ends, so after that the file is the only copy.
@@ -349,9 +355,15 @@ export async function launchAutomaton(
   let unsubscribe: (() => void) | undefined;
   try {
     const modelRuntime = await ensureRuntime();
-    const { provider, modelId, thinking } = resolveChatDefaults(
-      await resolveScopeConfig(scope),
-    );
+    const defaults = resolveChatDefaults(await resolveScopeConfig(scope));
+    // The definition's `model:` wins over the scope's chat default; with no `model:`
+    // the run keeps inheriting, which is what every automaton did before the key
+    // existed. The thinking level is not per-automaton, so it always comes from the
+    // scope (docs/automatons.md deferred #4).
+    const { provider, modelId } = def.model
+      ? splitModelRef(def.model)
+      : { provider: defaults.provider, modelId: defaults.modelId };
+    const thinking = defaults.thinking;
     const model = modelRuntime.getModel(provider, modelId);
     // No fallback model, unlike chat: a run that quietly used a different model than
     // the scope configured would be discovered long after it finished.
@@ -383,6 +395,7 @@ export async function launchAutomaton(
       startedAt,
       trigger,
       args,
+      model: `${provider}/${modelId}`,
       sessionFile: session.sessionFile,
     });
   } catch (err) {

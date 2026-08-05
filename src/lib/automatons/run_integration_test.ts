@@ -112,8 +112,14 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
             baseUrl,
             api: "openai-completions",
             apiKey: "mock",
+            // Two models on one endpoint. The second exists solely so a test can pin a
+            // model that is provably NOT the scope default below.
             models: [{
               id: "mock-model",
+              contextWindow: 128000,
+              input: ["text"],
+            }, {
+              id: "other-model",
               contextWindow: 128000,
               input: ["text"],
             }],
@@ -340,6 +346,71 @@ Deno.test("a finished run's transcript is rebuilt from its session JSONL", async
       );
     }
     assertStringIncludes(reply.text, REPLY);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 3 — which model a run uses, and where that is recorded.
+// ---------------------------------------------------------------------------
+
+// The inherit path: no `model:` in the file, so the run takes the scope's chat default
+// — and says so on the record, which is the only place a finished run's model survives.
+Deno.test("a run with no model of its own records the scope's default", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+
+    const id = await launchAutomaton({ scope: SCOPE, name: "triage", cwd });
+    assertEquals((await recordOf(id)).model, "mock/mock-model");
+
+    await stopRun(id);
+  });
+});
+
+// The pinned path. `other-model` is a second model on the same endpoint and is NOT what
+// the scope config names, so a record saying so proves the definition's ref is what
+// reached getModel rather than the default coincidentally matching.
+Deno.test("a run pins the model its file names, over the scope's default", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+    await saveAutomaton(SCOPE, "triage", {
+      description: "fixture",
+      prompt: "job",
+      extensions: [],
+      skills: [],
+      model: "mock/other-model",
+    });
+
+    const id = await launchAutomaton({ scope: SCOPE, name: "triage", cwd });
+    assertEquals((await recordOf(id)).model, "mock/other-model");
+
+    await stopRun(id);
+  });
+});
+
+// No fallback, deliberately: a run that quietly used a different model than its file
+// names would be discovered long after it finished.
+Deno.test("a run naming an unavailable model is refused rather than falling back", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+    await saveAutomaton(SCOPE, "triage", {
+      description: "fixture",
+      prompt: "job",
+      extensions: [],
+      skills: [],
+      model: "mock/nosuchmodel",
+    });
+
+    let raised = "";
+    try {
+      await launchAutomaton({ scope: SCOPE, name: "triage", cwd });
+    } catch (err) {
+      raised = err instanceof Error ? err.message : String(err);
+    }
+    assertEquals(raised, "model unavailable: mock/nosuchmodel");
+
+    const [record] = await listRuns(SCOPE);
+    assertEquals(record.status, "failed");
+    assertEquals(record.error, "model unavailable: mock/nosuchmodel");
   });
 });
 

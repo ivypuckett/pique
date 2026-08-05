@@ -171,8 +171,9 @@ workspace, and a same-named local one shadows root's. Two things belong to the
 **launching** scope regardless of where the definition came from — the run and
 its record under `automatons/runs/`, and everything the run resolves against,
 which means the model, the base prompt, the Kanban board and the working
-directory. A root automaton launched in `ws-1` is therefore `ws-1`'s run,
-touching `ws-1`'s board.
+directory. (The model only when the definition does not pin one of its own — see
+[automatons.md](automatons.md).) A root automaton launched in `ws-1` is
+therefore `ws-1`'s run, touching `ws-1`'s board.
 
 This is also where the package rule above bites. Because packages are not
 inherited, a root automaton naming one only launches from a scope where that

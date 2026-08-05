@@ -161,6 +161,10 @@ win.bind("chatSetThinking", async (arg) => {
 // API keys persist to ~/.pi/agent/auth.json; custom endpoints to ~/.pi/agent/models.json.
 win.bind("providerList", async () => await providers.listProviders());
 
+// Every model the connected providers offer, independent of any chat session — what
+// the automaton editor's model picker offers.
+win.bind("providerModels", async () => await providers.listModels());
+
 win.bind("providerConnect", async (arg) => {
   const { id, apiKey } = arg as { id: string; apiKey: string };
   await providers.connectProvider(id, apiKey);
@@ -220,6 +224,14 @@ win.bind("scopeConfigWrite", async (arg) => {
 win.bind("scopeConfigResolve", async (arg) => {
   const { scope } = arg as { scope: string };
   return await scopeConfig.resolveScopeConfig(scope);
+});
+
+// What a scope's agents ACTUALLY use when nothing overrides them: the resolved config
+// with the compiled-in fallbacks filled in. Separate from scopeConfigResolve because
+// the frontend cannot fill those in itself — the fallback model lives in chat/agent.ts.
+win.bind("scopeChatDefaults", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return chat.resolveChatDefaults(await scopeConfig.resolveScopeConfig(scope));
 });
 
 win.bind("pickDirectory", async (arg) => {
@@ -548,6 +560,7 @@ win.bind("automatonsSave", async (arg) => {
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    model,
   } = arg as {
     scope: string;
     name: string;
@@ -555,12 +568,14 @@ win.bind("automatonsSave", async (arg) => {
     prompt: string;
     extensions: string[];
     skills: string[];
+    model?: string;
   };
   await automatonService.saveAutomaton(scope, name, {
     description,
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    model,
   });
   return true;
 });

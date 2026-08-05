@@ -20,6 +20,8 @@ export interface AutomatonBindings {
       prompt: string;
       extensions: string[];
       skills: string[];
+      // `provider/model-id`, or "" to inherit the scope's chat default.
+      model?: string;
     },
   ): Promise<unknown>;
   automatonsDelete(arg: { scope: string; name: string }): Promise<unknown>;

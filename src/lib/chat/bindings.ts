@@ -8,12 +8,13 @@ import type {
   ModelInfo,
   ThinkingLevel,
 } from "./agent.ts";
-import type { ProviderInfo } from "./providers.ts";
+import type { ModelOption, ProviderInfo } from "./providers.ts";
 export type {
   ChatEvent,
   CommandInfo,
   Item,
   ModelInfo,
+  ModelOption,
   ProviderInfo,
   ThinkingLevel,
 };
@@ -52,6 +53,10 @@ export function chatBindings(): ChatBindings | null {
 // the `pi` CLI. Connecting/adding takes effect on chat agents without a restart.
 export interface ProviderBindings {
   providerList(): Promise<ProviderInfo[]>;
+  // Every model those providers offer, for pickers with no chat session behind them
+  // (the automaton editor). A live Chat module uses chatListModels instead, which also
+  // marks the one it is currently on.
+  providerModels(): Promise<ModelOption[]>;
   providerConnect(arg: { id: string; apiKey: string }): Promise<unknown>;
   providerDisconnect(arg: { id: string }): Promise<unknown>;
   providerAddCustom(

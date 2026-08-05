@@ -2,9 +2,10 @@
 // format is testable on its own. Shaped on prompts/parse.ts.
 //
 // An automaton is four references: a prompt template to send, the extensions and
-// skills the run may load, and a description for the human reading the list. The BODY
-// IS RESERVED: it is retained so a round-trip loses nothing, and it is never sent to a
-// model. `prompt:` is what runs (docs/automatons.md).
+// skills the run may load, and a description for the human reading the list, plus an
+// optional model to run them on. The BODY IS RESERVED: it is retained so a round-trip
+// loses nothing, and it is never sent to a model. `prompt:` is what runs
+// (docs/automatons.md).
 import { extract } from "@std/front-matter/yaml";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
@@ -16,6 +17,9 @@ export type Automaton = {
   prompt: string;
   extensions: string[];
   skills: string[];
+  // Which model the run uses, as `provider/model-id`. Absent means the scope's chat
+  // default — what every automaton used before this key existed.
+  model?: string;
   // Reserved. Never interpreted; see the module comment.
   body: string;
   // Set when the file cannot be launched as written. The automaton is still returned
@@ -32,6 +36,31 @@ function strList(v: unknown): string[] {
   return Array.isArray(v)
     ? v.filter((e): e is string => typeof e === "string")
     : [];
+}
+
+// A `model:` ref split at the FIRST slash. Provider ids never contain one
+// (chat/providers.ts's PROVIDER_ID_RE), while model ids routinely do — the compiled-in
+// fallback is literally `lmstudio` + `google/gemma-4-e4b` — so splitting anywhere else
+// would address a model that does not exist.
+export function splitModelRef(
+  ref: string,
+): { provider: string; modelId: string } {
+  const i = ref.indexOf("/");
+  // No slash at all is "no provider", not "provider is everything but the last
+  // character" — which is what a bare slice(0, -1) would produce.
+  if (i < 0) return { provider: "", modelId: ref };
+  return { provider: ref.slice(0, i), modelId: ref.slice(i + 1) };
+}
+
+// Checked here rather than at launch for the same reason `prompt:` is: a ref that
+// cannot name a model would otherwise surface as a puzzling "model unavailable" on an
+// unattended run. `provider/` and `/model` are both rejected — each would send half a
+// ref to getModel, which answers undefined for either.
+function modelError(ref: string): string | undefined {
+  const { provider, modelId } = splitModelRef(ref);
+  return provider && modelId
+    ? undefined
+    : `model: expected "provider/model-id", got ${JSON.stringify(ref)}`;
 }
 
 export function parseAutomaton(name: string, text: string): Automaton {
@@ -71,14 +100,21 @@ export function parseAutomaton(name: string, text: string): Automaton {
   // Trimmed so a whitespace-only value collapses to "" and reports the same error as
   // an absent one, per the type comment above.
   const prompt = (str(attrs.prompt) ?? "").trim();
+  const model = (str(attrs.model) ?? "").trim();
   return {
     name,
     description: str(attrs.description) ?? "",
     prompt,
     extensions: strList(attrs.extensions),
     skills: strList(attrs.skills),
+    // "" and absent are the same thing — inherit the scope's default.
+    model: model || undefined,
     body: body.trim(),
-    error: prompt ? undefined : "prompt: required",
+    // One error field, so a file missing its prompt reports that first; the model is
+    // checked only once there is something to run.
+    error: prompt
+      ? (model ? modelError(model) : undefined)
+      : "prompt: required",
   };
 }
 
@@ -95,16 +131,21 @@ export function automatonFile(
     prompt: string;
     extensions: string[];
     skills: string[];
+    model?: string;
   },
 ): string {
   const list = (xs: string[]) =>
     `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
+  const model = a.model?.trim();
   return [
     "---",
     `description: ${JSON.stringify(a.description)}`,
     `prompt: ${JSON.stringify(a.prompt)}`,
     `extensions: ${list(a.extensions)}`,
     `skills: ${list(a.skills)}`,
+    // Omitted rather than written empty, so a file inheriting the scope's model looks
+    // like every automaton written before the key existed.
+    ...(model ? [`model: ${JSON.stringify(model)}`] : []),
     "---",
     "",
   ].join("\n");

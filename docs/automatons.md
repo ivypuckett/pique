@@ -21,6 +21,7 @@ description: Sorts new cards into columns and comments its reasoning.
 prompt: daily-triage
 extensions: [pique:kanban, kanban_notes, npm:pi-crew]
 skills: [changelog-style]
+model: anthropic/claude-opus-4
 ---
 ```
 
@@ -28,8 +29,8 @@ The filename minus `.md` is the name — there is no `name:` key, so the two can
 never disagree. Names match `/^[a-z0-9][a-z0-9-]*$/`; a file whose basename does
 not is skipped rather than breaking the listing.
 
-`prompt:` is **required**. `description:`, `extensions:` and `skills:` are
-optional and default to empty. Unknown keys are ignored.
+`prompt:` is **required**. `description:`, `extensions:`, `skills:` and `model:`
+are optional. Unknown keys are ignored.
 
 ### `prompt:` is what runs. The body is reserved.
 
@@ -56,6 +57,35 @@ so the run's first message is `/daily-triage <your text>` and the template's own
 `$1`/`$@` substitution does the rest — see [prompts.md](prompts.md). No new
 mechanism, which is also how a kanban card will hand over its title when that
 trigger lands.
+
+### `model:` pins which model runs it
+
+`model:` is `provider/model-id` — the same pair the Chat module's picker writes,
+and the same pair `~/.pi/agent/models.json` uses. The run uses that model no
+matter what the workspace's chat is later switched to — which is the point: a
+job that was tuned against one model should not silently change model because
+somebody moved a picker in another tab.
+
+The editor's picker lists every model the connected providers serve and has no
+"inherit" entry: a definition with no `model:` yet opens on the scope's chat
+default, so what the picker shows is always the model the run will use, and
+saving writes it out. Editing an older automaton through the form therefore pins
+whatever it was already running on.
+
+A hand-written file may still omit `model:`, and then the run takes the scope's
+chat default at launch — what every automaton did before the key existed.
+
+Only the first `/` separates the halves. Provider ids never contain one; model
+ids routinely do (`lmstudio/google/gemma-4-e4b` is a provider and a model, not
+three parts). A value that is not two non-empty halves is rejected when the file
+is read, alongside a missing `prompt:`.
+
+**There is no fallback.** A `model:` no connected provider serves refuses the
+launch with `model unavailable: <ref>` — unlike Chat, which quietly drops to a
+compiled-in default. A run that used a model other than the one its file names
+would be discovered long after it finished.
+
+The thinking level still comes from the scope for every run; see Deferred #4.
 
 ## The capability set
 
@@ -133,12 +163,17 @@ mismatch surfaces as a puzzling "skill not found" at launch time.
 
 ```
 ~/.pique/scopes/<id>/automatons/
-  runs/<id>.json     the record: status, timings, trigger, error
+  runs/<id>.json     the record: status, timings, trigger, model, error
   sessions/          pi session JSONL — the transcript
 ```
 
 A run is `running`, then `done`, `failed` or `stopped`. The record is what makes
 yesterday's runs listable; the JSONL is the transcript you read by clicking one.
+
+Every record also carries the `model` the run actually used, resolved at launch
+and shown on the run. Reading it off the automaton instead would answer with
+whatever the scope's default is _today_, which is not necessarily what produced
+last week's transcript.
 
 Every record carries a `trigger`, which is `manual` today. It exists now so the
 shape does not change when card-move and cron triggers land, and so "why did
@@ -163,7 +198,8 @@ root's. See [scopes.md](scopes.md).
 
 Two things always belong to the **launching** scope, even when the definition
 was inherited from root: the run and its record, and everything the run resolves
-against — model, base prompt, kanban board, working directory.
+against — base prompt, kanban board, working directory, and the model unless the
+file pins one.
 
 One asymmetry worth knowing: packages are not inherited. An automaton in root
 that names a package therefore only launches from a scope where that package is
@@ -191,11 +227,12 @@ Per above, `read`/`write`/`edit`/`bash` are always present.
 `session.setActiveToolsByName()` is the mechanism and would layer onto the
 capability set cleanly.
 
-### 4. Per-automaton model, thinking level and base prompt
+### 4. Per-automaton thinking level and base prompt
 
-A run uses the scope's chat defaults and the scope's `agent/SYSTEM.md`. All
-three are natural frontmatter additions, left until the prompt/extensions/skills
-triple has proven itself.
+`model:` landed; these two did not. A run's thinking level still comes from the
+scope's chat defaults and its system prompt from the scope's `agent/SYSTEM.md`.
+Both are the same shape of addition as `model:` — a frontmatter key read in
+`launchAutomaton` — and neither has come up in practice yet.
 
 ### 5. Run retention
 

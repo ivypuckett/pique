@@ -201,6 +201,35 @@ Deno.test("an automaton whose prompt names no template is refused before a sessi
   });
 });
 
+// A malformed `model:` is caught by the parser, so this refusal happens before
+// ensureRuntime() — no model server is involved in deciding that "opus" names no
+// provider. The launch-time counterpart (an available-looking ref that no provider
+// serves) needs a real runtime and lives in run_integration_test.ts.
+Deno.test("an automaton whose model is not provider/id is refused before a runtime exists", async () => {
+  await withTempHome(async () => {
+    const cwd = await Deno.makeTempDir();
+    try {
+      await saveAutomaton("ws-1", "triage", {
+        description: "",
+        prompt: "job",
+        extensions: [],
+        skills: [],
+        model: "opus",
+      });
+
+      await assertRejects(
+        () => launchAutomaton({ scope: "ws-1", name: "triage", cwd }),
+        Error,
+        'model: expected "provider/model-id", got "opus"',
+      );
+
+      assertEquals((await listRuns("ws-1"))[0].status, "failed");
+    } finally {
+      await Deno.remove(cwd, { recursive: true });
+    }
+  });
+});
+
 Deno.test("runHistory of a run with no session file is empty, not an error", async () => {
   await withTempHome(async () => {
     await ensureAutomatonDirs("ws-1");

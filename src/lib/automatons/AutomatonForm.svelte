@@ -2,8 +2,10 @@
   import { onMount, untrack } from "svelte";
   import { automatonBindings, type AutomatonInfo } from "./bindings.ts";
   import { extensionBindings } from "../extensions/bindings.ts";
+  import { type ModelOption, providerBindings } from "../chat/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
   import { skillBindings } from "../skills/bindings.ts";
+  import { scopeBindings } from "../scope/bindings.ts";
   import { ROOT } from "../scope/paths.ts";
 
   // `automaton` is null when creating. The parent hands this component a snapshot taken
@@ -21,6 +23,8 @@
   const exts = extensionBindings();
   const prompts = promptBindings();
   const skills = skillBindings();
+  const providers = providerBindings();
+  const scopes = scopeBindings();
 
   // The fields below are seeded from the prop at construction and never re-derived — a
   // list refresh landing mid-edit must not overwrite what is being typed. `untrack` says
@@ -36,8 +40,13 @@
   let prompt = $state(initial?.prompt ?? "");
   let extensionRefs = $state<string[]>([...(initial?.extensions ?? [])]);
   let skillRefs = $state<string[]>([...(initial?.skills ?? [])]);
+  // `provider/model-id`. Starts empty only for the moment before loadOptions seeds it
+  // with the scope's default — the picker has no "inherit" entry, so what it shows is
+  // always the model the run will use.
+  let model = $state(initial?.model ?? "");
 
   let templates = $state<PromptInfo[]>([]);
+  let models = $state<ModelOption[]>([]);
   type Option = { value: string; hint: string };
   let extensionOptions = $state<Option[]>([]);
   let skillOptions = $state<Option[]>([]);
@@ -86,6 +95,16 @@
         }
         extensionOptions = [...byValue.values()];
       }
+      if (providers) models = await providers.providerModels();
+      // A definition with no `model:` of its own — one written before the key existed,
+      // or a new one — opens on the scope's chat default, and saving pins it. Asked of
+      // the backend rather than guessed: the fallback model is compiled into
+      // chat/agent.ts, so an unset config cannot be read off the config. Only when the
+      // form has nothing saved, so this can never overwrite what the file names.
+      if (scopes && model === "") {
+        const d = await scopes.scopeChatDefaults({ scope });
+        model = `${d.provider}/${d.modelId}`;
+      }
       if (skills) {
         skillOptions = (await skills.skillsVisible({ scope })).map((s) => ({
           value: s.name,
@@ -115,6 +134,11 @@
   // Same reasoning for the template: an unlisted one stays selectable rather than being
   // silently rewritten to whatever happens to sit first in the menu.
   const promptMissing = $derived(prompt !== "" && !templates.some((t) => t.name === prompt));
+  // And again for the model: a saved ref whose provider has since been disconnected
+  // stays selected rather than being silently rewritten to whatever heads the list.
+  const modelMissing = $derived(
+    model !== "" && !models.some((m) => `${m.provider}/${m.id}` === model),
+  );
 
   function toggle(list: string[], value: string): string[] {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -144,6 +168,7 @@
           prompt,
           extensions: extensionRefs,
           skills: skillRefs,
+          model,
         }),
       `Saved ${n}.`,
     );
@@ -204,6 +229,22 @@
     </select>
     <div class="text-[0.65rem] opacity-50">
       Sent as the run's first message. Launch arguments are appended to it.
+    </div>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label class="text-xs opacity-70" for="a-model">Model</label>
+    <select id="a-model" class="select select-bordered select-sm" bind:value={model}>
+      {#if modelMissing}
+        <option value={model}>{model} (not available here)</option>
+      {/if}
+      {#each models as m (`${m.provider}/${m.id}`)}
+        <option value={`${m.provider}/${m.id}`}>{m.provider} · {m.name}</option>
+      {/each}
+    </select>
+    <div class="text-[0.65rem] opacity-50">
+      The run uses this model whatever the scope's chat is later set to. A run whose
+      model is unavailable fails rather than falling back.
     </div>
   </div>
 

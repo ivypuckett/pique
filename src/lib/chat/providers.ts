@@ -25,6 +25,11 @@ export type ProviderInfo = {
   isCustom: boolean; // defined by a models.json entry pique can remove
 };
 
+// One model the runtime can serve, addressed the way a stored `provider/model-id` ref
+// is. Distinct from chat/agent.ts's ModelInfo, which also marks which one a LIVE chat
+// session is on: the automaton editor has no session, only a definition to write into.
+export type ModelOption = { provider: string; id: string; name: string };
+
 // A user-defined OpenAI-compatible endpoint, as entered in the Settings form.
 export type CustomProviderInput = {
   id: string;
@@ -182,6 +187,19 @@ export async function listProviders(): Promise<ProviderInfo[]> {
       custom.has(p.id),
     )
   );
+}
+
+// Every model the connected providers offer. Session-independent, which is what makes
+// it usable from a picker that is choosing a model for a run that does not exist yet.
+export async function listModels(): Promise<ModelOption[]> {
+  const runtime = await ensureRuntime();
+  // deno-lint-ignore no-explicit-any
+  const available: any[] = await runtime.getAvailable();
+  return available.map((m) => ({
+    provider: m.provider,
+    id: m.id,
+    name: m.name ?? m.id,
+  }));
 }
 
 // Persist an API key for a built-in provider via pi's login flow (→ auth.json).

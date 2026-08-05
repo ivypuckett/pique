@@ -23,6 +23,13 @@ export interface ScopeBindings {
   scopeConfigWrite(arg: { scope: string; data: ScopeConfig }): Promise<unknown>;
   // Root's config overlaid with the scope's — what an agent there actually sees.
   scopeConfigResolve(arg: { scope: string }): Promise<ScopeConfig | null>;
+  // The same, with the compiled-in fallbacks filled in: the model an agent in this
+  // scope runs on when nothing overrides it. Every field is set, which is what makes
+  // it printable — resolveConfig alone cannot say what an unset field means, because
+  // the fallbacks live Deno-side in chat/agent.ts.
+  scopeChatDefaults(
+    arg: { scope: string },
+  ): Promise<{ provider: string; modelId: string; thinking: ThinkingLevel }>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — callers then

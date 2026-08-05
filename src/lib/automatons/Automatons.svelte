@@ -277,7 +277,7 @@
                   {/if}
                 </div>
                 <div class="truncate text-[0.65rem] opacity-60">
-                  {a.description || `/${a.prompt}`}
+                  {a.description || `/${a.prompt}`}{a.model ? ` · ${a.model}` : ""}
                 </div>
 
                 {#if a.error}
@@ -363,6 +363,9 @@
                 >Stop</button>
               {/if}
             </div>
+            {#if selectedRun.model}
+              <div class="font-mono text-[0.65rem] opacity-60">model: {selectedRun.model}</div>
+            {/if}
             {#if selectedRun.args}
               <div class="font-mono text-[0.65rem] opacity-60">arguments: {selectedRun.args}</div>
             {/if}

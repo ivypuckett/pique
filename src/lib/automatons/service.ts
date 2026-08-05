@@ -105,6 +105,7 @@ export async function saveAutomaton(
     prompt: string;
     extensions: string[];
     skills: string[];
+    model?: string;
   },
 ): Promise<void> {
   assertAutomatonName(name);

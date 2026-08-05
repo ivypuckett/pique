@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { automatonFile, parseAutomaton } from "./parse.ts";
+import { automatonFile, parseAutomaton, splitModelRef } from "./parse.ts";
 
 Deno.test("a full file parses into its four references", () => {
   const a = parseAutomaton(
@@ -84,6 +84,73 @@ Deno.test("automatonFile round-trips through parseAutomaton", () => {
   assertEquals(a.prompt, "daily-triage");
   assertEquals(a.extensions, ["pique:kanban"]);
   assertEquals(a.skills, []);
+});
+
+Deno.test("an absent model means the scope's default, not an error", () => {
+  const a = parseAutomaton("triage", "---\nprompt: p\n---\n");
+  assertEquals(a.model, undefined);
+  assertEquals(a.error, undefined);
+});
+
+Deno.test("a model pins the run to one provider and model", () => {
+  const a = parseAutomaton(
+    "triage",
+    "---\nprompt: p\nmodel: anthropic/claude-opus-4\n---\n",
+  );
+  assertEquals(a.model, "anthropic/claude-opus-4");
+  assertEquals(a.error, undefined);
+});
+
+// A model id with slashes of its own is the ORDINARY case for a local endpoint — the
+// compiled-in fallback is one — so only the first slash separates the two halves.
+Deno.test("a model id containing slashes splits at the first one only", () => {
+  const a = parseAutomaton(
+    "triage",
+    "---\nprompt: p\nmodel: lmstudio/google/gemma-4-e4b\n---\n",
+  );
+  assertEquals(a.error, undefined);
+  assertEquals(splitModelRef(a.model!), {
+    provider: "lmstudio",
+    modelId: "google/gemma-4-e4b",
+  });
+});
+
+// Refused at parse time for the same reason a missing template is: an unattended run
+// must not discover a half-written ref as "model unavailable" hours later.
+Deno.test("a model ref that is not provider/id is an error", () => {
+  for (const ref of ["opus", "anthropic/", "/claude-opus-4"]) {
+    const a = parseAutomaton(
+      "triage",
+      `---\nprompt: p\nmodel: "${ref}"\n---\n`,
+    );
+    assertEquals(a.error?.startsWith("model: expected"), true, ref);
+  }
+});
+
+// One error field, and a file with neither half right should say the more basic thing.
+Deno.test("a missing prompt outranks a bad model", () => {
+  const a = parseAutomaton("triage", "---\nmodel: opus\n---\n");
+  assertEquals(a.error, "prompt: required");
+});
+
+Deno.test("a model round-trips, and an unset one writes no key", () => {
+  const base = {
+    description: "d",
+    prompt: "p",
+    extensions: [],
+    skills: [],
+  };
+  const withModel = automatonFile({
+    ...base,
+    model: "anthropic/claude-opus-4",
+  });
+  assertEquals(
+    parseAutomaton("t", withModel).model,
+    "anthropic/claude-opus-4",
+  );
+  const without = automatonFile({ ...base, model: "" });
+  assertEquals(without.includes("model:"), false);
+  assertEquals(parseAutomaton("t", without).model, undefined);
 });
 
 // The YAML is well-formed but not an object (a bare scalar/null document), so
