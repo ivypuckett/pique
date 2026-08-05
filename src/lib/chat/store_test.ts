@@ -4,8 +4,8 @@
 // must not land in the new transcript.
 import { assertEquals } from "@std/assert";
 import { get } from "svelte/store";
-import type { ChatEvent, Item } from "./bindings.ts";
-import { chatSession } from "./store.ts";
+import type { ChatEvent, Item, ReloadSummary } from "./bindings.ts";
+import { chatSession, formatReloadNotice } from "./store.ts";
 
 // A backend that hands out incrementing agent ids and lets a test push events to a
 // chosen agent, so "the old agent answered late" is expressible. `resumed` stands in for
@@ -16,7 +16,12 @@ function fakeBindings(resumed: Item[] = []) {
   const stopped: string[] = [];
   const queues = new Map<string, ChatEvent[]>();
   const histories = new Map<string, Item[]>();
+  // What actually reached the model, so a test can assert that `/reload` did NOT.
+  const prompted: string[] = [];
   let next = 1;
+  let reloads = 0;
+  let listedCommands = 0;
+  let reloadSummary: ReloadSummary = { added: [], removed: [], failed: [] };
   const bindings = {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
@@ -45,10 +50,21 @@ function fakeBindings(resumed: Item[] = []) {
       }
       return [];
     },
-    chatPrompt: () => Promise.resolve(true),
+    // deno-lint-ignore no-explicit-any
+    chatPrompt(arg: any) {
+      prompted.push(arg.text);
+      return Promise.resolve(true);
+    },
     chatAbort: () => Promise.resolve(true),
     chatListModels: () => Promise.resolve([]),
-    chatListCommands: () => Promise.resolve([]),
+    chatListCommands: () => {
+      listedCommands++;
+      return Promise.resolve([]);
+    },
+    chatReload: () => {
+      reloads++;
+      return Promise.resolve(reloadSummary);
+    },
     chatSetModel: () => Promise.resolve(true),
     chatSetThinking: () => Promise.resolve(true),
     scopeConfigRead: () => Promise.resolve({}),
@@ -59,8 +75,14 @@ function fakeBindings(resumed: Item[] = []) {
     bindings,
     started,
     stopped,
+    prompted,
     emit(id: string, ev: ChatEvent) {
       queues.get(id)?.push(ev);
+    },
+    reloadCount: () => reloads,
+    listedCommandsCount: () => listedCommands,
+    setReloadSummary(s: ReloadSummary) {
+      reloadSummary = s;
     },
   };
 }
@@ -205,4 +227,100 @@ Deno.test("release stops the agent and drops the session", async () => {
     assertEquals(f.started.length, 2);
     chatSession("ws-restart-4").release();
   });
+});
+
+// ---------------------------------------------------------------------------
+// `/reload`: pique's own command. The point of intercepting it in the store is that pi
+// does NOT expand it — session.prompt("/reload") sends the literal text to the model
+// (verified against a real session) — so "never reaches chatPrompt" is the claim.
+// ---------------------------------------------------------------------------
+
+Deno.test("/reload is handled by pique and never sent to the model", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-reload-1");
+    s.retain();
+    await settle();
+    f.setReloadSummary({ added: ["new_tool"], removed: [], failed: [] });
+
+    s.input.set("/reload");
+    s.send();
+    await settle();
+
+    assertEquals(f.prompted, [], "the model must not be asked about /reload");
+    assertEquals(f.reloadCount(), 1, "the reload must actually run");
+    assertEquals(
+      get(s.items),
+      [
+        ...SAVED,
+        { role: "user", text: "/reload" },
+        { role: "notice", text: "Reloaded — +new_tool" },
+      ],
+      "the transcript shows the command and what it did",
+    );
+    assertEquals(
+      get(s.streaming),
+      false,
+      "there is no model turn, so the input must stay usable",
+    );
+    assertEquals(get(s.input), "", "the input is cleared like any other send");
+
+    s.release();
+  }, SAVED);
+});
+
+Deno.test("/reload re-lists the command menu, since an extension can add commands", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-reload-2");
+    s.retain();
+    await settle();
+    const before = f.listedCommandsCount();
+
+    s.input.set("/reload");
+    s.send();
+    await settle();
+
+    assertEquals(
+      f.listedCommandsCount(),
+      before + 1,
+      "the `/` menu must be re-read after a reload",
+    );
+    s.release();
+  });
+});
+
+Deno.test("ordinary text is still sent to the model", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-reload-3");
+    s.retain();
+    await settle();
+
+    s.input.set("what does /reload do?");
+    s.send();
+    await settle();
+
+    assertEquals(f.prompted, ["what does /reload do?"]);
+    assertEquals(f.reloadCount(), 0, "only the exact command reloads");
+    s.release();
+  });
+});
+
+Deno.test("formatReloadNotice names failures first, then the tool changes", () => {
+  assertEquals(
+    formatReloadNotice({ added: [], removed: [], failed: [] }),
+    "Reloaded — no tool changes",
+    "a no-op reload still says something, or it looks like nothing happened",
+  );
+  assertEquals(
+    formatReloadNotice({ added: ["a", "b"], removed: ["c"], failed: [] }),
+    "Reloaded — +a +b; −c",
+  );
+  assertEquals(
+    formatReloadNotice({
+      added: [],
+      removed: [],
+      failed: [{ name: "broken", error: "Expected ')'\n  at line 1" }],
+    }),
+    "Reloaded — ⚠ broken failed to load: Expected ')'; no tool changes",
+    "only the first line of the error, and the failure comes first",
+  );
 });

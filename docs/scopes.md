@@ -219,9 +219,12 @@ it — now an ordinary piece of unbuilt work rather than a blocked one.
 
 ### 2. Live reload into running sessions
 
-Unchanged from before: approving, revoking, installing and changing a model
-default all take effect in Chat modules opened _afterwards_. A revoked tool
-stays live in every running session until it restarts.
+Approving, revoking and installing now reach a running chat when someone types
+`/reload` in it — explicitly, never automatically
+([extensions.md](extensions.md) Deferred #2). A **model default** is the part
+that does not: it is resolved in `startAgent` at session creation, and reload
+does not re-resolve it, so picking a different default for a scope still only
+affects Chat modules opened afterwards.
 
 ### 3. Deeper nesting
 

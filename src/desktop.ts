@@ -140,6 +140,14 @@ win.bind("chatReloadPrompts", async (arg) => {
   return true;
 });
 
+// The whole resource set, extensions included — what `/reload` runs. Separate from
+// chatReloadPrompts on purpose: that one is automatic after a Library prompt edit,
+// this one only ever happens because someone typed the command.
+win.bind("chatReload", async (arg) => {
+  const { id } = arg as { id: string };
+  return await chat.reloadAgent(id);
+});
+
 win.bind("chatSetModel", async (arg) => {
   const { id, provider, model } = arg as {
     id: string;

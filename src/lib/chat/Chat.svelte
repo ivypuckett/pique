@@ -119,6 +119,8 @@
           </div>
         {:else if item.role === "thinking"}
           <div class="whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
+        {:else if item.role === "notice"}
+          <div class="rounded border border-base-300 px-2 py-1 font-mono text-xs opacity-70">{item.text}</div>
         {:else}
           <details class="rounded border border-base-300 p-2 text-xs">
             <summary class="cursor-pointer font-mono">

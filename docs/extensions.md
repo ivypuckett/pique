@@ -59,8 +59,10 @@ drift.
 Revoke is deliberately **not** a delete: it returns the extension to review, so
 re-enabling something you previously turned off means reading it again.
 
-Every change takes effect in Chat modules opened **afterwards**. Sessions
-already running keep what they loaded until they restart.
+Every change takes effect in Chat modules opened **afterwards**. A session
+already running picks the change up when someone types **`/reload`** in it —
+never on its own, so tools do not appear and vanish under a conversation without
+being asked for.
 
 ## The review gate
 
@@ -196,17 +198,59 @@ not expressible by resource selection alone — that needs the allowlist above,
 and any UI built on `no*` should avoid language ("sandbox", "restricted") that
 would claim otherwise.
 
-### 2. Live reload into running sessions
+### 2. Live reload — shipped as `/reload`, with three pieces left
 
-Enable and revoke take effect only in Chat modules opened afterwards, and the UI
-says so. pi has `ctx.reload()`, and `examples/extensions/reload-runtime.ts`
-shows the idiom (a tool queues `/reload` via
-`pi.sendUserMessage(..., {deliverAs: "followUp"})`, because tools get
-`ExtensionContext` and cannot call `ctx.reload()` directly).
+A running chat re-reads extensions, prompts and skills when someone types
+`/reload` in it. The mechanism is `AgentSession.reload()`, a public SDK method
+rather than the TUI affair the earlier note here assumed: it re-reads the
+resource loader, rebuilds the extension runner from what that yields, and passes
+`includeAllExtensionTools`, so a newly enabled extension's tools land in the
+session's _active_ set and not merely its registry.
 
-Unverified: whether `/reload` survives pique's `session.prompt()` path. pique
-omits pi's builtin commands from its `/` menu (`chat/agent.ts:listCommands`), so
-a builtin may or may not run here. Test before building on it.
+It is a typed command rather than an automatic consequence of Enable, so tools
+never change under a conversation that did not ask. pi does **not** expand
+`/reload` — `session.prompt("/reload")` sends the literal text to the model
+(pinned in `chat/reload_test.ts`) — so `chat/store.ts` intercepts it before it
+becomes a turn, and `chat/agent.ts:listCommands` contributes the entry to the
+`/` menu as the one command sourced from pique itself. The reply is a `notice`
+line, styled as pique speaking rather than as the model, naming what was added,
+removed, or failed to load.
+
+Reporting failures there is the point of the summary: pi's reload swallows a
+module that will not import, so without it a broken extension is
+indistinguishable from one that was never enabled.
+
+**Resilience, measured rather than assumed.** `chat/reload_resilience_test.ts`
+drives the cases that would make reload unsafe, against real sessions and real
+extension modules on disk. What holds: an EDITED extension file reloads to its
+new version (not a stale ESM module — the failure a test that only ever ADDS a
+file would miss); a broken extension neither throws out of reload nor takes its
+healthy siblings with it, and is named in `getExtensions().errors`; reloading
+mid-turn is safe both while the turn is parked at the model and while an
+extension's own tool is executing, despite `reload()` carrying no idle guard of
+its own; two concurrent reloads leave a coherent, duplicate-free tool set; a
+conversation that already CALLED a tool still runs after that tool is revoked
+and reloaded away; and 25 reloads converge on the same tool set with the session
+still able to run a turn.
+
+**What is left:**
+
+- The **system prompt** is fixed at session creation (pi exposes no setter), and
+  the scope's **model default** is resolved in `startAgent`. Neither is
+  re-resolved by a reload, so a changed `SYSTEM.md` or model pick still needs a
+  new module. `/reload` says "no tool changes" in that case, which is honest but
+  not obviously the whole story to someone who just edited a prompt.
+- Whether a **provider** accepts a request whose history names a tool absent
+  from the current tool list is untested — the mock endpoint accepts anything.
+  It only arises after a revoke in a conversation that already used the tool.
+- `session_start` **never fires for extensions in pique** — not on reload, and
+  not at startup either. pique calls no `bindExtensions`, so pi's `hasBindings`
+  check is false and the emit is skipped on both paths; an extension whose setup
+  lives in that handler has never run here. The lifecycle one does see across a
+  reload is `load → session_shutdown → load` (pinned in probe E), which is
+  coherent for the module-scope setup pi's own docs demonstrate. Fixing it means
+  passing bindings pique has no TUI use for, and changes behaviour for every
+  extension — its own decision, not reload's.
 
 ### 3. Source validation at enable time
 

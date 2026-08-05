@@ -10,6 +10,7 @@ import {
   type CommandInfo,
   type Item,
   type ModelInfo,
+  type ReloadSummary,
   type ThinkingLevel,
 } from "./bindings.ts";
 import { scopeBindings } from "../scope/bindings.ts";
@@ -19,6 +20,22 @@ import { ROOT } from "../scope/paths.ts";
 // Defined next to ChatEvent in chat/agent.ts: the backend rebuilds the same Items for a
 // resumed conversation, so the shape has to be one thing, not two.
 export type { Item };
+
+// The line `/reload` leaves in the transcript. A reload that changes nothing still says
+// so — silence would be indistinguishable from a command that did not register — and a
+// failed extension is named first, because that is the case the user has to act on.
+export function formatReloadNotice(summary: ReloadSummary): string {
+  const parts: string[] = [];
+  for (const f of summary.failed) {
+    parts.push(`⚠ ${f.name} failed to load: ${f.error.split("\n")[0]}`);
+  }
+  if (summary.added.length) parts.push(`+${summary.added.join(" +")}`);
+  if (summary.removed.length) parts.push(`−${summary.removed.join(" −")}`);
+  if (!summary.added.length && !summary.removed.length) {
+    parts.push("no tool changes");
+  }
+  return `Reloaded — ${parts.join("; ")}`;
+}
 
 export interface ChatSession {
   items: Writable<Item[]>;
@@ -122,6 +139,26 @@ function createSession(
     }
   }
 
+  // What `/reload` runs. Re-lists the `/` menu afterwards because a newly loaded
+  // extension can register commands of its own, and reports the outcome in the
+  // transcript — including the load failures pi's reload swallows.
+  async function reload() {
+    if (!b || !id) return;
+    try {
+      const summary = await b.chatReload({ id });
+      items.update((xs) => [...xs, {
+        role: "notice",
+        text: formatReloadNotice(summary),
+      }]);
+      commands.set(await b.chatListCommands({ id }));
+    } catch (err) {
+      items.update((xs) => [...xs, {
+        role: "notice",
+        text: `Reload failed — ${err instanceof Error ? err.message : err}`,
+      }]);
+    }
+  }
+
   // `fresh` asks the backend to begin a new conversation rather than resume the scope's
   // saved one.
   function start(fresh?: boolean) {
@@ -186,6 +223,13 @@ function createSession(
       if (!b || !get(ready) || !id || get(streaming) || !text) return;
       items.update((xs) => [...xs, { role: "user", text }]);
       input.set("");
+      // pique's own command, handled here rather than sent: pi does not expand it, so
+      // `session.prompt("/reload")` would just ask the model about the word "/reload".
+      // No model turn, so `streaming` stays false and the input is usable immediately.
+      if (text === "/reload") {
+        reload();
+        return;
+      }
       streaming.set(true);
       b.chatPrompt({ id, text }).catch(() => streaming.set(false));
     },

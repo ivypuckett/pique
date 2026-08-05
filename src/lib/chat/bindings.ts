@@ -6,6 +6,7 @@ import type {
   CommandInfo,
   Item,
   ModelInfo,
+  ReloadSummary,
   ThinkingLevel,
 } from "./agent.ts";
 import type { ModelOption, ProviderInfo } from "./providers.ts";
@@ -16,6 +17,7 @@ export type {
   ModelInfo,
   ModelOption,
   ProviderInfo,
+  ReloadSummary,
   ThinkingLevel,
 };
 
@@ -37,6 +39,7 @@ export interface ChatBindings {
   chatListModels(arg: { id: string }): Promise<ModelInfo[]>;
   chatListCommands(arg: { id: string }): Promise<CommandInfo[]>;
   chatReloadPrompts(arg: { id: string }): Promise<unknown>;
+  chatReload(arg: { id: string }): Promise<ReloadSummary>;
   chatSetModel(
     arg: { id: string; provider: string; model: string },
   ): Promise<unknown>;

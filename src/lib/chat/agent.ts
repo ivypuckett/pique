@@ -24,8 +24,18 @@ export type ModelInfo = {
 export type CommandInfo = {
   name: string;
   description: string;
-  source: "extension" | "prompt" | "skill";
+  source: "extension" | "prompt" | "skill" | "pique";
   argumentHint?: string;
+};
+
+// What one `/reload` did, for the line the chat prints afterwards. `failed` is the
+// reason the summary exists at all: pi's reload swallows a module that will not import
+// (reload_resilience_test.ts probe B), so without reporting it here a broken extension
+// is indistinguishable from one that was never enabled.
+export type ReloadSummary = {
+  added: string[];
+  removed: string[];
+  failed: Array<{ name: string; error: string }>;
 };
 
 // One rendered line of the transcript. The streaming path builds these from ChatEvents
@@ -36,6 +46,10 @@ export type Item =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string }
   | { role: "thinking"; text: string }
+  // pique speaking, not the model: what a `/reload` did. Written by the store and never
+  // by `historyOf`, so it is deliberately not part of the conversation — resuming the
+  // session brings back the messages, not the notices.
+  | { role: "notice"; text: string }
   | {
     role: "tool";
     id: string;
@@ -420,6 +434,36 @@ export async function reloadPrompts(id: string): Promise<void> {
   await agents.get(id)?.resourceLoader.reload();
 }
 
+// Re-read everything the session loaded at startup — extensions included — so an extension
+// enabled or revoked in Library reaches a conversation that is already running. pi's own
+// `/reload` is a TUI action, but the flow behind it is `session.reload()`, which rebuilds
+// the extension runner from a re-read loader and hands the fresh tools to the active set.
+// The messages are untouched, so the transcript and the model's context both survive
+// (reload_test.ts). Two things it does NOT do: the system prompt is baked in at session
+// creation and stays, and pi skips the extensions' own `session_start` event here because
+// pique binds no TUI context — an extension doing its setup in that handler rather than at
+// module scope will not have run.
+export async function reloadAgent(id: string): Promise<ReloadSummary> {
+  const agent = agents.get(id);
+  if (!agent) return { added: [], removed: [], failed: [] };
+  const before = new Set<string>(agent.session.getActiveToolNames());
+  await agent.session.reload();
+  const after: string[] = agent.session.getActiveToolNames();
+  const afterSet = new Set(after);
+  // The same loader instance the session holds, so this reads the errors from the
+  // reload that just happened rather than a stale scan.
+  const errors: Array<{ path: string; error: string }> =
+    agent.resourceLoader.getExtensions().errors ?? [];
+  return {
+    added: after.filter((name) => !before.has(name)),
+    removed: [...before].filter((name) => !afterSet.has(name)),
+    failed: errors.map((e) => ({
+      name: e.path.split("/").pop()?.replace(/\.[jt]s$/, "") ?? e.path,
+      error: e.error,
+    })),
+  };
+}
+
 // The `/` menu list: the same three sources pi's TUI concatenates in getCommands —
 // extension commands, file-based prompt templates, and skills (prefixed `skill:`).
 // pi's own builtins (/model, /settings, …) are TUI actions pique covers in its own
@@ -428,6 +472,14 @@ export async function reloadPrompts(id: string): Promise<void> {
 export function listCommands(id: string): CommandInfo[] {
   const session = agents.get(id)?.session;
   if (!session) return [];
+  // pique's own, and the only entry here that pi does not expand: `session.prompt()`
+  // sends "/reload" to the model as literal user text (agent_test.ts), so the chat
+  // store intercepts it before it ever gets that far.
+  const pique: CommandInfo[] = [{
+    name: "reload",
+    description: "Re-read extensions, prompts and skills from disk",
+    source: "pique",
+  }];
   // deno-lint-ignore no-explicit-any
   const ext: CommandInfo[] = session.extensionRunner.getRegisteredCommands()
     .map((c: any) => ({
@@ -454,5 +506,5 @@ export function listCommands(id: string): CommandInfo[] {
     description: s.description ?? "",
     source: "skill",
   }));
-  return [...ext, ...prompts, ...skills];
+  return [...pique, ...ext, ...prompts, ...skills];
 }
