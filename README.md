@@ -48,6 +48,9 @@ Notes:
   [docs/prompts.md](docs/prompts.md).
 - Extension: https://pi.dev/docs/latest/extensions
 - Skill: https://pi.dev/docs/latest/skills
+- Automaton: A prompt template plus the exact extension and skill set a run may
+  load, launched without a conversation — see
+  [docs/automatons.md](docs/automatons.md).
 
 ### Modules
 
@@ -56,5 +59,7 @@ Notes:
 - Explorer: File explorer which opens into an $EDITOR terminal window.
 - Terminal: Terminal which opens with current $SHELL.
 - Diff: Git diff of highlighted item (or current workspace folder).
-- Library: Extensions and prompt templates for the current scope — review,
-  enable, edit.
+- Library: Extensions, prompt templates and skills for the current scope —
+  review, enable, edit.
+- Automatons: Named agents — one prompt template plus the extensions and skills
+  they may load — launched by a button and, later, by a card move or a schedule.

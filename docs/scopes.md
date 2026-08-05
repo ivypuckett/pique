@@ -44,10 +44,20 @@ Each scope owns one directory:
     pending/     awaiting review — pi never loads these (`.ts` modules, `.json` packages)
     prompts/     live prompt templates — pi auto-discovers these too
       pending/   agent-written, awaiting review — pi's scan does not recurse
+    skills/      nameable skills — pi's own location, listed but not gated
     settings.json  enabled pi packages
+  automatons/    launchable definitions (see automatons.md)
+    pending/     reserved for define_automaton; nothing writes here yet
+    runs/        one JSON record per run
+    sessions/    each run's transcript, as pi session JSONL
   sessions/      this scope's saved chat conversations, as pi session JSONL
   board.db       this scope's Kanban board
 ```
+
+`automatons/` sits outside `agent/` for the reason `sessions/` does: pi
+auto-discovers inside an `agentDir`, and a directory of markdown there invites
+it to interpret files that are pique's, not pi's. `agent/skills/` is inside for
+the opposite reason — pi's discovery there is exactly what is wanted.
 
 `sessions/` sits beside `agent/` rather than inside it so pi does not also find
 these under its own default session path. A chat resumes the newest session
@@ -72,6 +82,8 @@ because the old paths were the only copy of the user's boards.
 | **Tools**            | `agentDir` + `additionalExtensionPaths`      | union — root's tools plus its own                     |
 | **Base prompt**      | `scope/prompt.ts:resolveBasePrompt`          | nearest `SYSTEM.md` wins, whole file                  |
 | **Prompt templates** | `agentDir` + `additionalPromptTemplatePaths` | union, nearest name wins                              |
+| **Skills**           | `skills/service.ts:listVisibleSkills`        | union, nearest name wins                              |
+| **Automatons**       | `automatons/service.ts:resolveAutomaton`     | union, nearest name wins                              |
 | **Packages**         | `agentDir` only                              | **not inherited** (see Deferred #1)                   |
 | **Chat defaults**    | `resolveScopeConfig`                         | per key — override one field, inherit the rest        |
 | **cwd**              | `resolveModuleDir`                           | workspace's, else root's, else `$HOME`                |
@@ -151,6 +163,22 @@ deleted (move them first — an implicit move would need a `set_status` reason
 nobody supplied), and the last remaining column cannot be deleted (a board with
 zero columns would be silently re-seeded from the defaults on next open). Column
 edits are not written to the card log, which is card-scoped by schema.
+
+### Automatons and their runs
+
+Definitions inherit like prompt templates: root's are launchable from every
+workspace, and a same-named local one shadows root's. Two things belong to the
+**launching** scope regardless of where the definition came from — the run and
+its record under `automatons/runs/`, and everything the run resolves against,
+which means the model, the base prompt, the Kanban board and the working
+directory. A root automaton launched in `ws-1` is therefore `ws-1`'s run,
+touching `ws-1`'s board.
+
+This is also where the package rule above bites. Because packages are not
+inherited, a root automaton naming one only launches from a scope where that
+package is enabled; anywhere else the reference resolves to nothing and the
+launch is refused. Local extensions and skills do not have this problem, since
+both inherit. See [automatons.md](automatons.md).
 
 ## The review gate, per scope
 
