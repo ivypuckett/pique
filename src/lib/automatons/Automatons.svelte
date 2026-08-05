@@ -3,7 +3,17 @@
   import AutomatonForm from "./AutomatonForm.svelte";
   import { ROOT } from "../scope/paths.ts";
 
-  let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
+  // `cwd` is this workspace's working-directory override, threaded down by Column the
+  // way it is to every other module. A run executes pi's builtins — bash, write, edit —
+  // in it, so failing to pass it on is not cosmetic: the run would silently work on
+  // root's project instead of this workspace's.
+  let { workspaceId, cwd }: {
+    title: string;
+    cwd?: string;
+    workspaceId?: string;
+    viewId?: string;
+    tabId?: string;
+  } =
     $props();
 
   const b = automatonBindings();
@@ -138,7 +148,14 @@
     notice = "";
     try {
       const arg = (args[a.name] ?? "").trim();
-      const { id } = await b.automatonsLaunch({ scope, name: a.name, args: arg || undefined });
+      // Viewing root's list means launching into root, so the workspace's own cwd must
+      // not follow — `undefined` resolves to root's, per resolveModuleDir.
+      const { id } = await b.automatonsLaunch({
+        scope,
+        name: a.name,
+        args: arg || undefined,
+        cwd: showRoot ? undefined : cwd,
+      });
       await refreshRuns();
       const started = runs.find((r) => r.id === id);
       if (started) selectRun(started);

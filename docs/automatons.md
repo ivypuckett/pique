@@ -33,9 +33,12 @@ optional and default to empty. Unknown keys are ignored.
 
 ### `prompt:` is what runs. The body is reserved.
 
-The file's body is retained on read so nothing is lost in a round-trip, and it
-is **never sent to a model**. What runs is the prompt template `prompt:` names,
-invoked as if you had typed `/daily-triage` in a chat.
+The file's body is **never sent to a model**. What runs is the prompt template
+`prompt:` names, invoked as if you had typed `/daily-triage` in a chat.
+
+A body is retained when the file is read, so nothing is lost by listing or
+launching one — but the editor has no field for it and never writes one back, so
+saving through the form drops whatever a hand-written file had there.
 
 This is deliberate. pique had a "profile" concept that carried its own prompt
 body, and it was removed on 2026-08-03 precisely because it duplicated the

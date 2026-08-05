@@ -163,6 +163,11 @@ export async function listRuns(scope: ScopeId): Promise<RunRecord[]> {
 // Startup repair. Every `running` record belongs to a process that no longer exists,
 // because runs live in this process's memory. Called once from desktop.ts, AFTER the
 // binds are registered (that file's first constraint).
+//
+// This assumes ONE pique per machine: a second instance starting while the first has a
+// live run would mark that run's record failed while it is still going. Records carry no
+// owning pid, so there is nothing to tell the two apart. Worth revisiting before the cron
+// trigger makes long runs ordinary (docs/automatons.md deferred #1).
 export async function reconcileRuns(): Promise<void> {
   const scopes: string[] = [];
   try {
