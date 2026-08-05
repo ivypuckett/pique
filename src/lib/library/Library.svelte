@@ -2,6 +2,7 @@
   import { ROOT } from "../scope/paths.ts";
   import Extensions from "../extensions/Extensions.svelte";
   import Prompts from "../prompts/Prompts.svelte";
+  import Skills from "../skills/Skills.svelte";
 
   let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
     $props();
@@ -21,7 +22,7 @@
   // The sections use this to say whether a change reaches every workspace.
   const scopeIsRoot = $derived(scope === ROOT);
 
-  let section = $state<"extensions" | "prompts">("extensions");
+  let section = $state<"extensions" | "prompts" | "skills">("extensions");
 
   // A module tab stays mounted when it is not active (Column.svelte hides it with a
   // class), so nothing re-lists on its own — bumping this counter is how the shell asks
@@ -44,6 +45,12 @@
         aria-pressed={section === "prompts"}
         onclick={() => (section = "prompts")}
       >Prompts</button>
+      <button
+        class="btn btn-ghost btn-xs"
+        class:btn-active={section === "skills"}
+        aria-pressed={section === "skills"}
+        onclick={() => (section = "skills")}
+      >Skills</button>
     </div>
 
     {#if !isRootWorkspace}
@@ -70,12 +77,12 @@
     <button
       class="btn btn-ghost btn-xs ml-auto"
       aria-label="Refresh"
-      title="Re-read this scope's extensions and templates"
+      title="Re-read this scope's extensions, templates and skills"
       onclick={() => refreshKey++}
     >↻</button>
   </div>
 
-  <!-- Both sections stay mounted and the inactive one is hidden, the way Column.svelte
+  <!-- Every section stays mounted and the inactive ones are hidden, the way Column.svelte
        hides inactive module tabs. Tearing one down on every sub-tab switch would discard
        an in-progress prompt draft. -->
   <div class="min-h-0 flex-1 overflow-y-auto" class:hidden={section !== "extensions"}>
@@ -83,5 +90,8 @@
   </div>
   <div class="min-h-0 flex-1 overflow-y-auto" class:hidden={section !== "prompts"}>
     <Prompts {scope} {scopeIsRoot} {refreshKey} />
+  </div>
+  <div class="min-h-0 flex-1 overflow-y-auto" class:hidden={section !== "skills"}>
+    <Skills {scope} {scopeIsRoot} {refreshKey} />
   </div>
 </div>
