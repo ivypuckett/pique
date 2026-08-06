@@ -24,7 +24,9 @@ export async function scheduledTargets(): Promise<Target[]> {
 
 // One scope's working directory, or undefined when the layout has no such scope — a
 // closed workspace whose board file is still on disk. A trigger with no cwd does not
-// fire; see schedule.ts decision 4 for why that is the same rule for both triggers.
+// fire: the layout is the source of truth (see the header above), and a scope missing
+// from it is one whose runs must not fire — see docs/automatons.md, "It does not fire
+// for a closed workspace."
 export async function scopeCwd(scope: ScopeId): Promise<string | undefined> {
   return (await scheduledTargets()).find((t) => t.scope === scope)?.cwd;
 }

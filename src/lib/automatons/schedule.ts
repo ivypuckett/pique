@@ -28,8 +28,6 @@ import { isAutomatonRunning, launchAutomaton } from "./run.ts";
 import { scheduledTargets, type Target } from "./targets.ts";
 import type { ScopeId } from "../scope/paths.ts";
 
-export type { Target };
-
 // What tickOnce needs from the rest of the app. Injected so the tick's rules —
 // which definitions fire, and what stops one from firing — are testable without a
 // model runtime, a session or a real minute passing.
