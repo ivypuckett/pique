@@ -1,6 +1,7 @@
 <script lang="ts">
   import { automatonBindings, type AutomatonInfo, type Item, type RunRecord } from "./bindings.ts";
   import AutomatonForm from "./AutomatonForm.svelte";
+  import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
   import { ROOT } from "../scope/paths.ts";
 
   // `cwd` is this workspace's working-directory override, threaded down by Column the
@@ -17,6 +18,7 @@
     $props();
 
   const b = automatonBindings();
+  const kb = kanbanBindings();
 
   // Which scope this module acts on: its own workspace's, or the shared root one it
   // inherits from. Same shape as Library and Kanban — the toggle is hidden in root,
@@ -32,6 +34,11 @@
 
   let automatons = $state<AutomatonInfo[]>([]);
   let runs = $state<RunRecord[]>([]);
+  // This scope's own columns, so a `kanban:` naming one that no longer exists can be
+  // flagged. A rename is the only way that happens, and this is the one place it shows.
+  let columns = $state<StatusRow[]>([]);
+  // Only what the run detail needs: a card's title from the id on its record.
+  let boardCards = $state<{ id: string; title: string }[]>([]);
   let error = $state("");
   let notice = $state("");
   let busy = $state(false);
@@ -58,6 +65,20 @@
     return runs.filter((r) => r.automaton === name).slice(0, RECENT_RUNS);
   }
 
+  // Does the board still have the column this automaton names? An inherited definition
+  // watches its OWN scope's board, which is not the one loaded here, so it is never
+  // flagged — the badge only claims something about a file this scope owns.
+  function columnMissing(a: AutomatonInfo): boolean {
+    return a.scope === scope && a.kanban !== undefined &&
+      !columns.some((c) => c.name.toLowerCase() === a.kanban!.toLowerCase());
+  }
+
+  // The card a run was fired by, by title. Falls back to the id: a card deleted since is
+  // exactly the case where the record is the only thing that still remembers it.
+  function cardTitle(id: string): string {
+    return boardCards.find((c) => c.id === id)?.title || id;
+  }
+
   function message(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
   }
@@ -79,6 +100,17 @@
       automatons = await b.automatonsVisible({ scope });
     } catch (e) {
       error = message(e);
+    }
+    if (kb) {
+      try {
+        const board = await kb.kanbanGetBoard({ scope });
+        columns = board.statuses;
+        boardCards = board.cards;
+      } catch {
+        // The badge degrades to "unknown", not to an error strip over the whole list.
+        columns = [];
+        boardCards = [];
+      }
     }
     await refreshRuns();
   }
@@ -277,6 +309,18 @@
                         : `Scheduled ${a.cron} in ${a.scope}; it does not fire here`}
                     >{a.cron}</span>
                   {/if}
+                  <!-- Like a schedule, a card trigger fires only in the scope that OWNS
+                       the file, so an inherited one is shown but does not fire here. -->
+                  {#if a.kanban}
+                    <span
+                      class="badge badge-xs shrink-0 {columnMissing(a) ? 'badge-error' : 'badge-outline'}"
+                      title={columnMissing(a)
+                        ? `No column named ${a.kanban} on this board; nothing will fire it`
+                        : a.scope === scope
+                        ? `Runs when a card arrives in ${a.kanban}${a.wip ? `, ${a.wip} at a time` : ""}`
+                        : `Watches ${a.kanban} in ${a.scope}; it does not fire here`}
+                    >{a.kanban}</span>
+                  {/if}
                   {#if a.scope === scope}
                     <button
                       type="button"
@@ -363,7 +407,11 @@
                 {selectedRun.status}
               </span>
               <span class="text-[0.65rem] opacity-60">
-                {selectedRun.trigger} · {ago(selectedRun.startedAt)}
+                <!-- The separator sits INSIDE the block and on its content's line: Svelte
+                     trims a block's leading whitespace, so a "·" on its own line would
+                     render flush against the trigger. -->
+                {selectedRun.trigger}{#if selectedRun.card}{" · "}{cardTitle(selectedRun.card)}{/if}
+                · {ago(selectedRun.startedAt)}
               </span>
               {#if selectedRun.status === "running"}
                 <button
