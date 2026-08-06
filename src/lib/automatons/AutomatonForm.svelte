@@ -2,6 +2,7 @@
   import { onMount, untrack } from "svelte";
   import { automatonBindings, type AutomatonInfo } from "./bindings.ts";
   import { PI_BUILTIN_TOOLS as PI_BUILTINS } from "./builtins.ts";
+  import { normalizeColumn } from "./column.ts";
   import { cronError } from "./cron.ts";
   import { wipError } from "./wip.ts";
   import { extensionBindings } from "../extensions/bindings.ts";
@@ -131,6 +132,15 @@
       if (kanban) {
         try {
           columns = (await kanban.kanbanGetBoard({ scope })).statuses;
+          // The file's spelling and the board's may differ in case or padding and still
+          // be the same column to the dispatcher. Snap to the board's spelling: the
+          // <option> values are the board's exact names, so leaving the file's variant
+          // bound would match no option and render the picker BLANK while the value
+          // silently survives. Saving then writes the spelling the board shows.
+          const canonical = columns.find(
+            (c) => normalizeColumn(c.name) === normalizeColumn(kanbanColumn),
+          );
+          if (canonical && canonical.name !== kanbanColumn) kanbanColumn = canonical.name;
         } catch {
           // A board that cannot be read leaves the picker with only the file's own value,
           // which is still editable. Not worth failing the whole form for.
@@ -178,15 +188,24 @@
 
   // The same treatment `modelMissing` gives an unavailable model: a column the board no
   // longer has stays selected rather than being silently rewritten to "no trigger".
+  // Matched the way the DISPATCHER matches, so the form cannot call a trigger broken
+  // that would in fact fire.
   const columnMissing = $derived(
     kanbanColumn !== "" &&
-      !columns.some((c) => c.name.toLowerCase() === kanbanColumn.toLowerCase()),
+      !columns.some((c) => normalizeColumn(c.name) === normalizeColumn(kanbanColumn)),
   );
 
   // Checked as it is typed, by the same function the backend parses with — a limit that
-  // is not a limit must never be written in the first place.
+  // is not a limit must never be written in the first place. Only while a column is
+  // chosen: the field is hidden without one, so a message from it could disable Save
+  // with nothing on screen to explain why, and `wip` is not written then either.
   const wipMessage = $derived(
-    wip.trim() === "" ? undefined : wipError(Number(wip)),
+    kanbanColumn === "" || wip.trim() === ""
+      ? undefined
+      // `Number("abc")` is NaN, which JSON-quotes as `null` — report what was actually
+      // typed instead. Corrected here rather than in wip.ts, which parse.ts also calls
+      // with raw YAML values that are genuinely null.
+      : wipError(Number.isNaN(Number(wip)) ? wip.trim() : Number(wip)),
   );
 
   function toggle(list: string[], value: string): string[] {
@@ -221,7 +240,10 @@
           model,
           cron: cron.trim(),
           kanban: kanbanColumn,
-          wip: wip.trim() === "" ? undefined : Number(wip),
+          // Only meaningful with a column to limit. Dropped without one, or clearing the
+          // trigger would leave a `wip:` behind in the file — `automatonFile` writes the
+          // key whenever it is defined.
+          wip: kanbanColumn === "" || wip.trim() === "" ? undefined : Number(wip),
         }),
       `Saved ${n}.`,
     );

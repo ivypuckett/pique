@@ -22,6 +22,7 @@
 //    follows that two automatons can pass a card back and forth indefinitely, and NOTHING
 //    HERE STOPS THAT: each run ends before the next begins, so no guard ever sees two at
 //    once. See docs/automatons.md.
+import { normalizeColumn } from "./column.ts";
 import type { Automaton } from "./parse.ts";
 import { listAutomatons } from "./service.ts";
 import { launchAutomaton, liveRunsOf } from "./run.ts";
@@ -57,7 +58,7 @@ export interface DispatchDeps {
 // carrying an `error` never fires, for the reason isDue gives in schedule.ts.
 export function watches(a: Automaton, columnName: string): boolean {
   if (!a.kanban || a.error) return false;
-  return a.kanban.trim().toLowerCase() === columnName.trim().toLowerCase();
+  return normalizeColumn(a.kanban) === normalizeColumn(columnName);
 }
 
 // A fire waiting for a slot. The card, not the definition — the definition is re-read

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { automatonBindings, type AutomatonInfo, type Item, type RunRecord } from "./bindings.ts";
   import AutomatonForm from "./AutomatonForm.svelte";
+  import { normalizeColumn } from "./column.ts";
   import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
   import { ROOT } from "../scope/paths.ts";
 
@@ -37,6 +38,10 @@
   // This scope's own columns, so a `kanban:` naming one that no longer exists can be
   // flagged. A rename is the only way that happens, and this is the one place it shows.
   let columns = $state<StatusRow[]>([]);
+  // Whether `columns` is an ANSWER or just an absence. An unread board and a board with
+  // no such column are the same empty list, and calling every trigger broken because the
+  // board could not be opened is a confident claim the module has no basis for.
+  let boardRead = $state(false);
   // Only what the run detail needs: a card's title from the id on its record.
   let boardCards = $state<{ id: string; title: string }[]>([]);
   let error = $state("");
@@ -68,9 +73,11 @@
   // Does the board still have the column this automaton names? An inherited definition
   // watches its OWN scope's board, which is not the one loaded here, so it is never
   // flagged — the badge only claims something about a file this scope owns.
+  // Matched the way the DISPATCHER matches (automatons/column.ts), or the list would
+  // badge a trigger broken that fires perfectly well.
   function columnMissing(a: AutomatonInfo): boolean {
-    return a.scope === scope && a.kanban !== undefined &&
-      !columns.some((c) => c.name.toLowerCase() === a.kanban!.toLowerCase());
+    return boardRead && a.scope === scope && a.kanban !== undefined &&
+      !columns.some((c) => normalizeColumn(c.name) === normalizeColumn(a.kanban!));
   }
 
   // The card a run was fired by, by title. Falls back to the id: a card deleted since is
@@ -106,10 +113,14 @@
         const board = await kb.kanbanGetBoard({ scope });
         columns = board.statuses;
         boardCards = board.cards;
+        boardRead = true;
       } catch {
-        // The badge degrades to "unknown", not to an error strip over the whole list.
+        // A board that cannot be read is not an error strip over the whole list: the
+        // trigger badge stays, uncoloured, saying which column it watches and nothing
+        // about whether that column still exists — which is the truth here.
         columns = [];
         boardCards = [];
+        boardRead = false;
       }
     }
     await refreshRuns();
