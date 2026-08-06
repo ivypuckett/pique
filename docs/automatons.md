@@ -2,8 +2,9 @@
 
 An **automaton** is a named agent that runs without a conversation. It is one
 markdown file naming a prompt template to send plus the exact extensions and
-skills its run may load, and it is launched by a button in the Automatons module
-or by a `cron:` schedule of its own.
+skills its run may load, and it is launched by a button in the Automatons
+module, by a `cron:` schedule of its own, or by a card arriving in a board
+column.
 
 A Chat module is a thread you tend. An automaton is a job. The two ask different
 questions — a chat asks "what did it say", a run asks "did it finish, and what
@@ -24,6 +25,8 @@ skills: [changelog-style]
 tools: [read, grep]
 model: anthropic/claude-opus-4
 cron: "0 9 * * 1-5"
+kanban: Inbox
+wip: 3
 ---
 ```
 
@@ -32,7 +35,7 @@ never disagree. Names match `/^[a-z0-9][a-z0-9-]*$/`; a file whose basename does
 not is skipped rather than breaking the listing.
 
 `prompt:` is **required**. `description:`, `extensions:`, `skills:`, `tools:`,
-`model:` and `cron:` are optional. Unknown keys are ignored.
+`model:`, `cron:`, `kanban:` and `wip:` are optional. Unknown keys are ignored.
 
 ### `tools:` withholds pi's builtins
 
@@ -82,8 +85,8 @@ off if templates get reused.
 The Launch button has an argument box beside it. Whatever you type is appended,
 so the run's first message is `/daily-triage <your text>` and the template's own
 `$1`/`$@` substitution does the rest — see [prompts.md](prompts.md). No new
-mechanism, which is also how a kanban card will hand over its title when that
-trigger lands.
+mechanism, which is also how a kanban card hands over its id and its title; see
+`kanban:` below.
 
 ### `model:` pins which model runs it
 
@@ -112,7 +115,7 @@ launch with `model unavailable: <ref>` — unlike Chat, which quietly drops to a
 compiled-in default. A run that used a model other than the one its file names
 would be discovered long after it finished.
 
-The thinking level still comes from the scope for every run; see Deferred #4.
+The thinking level still comes from the scope for every run; see Deferred #3.
 
 ### `cron:` fires it without a button
 
@@ -159,6 +162,85 @@ Mechanically it is `automatons/schedule.ts`: a 20-second timer that evaluates
 each **minute** exactly once and calls the same `launchAutomaton` the button
 does, with `trigger: "cron"`. It adds a caller, not a mechanism — which was the
 whole point of that seam.
+
+### `kanban:` fires it when a card arrives
+
+```yaml
+kanban: "In Progress"
+wip: 3
+```
+
+`kanban:` names one column of a board by **name**, matched after trimming and
+lowercasing both sides. No key means no card ever fires it, which is what every
+automaton did before the key existed.
+
+An id would survive a rename and a name does not, but a column id is a UUID:
+nobody hand-writes one, and a file holding one cannot be read to find out what
+it does. Readability wins, as it does for every other key in this format. The
+cost is that renaming a column stops the trigger — so the Automatons list flags
+a `kanban:` matching no column on the board, in red, rather than leaving a file
+that quietly never fires. The list and the dispatcher answer with the same
+`automatons/column.ts`, so a badge can never call a working trigger broken.
+
+**Arrival is entering the column.** A card moved in fires it, and a card created
+there fires it — one typed straight into a column has arrived as surely as one
+dragged in. Nothing else does: not a reorder within the column, not a metadata
+or connection edit, and not a move onto the column the card is already in.
+Firing on those would relaunch a job because somebody fixed a typo in a title.
+
+**A human's move and an agent's move are the same event.** That is deliberate: a
+triage automaton sorting cards into a column a worker automaton watches is the
+workflow this exists for, and filtering to human moves would kill it.
+
+It follows that **two automatons can pass a card back and forth indefinitely**.
+The per-card guard below does not stop it — each run ends before the next
+begins, so no guard ever sees two at once, and every hop is a real arrival.
+There is no chain-depth cap and no loop detection: nothing bounds it but the
+person reading the run list. A pair of automatons that move cards into each
+other's columns is worth reading twice before saving.
+
+Two guards, and no others:
+
+- **The same card, already running under that automaton, is dropped.** The card
+  is being worked; a second run would duplicate that rather than continue it.
+  Different cards do not block each other — this is deliberately not cron's
+  one-at-a-time rule, because a card carries an identity a schedule does not.
+- **A fire over `wip:` is queued, not dropped.** A schedule comes round again; a
+  card does not. The queue dedupes by card, so it cannot grow past the board,
+  and when a run ends the next card is re-checked before it starts: one that has
+  since left the column, or been deleted, is dropped rather than worked late.
+  Not waiting for it is the whole point of having waited.
+
+`wip:` is a whole number of 1 or more — the most runs of this automaton that may
+be live in one scope at once. **Absent means unlimited**, because a compiled-in
+default would be an arbitrary number and unlimited is what "a run per card"
+plainly means. A value that is not a usable limit is an error on the whole
+definition, alongside a malformed `cron:` or `model:`. It holds card fires only:
+the Launch button and a `cron:` are never held.
+
+The queue lives in memory, so **it dies with the app**, as the runs themselves
+do. Cards waiting for a slot when pique closes are not waiting at the next
+start, and nothing on the board records that they ever were. See Deferred #6.
+
+**The trigger does not inherit**, for cron's reason: a board fires the
+definitions its own scope holds and never the ones that scope inherits, or one
+`kanban:` in root would fire a run per open workspace on every arrival. It
+follows that a workspace dropping a card into a column of root's shared board
+fires **root's** automaton, in root's directory — the board that fired is the
+board that decides. A scope missing from the saved layout does not fire at all,
+on the same terms as a schedule: closing a workspace leaves its board file
+behind.
+
+The run's first message is `/<template> <card-id> "<title>"`, so `$1` is the id
+the `pique:kanban` tools address the card by and `$2` is the title for prose,
+quoted so a multi-word one stays a single positional. No new mechanism — it is
+the argument box above, typed by the dispatcher instead of by a human.
+
+Mechanically it is `automatons/kanban.ts`, reached from the one point in
+`board.ts` that announces an arrival, so every caller of the board fires the
+trigger by construction. Like the scheduler it adds a caller, not a mechanism:
+the same `launchAutomaton`, with `trigger: "kanban"` and the card recorded on
+the run.
 
 ## The capability set
 
@@ -262,8 +344,10 @@ whatever the scope's default is _today_, which is not necessarily what produced
 last week's transcript.
 
 Every record carries a `trigger`: `manual` for the button, `cron` for a
-schedule, and `kanban` once the card-move trigger lands. It is what keeps "why
-did this fire?" answerable.
+schedule, `kanban` for a card arriving. A `kanban` record also carries the
+`card` that fired it — `trigger` says what kind of thing launched the run, and
+by the time anyone reads it the board has moved on. Between them they are what
+keeps "why did this fire?" answerable.
 
 Stop is available while a run is `running`. There is no turn or wall-clock cap:
 any number would be arbitrary, and an automaton killed mid-edit is worse than
@@ -288,8 +372,9 @@ root's. See [scopes.md](scopes.md).
 Two things always belong to the **launching** scope, even when the definition
 was inherited from root: the run and its record, and everything the run resolves
 against — base prompt, kanban board, working directory, and the model unless the
-file pins one. A `cron:` schedule is the one part of a definition that does not
-inherit at all: it fires in the scope holding the file and nowhere else.
+file pins one. A definition's triggers are the part that does not inherit at
+all: a `cron:` fires in the scope holding the file and nowhere else, and a
+`kanban:` fires only for that scope's own board.
 
 Extensions a file names are chain-resolved, packages included — an automaton in
 root that names a root package launches from a workspace too. What the check
@@ -299,45 +384,46 @@ letting pi fetch it.
 
 ## Deferred
 
-### 1. The card-move trigger
-
-Cron shipped; see `cron:` above. The card-move trigger is the other caller of
-the same `launchAutomaton` entry point, and the question it still owes an answer
-to is the one cron answered with "drop it": whether a card moved twice launches
-twice. Cron's rule — at most one live run per automaton per scope — is the
-obvious starting point, but a card carries an identity a schedule does not, so
-"already running for this card" may be the better unit.
-
-### 2. `define_automaton`
+### 1. `define_automaton`
 
 There is no agent-facing tool for authoring one, and `automatons/pending/`
 exists unused, ready for it. An automaton grants no capability its scope has not
 already approved, but it does create an unattended runner, which is worth a
 human reading first.
 
-### 3. Restricting pi's builtins — built as `tools:`
+### 2. Restricting pi's builtins — built as `tools:`
 
 Shipped; see the file format above. What is still unbuilt is the same control
 for **chat**, which has no `tools:` of its own — a chat agent gets every
 builtin, and there is no surface asking for anything else. Restricting builtins
 matters most where nobody is watching, which is why the automaton got it first.
 
-### 4. Per-automaton thinking level and base prompt
+### 3. Per-automaton thinking level and base prompt
 
 `model:` landed; these two did not. A run's thinking level still comes from the
 scope's chat defaults and its system prompt from the scope's `agent/SYSTEM.md`.
 Both are the same shape of addition as `model:` — a frontmatter key read in
 `launchAutomaton` — and neither has come up in practice yet.
 
-### 5. Run retention
+### 4. Run retention
 
 Nothing prunes `runs/` or `sessions/`. That was tolerable while every run came
 from a button press. It no longer is: `*/15 * * * *` writes ~35,000 records a
 year, plus a session JSONL each, and the module's list reads every one of them
 to show the five most recent. This is now the first thing cron owes.
 
-### 6. Concurrency
+### 5. Concurrency
 
-Nothing limits how many runs go at once, and they share one model runtime. The
-schedule's re-entrancy rule is per automaton, so ten automatons sharing one
-`0 9 * * *` still start ten runs at nine o'clock.
+`wip:` bounds one automaton's card-triggered runs in one scope, and nothing
+bounds the total. Cron has no `wip:` of its own and its re-entrancy rule is per
+automaton, so ten automatons sharing one `0 9 * * *` still start ten runs at
+nine o'clock; ten each holding themselves to three cards are thirty runs against
+one model runtime.
+
+### 6. A queued fire does not survive a restart
+
+The kanban queue is in memory. A card waiting for a `wip:` slot when pique
+closes is simply not waiting at the next start, and nothing says so — it sits in
+the column looking exactly like one nobody has picked up yet. Runs die the same
+way, but a run at least leaves a record, repaired to `failed`; a queued fire
+leaves nothing behind at all.

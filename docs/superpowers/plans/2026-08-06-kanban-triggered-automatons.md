@@ -1,26 +1,51 @@
 # Kanban-triggered Automatons Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A card arriving in a named kanban column launches the automaton watching that column, with a per-card re-entrancy guard and a `wip:` cap on concurrency.
+**Goal:** A card arriving in a named kanban column launches the automaton
+watching that column, with a per-card re-entrancy guard and a `wip:` cap on
+concurrency.
 
-**Architecture:** `board.ts` gains one outward callback, `onCardArrived`, fired at the tail of `setStatus` (only when the column changed) and `createCard`. `kanban/service.ts` — the only place a board is opened — forwards it to a handler registered at boot by `desktop.ts`, which avoids the import cycle a direct import would close. The handler is `automatons/kanban.ts`, the exact sibling of `automatons/schedule.ts`: it lists the board scope's **own** automatons, matches `kanban:` case-insensitively, applies the guards, and calls the same `launchAutomaton()` the Launch button and the cron clock call, with `trigger: "kanban"`.
+**Architecture:** `board.ts` gains one outward callback, `onCardArrived`, fired
+at the tail of `setStatus` (only when the column changed) and `createCard`.
+`kanban/service.ts` — the only place a board is opened — forwards it to a
+handler registered at boot by `desktop.ts`, which avoids the import cycle a
+direct import would close. The handler is `automatons/kanban.ts`, the exact
+sibling of `automatons/schedule.ts`: it lists the board scope's **own**
+automatons, matches `kanban:` case-insensitively, applies the guards, and calls
+the same `launchAutomaton()` the Launch button and the cron clock call, with
+`trigger: "kanban"`.
 
-**Tech Stack:** Deno 2.x, TypeScript, `node:sqlite`, Svelte 5 (runes), daisyUI/Tailwind. Tests are `Deno.test` with `@std/assert`. Run everything with `deno task test`.
+**Tech Stack:** Deno 2.x, TypeScript, `node:sqlite`, Svelte 5 (runes),
+daisyUI/Tailwind. Tests are `Deno.test` with `@std/assert`. Run everything with
+`deno task test`.
 
-**Spec:** [docs/superpowers/specs/2026-08-06-kanban-triggered-automatons-design.md](../specs/2026-08-06-kanban-triggered-automatons-design.md)
+**Spec:**
+[docs/superpowers/specs/2026-08-06-kanban-triggered-automatons-design.md](../specs/2026-08-06-kanban-triggered-automatons-design.md)
 
-**Read first:** `docs/automatons.md` (the `cron:` section especially — this feature is its sibling and every decision below refers to it) and `docs/scopes.md`.
+**Read first:** `docs/automatons.md` (the `cron:` section especially — this
+feature is its sibling and every decision below refers to it) and
+`docs/scopes.md`.
 
 ---
 
 ### Task 0: Fix `tools:` being dropped by the save path
 
-**This is a pre-existing bug, not part of the feature.** `AutomatonForm.svelte:186` sends `tools`, but `AutomatonBindings.automatonsSave` does not declare it and the `automatonsSave` handler in `desktop.ts:576-594` does not destructure it — so saving a `tools:`-restricted automaton through the editor silently hands the run every builtin back. Tasks 8–9 widen that same path with two more keys, so it is fixed first rather than copied.
+**This is a pre-existing bug, not part of the feature.**
+`AutomatonForm.svelte:186` sends `tools`, but `AutomatonBindings.automatonsSave`
+does not declare it and the `automatonsSave` handler in `desktop.ts:576-594`
+does not destructure it — so saving a `tools:`-restricted automaton through the
+editor silently hands the run every builtin back. Tasks 8–9 widen that same path
+with two more keys, so it is fixed first rather than copied.
 
-Skip this task if the user would rather it be handled separately; nothing later depends on it.
+Skip this task if the user would rather it be handled separately; nothing later
+depends on it.
 
 **Files:**
+
 - Modify: `src/lib/automatons/bindings.ts:15-28`
 - Modify: `src/desktop.ts:571-603`
 - Test: `src/lib/automatons/service_test.ts`
@@ -53,7 +78,8 @@ Deno.test("saveAutomaton round-trips an empty tools restriction", async () => {
 });
 ```
 
-Check the imports at the top of that file already include `listAutomatons` and `saveAutomaton` from `./service.ts`; add whichever is missing.
+Check the imports at the top of that file already include `listAutomatons` and
+`saveAutomaton` from `./service.ts`; add whichever is missing.
 
 - [ ] **Step 2: Run it**
 
@@ -61,19 +87,24 @@ Check the imports at the top of that file already include `listAutomatons` and `
 deno test -A src/lib/automatons/service_test.ts
 ```
 
-Expected: this test PASSES — `saveAutomaton` itself is correct, and the bug is one layer up in the bind. It is worth having anyway as the regression floor. The real fix is verified by reading the two files in step 3.
+Expected: this test PASSES — `saveAutomaton` itself is correct, and the bug is
+one layer up in the bind. It is worth having anyway as the regression floor. The
+real fix is verified by reading the two files in step 3.
 
 - [ ] **Step 3: Forward `tools` through the bind**
 
-In `src/lib/automatons/bindings.ts`, add to the `automatonsSave` arg type, directly above `model`:
+In `src/lib/automatons/bindings.ts`, add to the `automatonsSave` arg type,
+directly above `model`:
 
 ```ts
-      // Which of pi's builtins the run keeps. Absent and empty are DIFFERENT — absent is
-      // every builtin, `[]` is none — so this is passed through rather than defaulted.
-      tools?: string[];
+// Which of pi's builtins the run keeps. Absent and empty are DIFFERENT — absent is
+// every builtin, `[]` is none — so this is passed through rather than defaulted.
+tools?: string[];
 ```
 
-In `src/desktop.ts`, add `tools,` to the destructure (after `skills: skillRefs,`), add `tools?: string[];` to the cast type, and add `tools,` to the `saveAutomaton` call.
+In `src/desktop.ts`, add `tools,` to the destructure (after
+`skills: skillRefs,`), add `tools?: string[];` to the cast type, and add
+`tools,` to the `saveAutomaton` call.
 
 - [ ] **Step 4: Verify the whole suite still passes**
 
@@ -94,9 +125,12 @@ git commit -m "Fix tools: being dropped by the automaton save bind"
 
 ### Task 1: `kanban:` and `wip:` in the file format
 
-Pure format work — no filesystem, no board. `parse.ts` validates `wip:` fully and `kanban:` only as a non-empty string; whether the column exists is a UI check (spec decision 8).
+Pure format work — no filesystem, no board. `parse.ts` validates `wip:` fully
+and `kanban:` only as a non-empty string; whether the column exists is a UI
+check (spec decision 8).
 
 **Files:**
+
 - Modify: `src/lib/automatons/parse.ts`
 - Test: `src/lib/automatons/parse_test.ts`
 
@@ -187,24 +221,26 @@ Deno.test("automatonFile omits an absent kanban: and wip:", () => {
 deno test -A src/lib/automatons/parse_test.ts
 ```
 
-Expected: FAIL — `kanban` and `wip` are not properties of `Automaton`, so this fails to type-check before it runs.
+Expected: FAIL — `kanban` and `wip` are not properties of `Automaton`, so this
+fails to type-check before it runs.
 
 - [ ] **Step 3: Add the two keys**
 
-In `src/lib/automatons/parse.ts`, add to the `Automaton` type after `cron?: string;`:
+In `src/lib/automatons/parse.ts`, add to the `Automaton` type after
+`cron?: string;`:
 
 ```ts
-  // The board column whose arrivals fire this automaton, matched case-insensitively
-  // against the board's column names (automatons/kanban.ts). Absent means no card ever
-  // fires it, which stays the default. Only the SHAPE is checked here — whether the
-  // column exists needs a board, which this module deliberately does not have, so the
-  // Automatons list is what flags a name no column matches.
-  kanban?: string;
-  // The most runs of this automaton that may be live in one scope at once. Absent means
-  // UNLIMITED: a compiled-in default would be an arbitrary number, and unlimited is what
-  // "a run per card" plainly means. Inert without `kanban:` — a manual or cron launch is
-  // never held.
-  wip?: number;
+// The board column whose arrivals fire this automaton, matched case-insensitively
+// against the board's column names (automatons/kanban.ts). Absent means no card ever
+// fires it, which stays the default. Only the SHAPE is checked here — whether the
+// column exists needs a board, which this module deliberately does not have, so the
+// Automatons list is what flags a name no column matches.
+kanban?: string;
+// The most runs of this automaton that may be live in one scope at once. Absent means
+// UNLIMITED: a compiled-in default would be an arbitrary number, and unlimited is what
+// "a run per card" plainly means. Inert without `kanban:` — a manual or cron launch is
+// never held.
+wip?: number;
 ```
 
 Add, next to `modelError`:
@@ -224,40 +260,41 @@ export function wipError(value: unknown): string | undefined {
 In `parseAutomaton`, after the `const cron = ...` line:
 
 ```ts
-  const kanban = (str(attrs.kanban) ?? "").trim();
-  const wip = attrs.wip;
+const kanban = (str(attrs.kanban) ?? "").trim();
+const wip = attrs.wip;
 ```
 
 Add to the returned object, after `cron: cron || undefined,`:
 
 ```ts
-    // "" and absent are both "no card fires this".
-    kanban: kanban || undefined,
-    // Kept only when it is a usable limit; a bad value is reported as the definition's
-    // error below rather than stored as a number it is not.
-    wip: typeof wip === "number" && Number.isInteger(wip) && wip >= 1
-      ? wip
-      : undefined,
+// "" and absent are both "no card fires this".
+kanban: kanban || undefined,
+// Kept only when it is a usable limit; a bad value is reported as the definition's
+// error below rather than stored as a number it is not.
+wip: typeof wip === "number" && Number.isInteger(wip) && wip >= 1
+  ? wip
+  : undefined,
 ```
 
 And extend the `error` expression:
 
 ```ts
-    error: prompt
-      ? (model && modelError(model)) || (cron && cronError(cron)) ||
-        (wip !== undefined && wipError(wip)) || undefined
-      : "prompt: required",
+error: prompt
+  ? (model && modelError(model)) || (cron && cronError(cron)) ||
+    (wip !== undefined && wipError(wip)) || undefined
+  : "prompt: required",
 ```
 
 - [ ] **Step 4: Teach `automatonFile` to write them**
 
-Add `kanban?: string;` and `wip?: number;` to its parameter type, and after the `cron` line in the emitted array:
+Add `kanban?: string;` and `wip?: number;` to its parameter type, and after the
+`cron` line in the emitted array:
 
 ```ts
-    // Same treatment as `cron:` — omitted rather than written empty, so clearing the
-    // form's column picker removes the trigger instead of leaving a blank one behind.
-    ...(a.kanban?.trim() ? [`kanban: ${JSON.stringify(a.kanban.trim())}`] : []),
-    ...(a.wip === undefined ? [] : [`wip: ${a.wip}`]),
+// Same treatment as `cron:` — omitted rather than written empty, so clearing the
+// form's column picker removes the trigger instead of leaving a blank one behind.
+...(a.kanban?.trim() ? [`kanban: ${JSON.stringify(a.kanban.trim())}`] : []),
+...(a.wip === undefined ? [] : [`wip: ${a.wip}`]),
 ```
 
 - [ ] **Step 5: Run the tests**
@@ -279,9 +316,12 @@ git commit -m "Add kanban: and wip: to the automaton file format"
 
 ### Task 2: One shared layout→cwd resolution
 
-Both triggers need "where would a run in this scope work?". Cron walks every scope each minute; the kanban dispatcher asks about one. Written once, in a module neither trigger owns.
+Both triggers need "where would a run in this scope work?". Cron walks every
+scope each minute; the kanban dispatcher asks about one. Written once, in a
+module neither trigger owns.
 
 **Files:**
+
 - Create: `src/lib/automatons/targets.ts`
 - Modify: `src/lib/automatons/schedule.ts:28-32,106-124`
 - Modify: `src/lib/automatons/schedule_test.ts:1-10,205`
@@ -325,23 +365,28 @@ export async function scopeCwd(scope: ScopeId): Promise<string | undefined> {
 
 - [ ] **Step 2: Point `schedule.ts` at it**
 
-Delete the `Target` type declaration (`schedule.ts:31-32`) and the whole `scheduledTargets` function (`schedule.ts:106-117`), including its comment. Replace the `layoutScopes` import line with:
+Delete the `Target` type declaration (`schedule.ts:31-32`) and the whole
+`scheduledTargets` function (`schedule.ts:106-117`), including its comment.
+Replace the `layoutScopes` import line with:
 
 ```ts
 import { scheduledTargets, type Target } from "./targets.ts";
 ```
 
-Re-export the type just below the imports so `TickDeps` consumers keep their import path:
+Re-export the type just below the imports so `TickDeps` consumers keep their
+import path:
 
 ```ts
 export type { Target };
 ```
 
-Remove the now-unused `ScopeId` import only if nothing else in the file uses it — `TickDeps` does, so keep it.
+Remove the now-unused `ScopeId` import only if nothing else in the file uses it
+— `TickDeps` does, so keep it.
 
 - [ ] **Step 3: Update the test's import**
 
-In `src/lib/automatons/schedule_test.ts`, move `scheduledTargets` out of the `./schedule.ts` import list into a new one:
+In `src/lib/automatons/schedule_test.ts`, move `scheduledTargets` out of the
+`./schedule.ts` import list into a new one:
 
 ```ts
 import { scheduledTargets } from "./targets.ts";
@@ -353,7 +398,8 @@ import { scheduledTargets } from "./targets.ts";
 deno task test
 ```
 
-Expected: PASS, unchanged. This task is a pure move; a behaviour change here is a mistake.
+Expected: PASS, unchanged. This task is a pure move; a behaviour change here is
+a mistake.
 
 - [ ] **Step 5: Commit**
 
@@ -366,9 +412,11 @@ git commit -m "Move layout cwd resolution into automatons/targets.ts"
 
 ### Task 3: `run.ts` learns about cards, WIP and run completion
 
-Three small additions. Both guards are answered from the live Map, for the reason `isAutomatonRunning` already states: the Map is what "still going" means.
+Three small additions. Both guards are answered from the live Map, for the
+reason `isAutomatonRunning` already states: the Map is what "still going" means.
 
 **Files:**
+
 - Modify: `src/lib/automatons/run.ts:49-88,230-264,420-500,557-600`
 - Test: `src/lib/automatons/run_test.ts`
 
@@ -411,7 +459,8 @@ Deno.test("liveRunsOf is empty when nothing is running", () => {
 });
 ```
 
-Add `assertRejects` to the `@std/assert` import and `launchAutomaton`, `listRuns`, `liveRunsOf` to the `./run.ts` import if they are not already there.
+Add `assertRejects` to the `@std/assert` import and `launchAutomaton`,
+`listRuns`, `liveRunsOf` to the `./run.ts` import if they are not already there.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -419,35 +468,39 @@ Add `assertRejects` to the `@std/assert` import and `launchAutomaton`, `listRuns
 deno test -A src/lib/automatons/run_test.ts
 ```
 
-Expected: FAIL — `card` is not a valid option on `launchAutomaton`, and `liveRunsOf` does not exist.
+Expected: FAIL — `card` is not a valid option on `launchAutomaton`, and
+`liveRunsOf` does not exist.
 
 - [ ] **Step 3: Add `card` to the record and the run**
 
 In `RunRecord`, after `args?: string;`:
 
 ```ts
-  // The card that fired this run, for `trigger: "kanban"`. `trigger` says what KIND of
-  // thing fired it; this says which one, which is what makes an old run legible after the
-  // board has moved on. Absent for every other trigger.
-  card?: string;
+// The card that fired this run, for `trigger: "kanban"`. `trigger` says what KIND of
+// thing fired it; this says which one, which is what makes an old run legible after the
+// board has moved on. Absent for every other trigger.
+card?: string;
 ```
 
 In the `Run` interface, after `automaton: string;`:
 
 ```ts
-  // The card this run is working, when a kanban arrival started it. Held so the
-  // dispatcher's two guards — one run per card, at most `wip:` at once — are answered
-  // from this Map rather than by reading every record off disk.
-  card?: string;
-  // Called once, after this run leaves the Map, whatever its terminal status. The kanban
-  // dispatcher passes one to drain its queue; nothing else does, which is why this is a
-  // per-launch option rather than a module-level listener registry.
-  onEnd?: () => void;
+// The card this run is working, when a kanban arrival started it. Held so the
+// dispatcher's two guards — one run per card, at most `wip:` at once — are answered
+// from this Map rather than by reading every record off disk.
+card?: string;
+// Called once, after this run leaves the Map, whatever its terminal status. The kanban
+// dispatcher passes one to drain its queue; nothing else does, which is why this is a
+// per-launch option rather than a module-level listener registry.
+onEnd?: () => void;
 ```
 
 - [ ] **Step 4: Accept and record them in `launchAutomaton`**
 
-Add to the opts type: `card?: string;` and `onEnd?: () => void;`. Add `card` to the destructure (`const { scope, name, cwd, args, card } = opts;`). Add `card,` to the record written in `fail()` and to the `running` record written after the session is created.
+Add to the opts type: `card?: string;` and `onEnd?: () => void;`. Add `card` to
+the destructure (`const { scope, name, cwd, args, card } = opts;`). Add `card,`
+to the record written in `fail()` and to the `running` record written after the
+session is created.
 
 Add `card,` and `onEnd: opts.onEnd,` to the `const run: Run = {...}` literal.
 
@@ -468,9 +521,13 @@ function notifyEnd(run: Run): void {
 }
 ```
 
-In `finish()`, as the last statement after the `session.dispose()` try/catch: `notifyEnd(run);`
+In `finish()`, as the last statement after the `session.dispose()` try/catch:
+`notifyEnd(run);`
 
-In `stopRun()`, immediately after `run.unsubscribe();`: `notifyEnd(run);` — **before** the patch and the abort. `session.abort()` awaits `waitForIdle()`, which a tool call that never settles never resolves; a queue that drained only after that would stall behind a hung run.
+In `stopRun()`, immediately after `run.unsubscribe();`: `notifyEnd(run);` —
+**before** the patch and the abort. `session.abort()` awaits `waitForIdle()`,
+which a tool call that never settles never resolves; a queue that drained only
+after that would stall behind a hung run.
 
 - [ ] **Step 6: Add `liveRunsOf`**
 
@@ -513,15 +570,18 @@ git commit -m "Record the card on a run, and report live runs per automaton"
 
 ### Task 4: The board's card-arrival hook
 
-`board.ts` gains one outward callback and learns nothing about automatons. It fires where the write already committed and the row is already in hand.
+`board.ts` gains one outward callback and learns nothing about automatons. It
+fires where the write already committed and the row is already in hand.
 
 **Files:**
+
 - Modify: `src/lib/kanban/board.ts:36-52,133-151,307-354`
 - Test: `src/lib/kanban/board_test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-`board_test.ts` already has a `fresh()` helper returning `{ b, status }` over an in-memory board seeded from `DEFAULTS`. Add its watching sibling next to it:
+`board_test.ts` already has a `fresh()` helper returning `{ b, status }` over an
+in-memory board seeded from `DEFAULTS`. Add its watching sibling next to it:
 
 ```ts
 // fresh(), plus the arrivals the board announced. Same seeded columns, so `status(name)`
@@ -541,7 +601,9 @@ function watched(): {
 }
 ```
 
-Change the import on line 2 to `import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";` and append:
+Change the import on line 2 to
+`import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";`
+and append:
 
 ```ts
 Deno.test("a card entering a column announces its arrival", () => {
@@ -636,7 +698,8 @@ Deno.test("a throwing arrival handler does not fail the move", () => {
 deno test -A src/lib/kanban/board_test.ts
 ```
 
-Expected: FAIL — `CardArrival` is not exported and `onCardArrived` is not an option.
+Expected: FAIL — `CardArrival` is not exported and `onCardArrived` is not an
+option.
 
 - [ ] **Step 3: Add the type and the option**
 
@@ -675,34 +738,34 @@ export function openBoard(
 Alongside the other closures inside `openBoard` (next to `log`):
 
 ```ts
-  // Fire-and-forget: the write has already committed, and a consumer's failure must not
-  // fail it. An unknown statusId announces nothing rather than a column with no name.
-  const announce = (cardId: string, statusId: string, title: string): void => {
-    if (!opts.onCardArrived) return;
-    const row = db.prepare("SELECT name FROM statuses WHERE id = ?").get(
-      statusId,
-    ) as { name: string } | undefined;
-    if (!row) return;
-    try {
-      opts.onCardArrived({ cardId, title, statusId, statusName: row.name });
-    } catch (err) {
-      console.error("kanban: a card-arrival handler failed:", err);
-    }
-  };
+// Fire-and-forget: the write has already committed, and a consumer's failure must not
+// fail it. An unknown statusId announces nothing rather than a column with no name.
+const announce = (cardId: string, statusId: string, title: string): void => {
+  if (!opts.onCardArrived) return;
+  const row = db.prepare("SELECT name FROM statuses WHERE id = ?").get(
+    statusId,
+  ) as { name: string } | undefined;
+  if (!row) return;
+  try {
+    opts.onCardArrived({ cardId, title, statusId, statusName: row.name });
+  } catch (err) {
+    console.error("kanban: a card-arrival handler failed:", err);
+  }
+};
 ```
 
 In `createCard`, as the last statement before `return id;`:
 
 ```ts
-      announce(id, statusId, title);
+announce(id, statusId, title);
 ```
 
 In `setStatus`, as the last statement after the `log(...)` call:
 
 ```ts
-      // Only a change of column is an arrival. `prev` is the row as it was BEFORE the
-      // update, and a move leaves the title alone, so it is the right source for both.
-      if (prev.status_id !== statusId) announce(cardId, statusId, prev.title);
+// Only a change of column is an arrival. `prev` is the row as it was BEFORE the
+// update, and a move leaves the title alone, so it is the right source for both.
+if (prev.status_id !== statusId) announce(cardId, statusId, prev.title);
 ```
 
 - [ ] **Step 5: Run the tests**
@@ -724,9 +787,12 @@ git commit -m "Announce card arrivals from the board"
 
 ### Task 5: Register the handler in `kanban/service.ts`
 
-Injected, not imported. `automatons/kanban.ts` reaches `run.ts` → `resolve.ts` → `kanban/agent-tools.ts` → `kanban/service.ts`, so a static import back the other way would close a cycle.
+Injected, not imported. `automatons/kanban.ts` reaches `run.ts` → `resolve.ts` →
+`kanban/agent-tools.ts` → `kanban/service.ts`, so a static import back the other
+way would close a cycle.
 
 **Files:**
+
 - Modify: `src/lib/kanban/service.ts:7-13,37-49`
 - Test: `src/lib/kanban/service_test.ts` (create if absent)
 
@@ -751,7 +817,11 @@ Deno.test("an arrival reaches the registered handler with its scope", async () =
     setCardArrivedHandler((scope, arrival) => seen.push({ scope, arrival }));
     const b = await board("root");
     const [backlog] = b.getBoard().statuses;
-    const id = b.createCard({ statusId: backlog.id, title: "Hi", actor: "human" });
+    const id = b.createCard({
+      statusId: backlog.id,
+      title: "Hi",
+      actor: "human",
+    });
     assertEquals(seen.length, 1);
     assertEquals(seen[0].scope, "root");
     assertEquals(seen[0].arrival.cardId, id);
@@ -775,7 +845,9 @@ Expected: FAIL — `setCardArrivedHandler` is not exported.
 
 - [ ] **Step 3: Implement it**
 
-In `src/lib/kanban/service.ts`, change the board import to `import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";` and add above `const handles`:
+In `src/lib/kanban/service.ts`, change the board import to
+`import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";`
+and add above `const handles`:
 
 ```ts
 // Who hears a card arrive. Registered at boot by desktop.ts rather than imported,
@@ -796,12 +868,12 @@ export function setCardArrivedHandler(
 And in `board()`:
 
 ```ts
-    h = openBoard(scopeBoardPath(scope), {
-      defaultStatuses: DEFAULT_STATUSES,
-      // Read at call time, not captured, so a board opened before the handler was
-      // registered still reports its arrivals.
-      onCardArrived: (arrival) => handler?.(scope, arrival),
-    });
+h = openBoard(scopeBoardPath(scope), {
+  defaultStatuses: DEFAULT_STATUSES,
+  // Read at call time, not captured, so a board opened before the handler was
+  // registered still reports its arrivals.
+  onCardArrived: (arrival) => handler?.(scope, arrival),
+});
 ```
 
 - [ ] **Step 4: Run the test**
@@ -823,9 +895,11 @@ git commit -m "Forward card arrivals from the board service"
 
 ### Task 6: The dispatcher
 
-The heart of the feature, and the exact sibling of `schedule.ts`: injected deps, so every rule is testable with no board, no layout and no model runtime.
+The heart of the feature, and the exact sibling of `schedule.ts`: injected deps,
+so every rule is testable with no board, no layout and no model runtime.
 
 **Files:**
+
 - Create: `src/lib/automatons/kanban.ts`
 - Test: `src/lib/automatons/kanban_test.ts`
 
@@ -835,7 +909,12 @@ The heart of the feature, and the exact sibling of `schedule.ts`: injected deps,
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { type DispatchDeps, dispatchArrival, pendingCards, watches } from "./kanban.ts";
+import {
+  dispatchArrival,
+  type DispatchDeps,
+  pendingCards,
+  watches,
+} from "./kanban.ts";
 import type { AutomatonInfo } from "./service.ts";
 import type { CardArrival } from "../kanban/board.ts";
 
@@ -917,7 +996,10 @@ function deps(
 }
 
 Deno.test("a column name matches case- and whitespace-insensitively", () => {
-  assertEquals(watches(def("a", { kanban: "In Progress" }), "in progress"), true);
+  assertEquals(
+    watches(def("a", { kanban: "In Progress" }), "in progress"),
+    true,
+  );
   assertEquals(watches(def("a", { kanban: "  Doing " }), "Doing"), true);
   assertEquals(watches(def("a", { kanban: "Doing" }), "Done"), false);
   // No key at all is the default: no card fires it.
@@ -1047,7 +1129,9 @@ Deno.test("a scope missing from the layout does not fire", async () => {
 });
 ```
 
-Note the deliberately distinct automaton names (`queued-1`…`queued-4`): the queue is module state keyed by scope and name, so tests that share a name would bleed into each other.
+Note the deliberately distinct automaton names (`queued-1`…`queued-4`): the
+queue is module state keyed by scope and name, so tests that share a name would
+bleed into each other.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -1205,7 +1289,10 @@ async function drain(
     try {
       column = await deps.columnOf(scope, next.cardId);
     } catch (err) {
-      console.error(`automaton kanban: could not re-check ${next.cardId}:`, err);
+      console.error(
+        `automaton kanban: could not re-check ${next.cardId}:`,
+        err,
+      );
       return;
     }
     if (column === undefined || !watches(a, column)) {
@@ -1244,7 +1331,10 @@ export async function dispatchArrival(
   try {
     cwd = await deps.cwd(scope);
   } catch (err) {
-    console.error("automaton kanban: could not read the workspace layout:", err);
+    console.error(
+      "automaton kanban: could not read the workspace layout:",
+      err,
+    );
     return;
   }
   if (cwd === undefined) {
@@ -1307,6 +1397,7 @@ git commit -m "Add the kanban arrival dispatcher"
 ### Task 7: Wire it up at boot
 
 **Files:**
+
 - Modify: `src/desktop.ts:680-690`
 
 - [ ] **Step 1: Register the handler**
@@ -1346,6 +1437,7 @@ git commit -m "Register the kanban trigger at boot"
 ### Task 8: Carry the two keys through the save path
 
 **Files:**
+
 - Modify: `src/lib/automatons/service.ts:100-119`
 - Modify: `src/lib/automatons/bindings.ts:15-28`
 - Modify: `src/desktop.ts:571-603`
@@ -1390,25 +1482,29 @@ Expected: FAIL — `kanban` and `wip` are not on `saveAutomaton`'s argument type
 
 - [ ] **Step 3: Widen the three layers**
 
-In `src/lib/automatons/service.ts`, add to `saveAutomaton`'s `a` parameter type after `cron?: string;`:
+In `src/lib/automatons/service.ts`, add to `saveAutomaton`'s `a` parameter type
+after `cron?: string;`:
 
 ```ts
-    kanban?: string;
-    // Absent is unlimited; see parse.ts. Passed through rather than defaulted for the
-    // same reason `tools` is.
-    wip?: number;
+kanban?: string;
+// Absent is unlimited; see parse.ts. Passed through rather than defaulted for the
+// same reason `tools` is.
+wip?: number;
 ```
 
-In `src/lib/automatons/bindings.ts`, add to the `automatonsSave` arg type after `cron?: string;`:
+In `src/lib/automatons/bindings.ts`, add to the `automatonsSave` arg type after
+`cron?: string;`:
 
 ```ts
-      // The board column whose arrivals fire this, or "" for no card trigger.
-      kanban?: string;
-      // Max concurrent runs of this automaton in this scope; undefined is unlimited.
-      wip?: number;
+// The board column whose arrivals fire this, or "" for no card trigger.
+kanban?: string;
+// Max concurrent runs of this automaton in this scope; undefined is unlimited.
+wip?: number;
 ```
 
-In `src/desktop.ts`'s `automatonsSave` handler, add `kanban,` and `wip,` to the destructure, `kanban?: string;` and `wip?: number;` to the cast type, and `kanban,` and `wip,` to the `saveAutomaton` call.
+In `src/desktop.ts`'s `automatonsSave` handler, add `kanban,` and `wip,` to the
+destructure, `kanban?: string;` and `wip?: number;` to the cast type, and
+`kanban,` and `wip,` to the `saveAutomaton` call.
 
 - [ ] **Step 4: Run the test**
 
@@ -1430,6 +1526,7 @@ git commit -m "Carry kanban: and wip: through the automaton save path"
 ### Task 9: The editor's trigger fields
 
 **Files:**
+
 - Modify: `src/lib/automatons/AutomatonForm.svelte`
 
 - [ ] **Step 1: Load this scope's columns**
@@ -1437,39 +1534,40 @@ git commit -m "Carry kanban: and wip: through the automaton save path"
 Add to the imports:
 
 ```ts
-  import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
+import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
 ```
 
 Add beside the other binding handles:
 
 ```ts
-  const kanban = kanbanBindings();
+const kanban = kanbanBindings();
 ```
 
 Add beside the other `$state` declarations:
 
 ```ts
-  // The columns of THIS scope's own board — the only board that can fire this file, since
-  // the trigger does not inherit (docs/automatons.md).
-  let columns = $state<StatusRow[]>([]);
-  // The column whose arrivals fire this automaton, by name. Empty is the default: no card
-  // ever fires it.
-  let kanbanColumn = $state(initial?.kanban ?? "");
-  // Max concurrent runs. Empty means unlimited — there is no compiled-in default.
-  let wip = $state(initial?.wip === undefined ? "" : String(initial.wip));
+// The columns of THIS scope's own board — the only board that can fire this file, since
+// the trigger does not inherit (docs/automatons.md).
+let columns = $state<StatusRow[]>([]);
+// The column whose arrivals fire this automaton, by name. Empty is the default: no card
+// ever fires it.
+let kanbanColumn = $state(initial?.kanban ?? "");
+// Max concurrent runs. Empty means unlimited — there is no compiled-in default.
+let wip = $state(initial?.wip === undefined ? "" : String(initial.wip));
 ```
 
-In the `onMount`/`loadOptions` function that already fetches templates, models, extensions and skills, add:
+In the `onMount`/`loadOptions` function that already fetches templates, models,
+extensions and skills, add:
 
 ```ts
-    if (kanban) {
-      try {
-        columns = (await kanban.kanbanGetBoard({ scope })).statuses;
-      } catch {
-        // A board that cannot be read leaves the picker with only the file's own value,
-        // which is still editable. Not worth failing the whole form for.
-      }
-    }
+if (kanban) {
+  try {
+    columns = (await kanban.kanbanGetBoard({ scope })).statuses;
+  } catch {
+    // A board that cannot be read leaves the picker with only the file's own value,
+    // which is still editable. Not worth failing the whole form for.
+  }
+}
 ```
 
 - [ ] **Step 2: Add the validation deriveds**
@@ -1477,24 +1575,25 @@ In the `onMount`/`loadOptions` function that already fetches templates, models, 
 Beside `modelMissing` and `scheduleError`:
 
 ```ts
-  // The same treatment `modelMissing` gives an unavailable model: a column the board no
-  // longer has stays selected rather than being silently rewritten to "no trigger".
-  const columnMissing = $derived(
-    kanbanColumn !== "" &&
-      !columns.some((c) => c.name.toLowerCase() === kanbanColumn.toLowerCase()),
-  );
+// The same treatment `modelMissing` gives an unavailable model: a column the board no
+// longer has stays selected rather than being silently rewritten to "no trigger".
+const columnMissing = $derived(
+  kanbanColumn !== "" &&
+    !columns.some((c) => c.name.toLowerCase() === kanbanColumn.toLowerCase()),
+);
 
-  // Checked as it is typed, by the same function the backend parses with — a limit that
-  // is not a limit must never be written in the first place.
-  const wipMessage = $derived(
-    wip.trim() === "" ? undefined : wipError(Number(wip)),
-  );
+// Checked as it is typed, by the same function the backend parses with — a limit that
+// is not a limit must never be written in the first place.
+const wipMessage = $derived(
+  wip.trim() === "" ? undefined : wipError(Number(wip)),
+);
 ```
 
-Add `wipError` to the `./parse.ts` import — the form currently imports `cronError` from `./cron.ts`, so add:
+Add `wipError` to the `./parse.ts` import — the form currently imports
+`cronError` from `./cron.ts`, so add:
 
 ```ts
-  import { wipError } from "./parse.ts";
+import { wipError } from "./parse.ts";
 ```
 
 - [ ] **Step 3: Send them on save**
@@ -1502,8 +1601,8 @@ Add `wipError` to the `./parse.ts` import — the form currently imports `cronEr
 In `save()`, add to the `automatonsSave` call after `cron: cron.trim(),`:
 
 ```ts
-          kanban: kanbanColumn,
-          wip: wip.trim() === "" ? undefined : Number(wip),
+kanban: kanbanColumn,
+wip: wip.trim() === "" ? undefined : Number(wip),
 ```
 
 - [ ] **Step 4: Add the markup**
@@ -1556,7 +1655,8 @@ Directly after the Schedule field's closing `</div>`:
 
 - [ ] **Step 5: Disable Save while the limit is invalid**
 
-Find the Save button's `disabled={...}` expression — it already includes `scheduleError` — and add `|| wipMessage !== undefined`.
+Find the Save button's `disabled={...}` expression — it already includes
+`scheduleError` — and add `|| wipMessage !== undefined`.
 
 - [ ] **Step 6: Build and eyeball it**
 
@@ -1564,7 +1664,9 @@ Find the Save button's `disabled={...}` expression — it already includes `sche
 deno task build
 ```
 
-Expected: builds clean. Then run the app (`deno task dev`), open an Automatons module, create an automaton, and confirm the column picker lists the board's real columns and that "Concurrent runs" appears only once a column is chosen.
+Expected: builds clean. Then run the app (`deno task dev`), open an Automatons
+module, create an automaton, and confirm the column picker lists the board's
+real columns and that "Concurrent runs" appears only once a column is chosen.
 
 - [ ] **Step 7: Commit**
 
@@ -1578,6 +1680,7 @@ git commit -m "Add the kanban trigger fields to the automaton editor"
 ### Task 10: The trigger badge in the list
 
 **Files:**
+
 - Modify: `src/lib/automatons/Automatons.svelte:1-5,32-40,72-83,265-280`
 
 - [ ] **Step 1: Load the board's columns**
@@ -1585,34 +1688,35 @@ git commit -m "Add the kanban trigger fields to the automaton editor"
 Add to the imports:
 
 ```ts
-  import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
+import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
 ```
 
 Beside `const b = automatonBindings();`:
 
 ```ts
-  const kb = kanbanBindings();
+const kb = kanbanBindings();
 ```
 
 Beside the other `$state`:
 
 ```ts
-  // This scope's own columns, so a `kanban:` naming one that no longer exists can be
-  // flagged. A rename is the only way that happens, and this is the one place it shows.
-  let columns = $state<StatusRow[]>([]);
+// This scope's own columns, so a `kanban:` naming one that no longer exists can be
+// flagged. A rename is the only way that happens, and this is the one place it shows.
+let columns = $state<StatusRow[]>([]);
 ```
 
-In `refresh()`, after the `automatons = await b.automatonsVisible({ scope });` try/catch:
+In `refresh()`, after the `automatons = await b.automatonsVisible({ scope });`
+try/catch:
 
 ```ts
-    if (kb) {
-      try {
-        columns = (await kb.kanbanGetBoard({ scope })).statuses;
-      } catch {
-        // The badge degrades to "unknown", not to an error strip over the whole list.
-        columns = [];
-      }
-    }
+if (kb) {
+  try {
+    columns = (await kb.kanbanGetBoard({ scope })).statuses;
+  } catch {
+    // The badge degrades to "unknown", not to an error strip over the whole list.
+    columns = [];
+  }
+}
 ```
 
 - [ ] **Step 2: Add the lookup helper**
@@ -1620,13 +1724,13 @@ In `refresh()`, after the `automatons = await b.automatonsVisible({ scope });` t
 Beside `runsOf`:
 
 ```ts
-  // Does the board still have the column this automaton names? An inherited definition
-  // watches its OWN scope's board, which is not the one loaded here, so it is never
-  // flagged — the badge only claims something about a file this scope owns.
-  function columnMissing(a: AutomatonInfo): boolean {
-    return a.scope === scope && a.kanban !== undefined &&
-      !columns.some((c) => c.name.toLowerCase() === a.kanban!.toLowerCase());
-  }
+// Does the board still have the column this automaton names? An inherited definition
+// watches its OWN scope's board, which is not the one loaded here, so it is never
+// flagged — the badge only claims something about a file this scope owns.
+function columnMissing(a: AutomatonInfo): boolean {
+  return a.scope === scope && a.kanban !== undefined &&
+    !columns.some((c) => c.name.toLowerCase() === a.kanban!.toLowerCase());
+}
 ```
 
 - [ ] **Step 3: Add the badge**
@@ -1634,47 +1738,48 @@ Beside `runsOf`:
 Directly after the `{#if a.cron}` block in the list item:
 
 ```svelte
-                  <!-- Like a schedule, a card trigger fires only in the scope that OWNS
-                       the file, so an inherited one is shown but does not fire here. -->
-                  {#if a.kanban}
-                    <span
-                      class="badge badge-xs shrink-0 {columnMissing(a)
-                        ? 'badge-error'
-                        : 'badge-outline'}"
-                      title={columnMissing(a)
-                        ? `No column named ${a.kanban} on this board; nothing will fire it`
-                        : a.scope === scope
-                        ? `Runs when a card arrives in ${a.kanban}${
-                          a.wip ? `, ${a.wip} at a time` : ""
-                        }`
-                        : `Watches ${a.kanban} in ${a.scope}; it does not fire here`}
-                    >{a.kanban}</span>
-                  {/if}
+<!-- Like a schedule, a card trigger fires only in the scope that OWNS
+     the file, so an inherited one is shown but does not fire here. -->
+{#if a.kanban}
+  <span
+    class="badge badge-xs shrink-0 {columnMissing(a)
+      ? 'badge-error'
+      : 'badge-outline'}"
+    title={columnMissing(a)
+      ? `No column named ${a.kanban} on this board; nothing will fire it`
+      : a.scope === scope
+      ? `Runs when a card arrives in ${a.kanban}${
+        a.wip ? `, ${a.wip} at a time` : ""
+      }`
+      : `Watches ${a.kanban} in ${a.scope}; it does not fire here`}
+  >{a.kanban}</span>
+{/if}
 ```
 
 - [ ] **Step 4: Show the card on a run**
 
-The same fetch already loaded the board, so keep its cards too. Add beside `columns`:
+The same fetch already loaded the board, so keep its cards too. Add beside
+`columns`:
 
 ```ts
-  // Only what the run detail needs: a card's title from the id on its record.
-  let boardCards = $state<{ id: string; title: string }[]>([]);
+// Only what the run detail needs: a card's title from the id on its record.
+let boardCards = $state<{ id: string; title: string }[]>([]);
 ```
 
 Change the `refresh()` block added in step 1 to keep both halves:
 
 ```ts
-    if (kb) {
-      try {
-        const board = await kb.kanbanGetBoard({ scope });
-        columns = board.statuses;
-        boardCards = board.cards;
-      } catch {
-        // The badge degrades to "unknown", not to an error strip over the whole list.
-        columns = [];
-        boardCards = [];
-      }
-    }
+if (kb) {
+  try {
+    const board = await kb.kanbanGetBoard({ scope });
+    columns = board.statuses;
+    boardCards = board.cards;
+  } catch {
+    // The badge degrades to "unknown", not to an error strip over the whole list.
+    columns = [];
+    boardCards = [];
+  }
+}
 ```
 
 (Replacing the version from step 1, which set `columns` only.)
@@ -1682,18 +1787,19 @@ Change the `refresh()` block added in step 1 to keep both halves:
 Add beside `columnMissing`:
 
 ```ts
-  // The card a run was fired by, by title. Falls back to the id: a card deleted since is
-  // exactly the case where the record is the only thing that still remembers it.
-  function cardTitle(id: string): string {
-    return boardCards.find((c) => c.id === id)?.title || id;
-  }
+// The card a run was fired by, by title. Falls back to the id: a card deleted since is
+// exactly the case where the record is the only thing that still remembers it.
+function cardTitle(id: string): string {
+  return boardCards.find((c) => c.id === id)?.title || id;
+}
 ```
 
-Find the run detail line that renders `{selectedRun.trigger} · {ago(selectedRun.startedAt)}` and change it to:
+Find the run detail line that renders
+`{selectedRun.trigger} · {ago(selectedRun.startedAt)}` and change it to:
 
 ```svelte
-                {selectedRun.trigger}{#if selectedRun.card}
-                  · {cardTitle(selectedRun.card)}{/if} · {ago(selectedRun.startedAt)}
+{selectedRun.trigger}{#if selectedRun.card}
+  · {cardTitle(selectedRun.card)}{/if} · {ago(selectedRun.startedAt)}
 ```
 
 - [ ] **Step 5: Build and check**
@@ -1702,7 +1808,9 @@ Find the run detail line that renders `{selectedRun.trigger} · {ago(selectedRun
 deno task build
 ```
 
-Expected: builds clean. In the app, give an automaton a `kanban:` column, confirm the badge appears; rename that column on the board, refresh the module, and confirm the badge goes red.
+Expected: builds clean. In the app, give an automaton a `kanban:` column,
+confirm the badge appears; rename that column on the board, refresh the module,
+and confirm the badge goes red.
 
 - [ ] **Step 6: Commit**
 
@@ -1715,14 +1823,18 @@ git commit -m "Show an automaton's kanban trigger in the list"
 
 ### Task 11: End-to-end through a real board
 
-Everything above is unit-tested against injected deps. This is the one test that proves the wiring: a real `setStatus` on a real board produces a real run record.
+Everything above is unit-tested against injected deps. This is the one test that
+proves the wiring: a real `setStatus` on a real board produces a real run
+record.
 
 **Files:**
+
 - Modify: `src/lib/automatons/run_integration_test.ts`
 
 - [ ] **Step 1: Write the test**
 
-Append to `src/lib/automatons/run_integration_test.ts`, following that file's existing temp-HOME setup helper rather than writing a new one:
+Append to `src/lib/automatons/run_integration_test.ts`, following that file's
+existing temp-HOME setup helper rather than writing a new one:
 
 ```ts
 // The whole chain, with nothing stubbed but the model: board.setStatus → service handler
@@ -1780,7 +1892,10 @@ Deno.test("a card moved into the watched column fires the automaton", async () =
 });
 ```
 
-Add the imports it needs: `dispatchArrival` from `./kanban.ts`, `board`, `closeAllBoards` and `setCardArrivedHandler` from `../kanban/service.ts`, `saveAutomaton` from `./service.ts`, `listRuns` from `./run.ts`, `writeJson` from `../settings/file.ts`.
+Add the imports it needs: `dispatchArrival` from `./kanban.ts`, `board`,
+`closeAllBoards` and `setCardArrivedHandler` from `../kanban/service.ts`,
+`saveAutomaton` from `./service.ts`, `listRuns` from `./run.ts`, `writeJson`
+from `../settings/file.ts`.
 
 - [ ] **Step 2: Run it**
 
@@ -1788,7 +1903,9 @@ Add the imports it needs: `dispatchArrival` from `./kanban.ts`, `board`, `closeA
 deno test -A src/lib/automatons/run_integration_test.ts
 ```
 
-Expected: PASS. If `record.status` is `failed` with `automaton not found` rather than a prompt-template error, the temp HOME is not the one `saveAutomaton` wrote into — check the `HOME` swap happens before the first import-time read.
+Expected: PASS. If `record.status` is `failed` with `automaton not found` rather
+than a prompt-template error, the temp HOME is not the one `saveAutomaton` wrote
+into — check the `HOME` swap happens before the first import-time read.
 
 - [ ] **Step 3: Run the whole suite**
 
@@ -1810,29 +1927,50 @@ git commit -m "Test a card move firing an automaton end to end"
 ### Task 12: Documentation
 
 **Files:**
+
 - Modify: `docs/automatons.md`
 
 - [ ] **Step 1: Replace Deferred #1 with a real section**
 
-Delete the "### 1. The card-move trigger" entry from the Deferred list, renumbering the rest, and add a `### kanban: fires it when a card arrives` section directly after the `### cron: fires it without a button` section. It must cover, in the voice of the surrounding document:
+Delete the "### 1. The card-move trigger" entry from the Deferred list,
+renumbering the rest, and add a `### kanban: fires it when a card arrives`
+section directly after the `### cron: fires it without a button` section. It
+must cover, in the voice of the surrounding document:
 
-- The key and its matching: a column **name**, case-insensitive, and why not an id (a UUID cannot be read to find out what a file does).
-- What counts as an arrival: a move into the column, or a card created there. Not a reorder, not a metadata edit, not a move onto the column the card is already in.
-- Who fires it: **both** human and agent moves, because a triage automaton feeding a worker automaton is the workflow this exists for.
-- **The loop.** Two automatons can pass a card back and forth indefinitely; the per-card guard does not stop it, because each run ends before the next begins. Nothing bounds it but the person reading the run list.
-- The two guards: same card while running is dropped; over `wip:` is queued, deduped by card, and re-checked when it drains so a card that left the column is not worked late.
+- The key and its matching: a column **name**, case-insensitive, and why not an
+  id (a UUID cannot be read to find out what a file does).
+- What counts as an arrival: a move into the column, or a card created there.
+  Not a reorder, not a metadata edit, not a move onto the column the card is
+  already in.
+- Who fires it: **both** human and agent moves, because a triage automaton
+  feeding a worker automaton is the workflow this exists for.
+- **The loop.** Two automatons can pass a card back and forth indefinitely; the
+  per-card guard does not stop it, because each run ends before the next begins.
+  Nothing bounds it but the person reading the run list.
+- The two guards: same card while running is dropped; over `wip:` is queued,
+  deduped by card, and re-checked when it drains so a card that left the column
+  is not worked late.
 - `wip:`, and that absent means unlimited.
-- Scope: it does not inherit, it fires on the board of the scope that owns the file, and a workspace dropping a card on root's shared board fires root's automaton in root's cwd.
+- Scope: it does not inherit, it fires on the board of the scope that owns the
+  file, and a workspace dropping a card on root's shared board fires root's
+  automaton in root's cwd.
 - The queue dies with the app.
-- What the run receives: `/<template> <card-id> "<title>"`, and that `$1` is the id and `$2` the title.
+- What the run receives: `/<template> <card-id> "<title>"`, and that `$1` is the
+  id and `$2` the title.
 - The column-rename failure, and that the Automatons list is where it surfaces.
 
 - [ ] **Step 2: Update the surrounding claims**
 
-- The `### Arguments` section says "which is also how a kanban card will hand over its title when that trigger lands" — change to the past tense and point at the new section.
-- The `## Runs` section says `trigger` is "`kanban` once the card-move trigger lands" — it has landed. Note that a `kanban` record also carries the `card`.
-- Deferred "#6. Concurrency" — rewrite: `wip:` now bounds one automaton's kanban-triggered runs; nothing bounds the total across automatons, and cron is still uncapped.
-- Add a new Deferred entry for the durable queue: queued fires die with the app, and nothing says so.
+- The `### Arguments` section says "which is also how a kanban card will hand
+  over its title when that trigger lands" — change to the past tense and point
+  at the new section.
+- The `## Runs` section says `trigger` is "`kanban` once the card-move trigger
+  lands" — it has landed. Note that a `kanban` record also carries the `card`.
+- Deferred "#6. Concurrency" — rewrite: `wip:` now bounds one automaton's
+  kanban-triggered runs; nothing bounds the total across automatons, and cron is
+  still uncapped.
+- Add a new Deferred entry for the durable queue: queued fires die with the app,
+  and nothing says so.
 
 - [ ] **Step 3: Check the links and the numbering**
 
@@ -1840,7 +1978,8 @@ Delete the "### 1. The card-move trigger" entry from the Deferred list, renumber
 grep -n "Deferred #" docs/*.md
 ```
 
-Expected: every cross-reference still points at the entry it means. Fix any that the renumbering broke.
+Expected: every cross-reference still points at the entry it means. Fix any that
+the renumbering broke.
 
 - [ ] **Step 4: Commit**
 
@@ -1859,4 +1998,6 @@ After Task 12, the whole feature:
 deno task test && deno task build
 ```
 
-Then in the running app: create a prompt template, create an automaton naming it with `kanban: Todo`, drag a card into Todo, and confirm a run appears in the list with trigger `kanban` and the card's title.
+Then in the running app: create a prompt template, create an automaton naming it
+with `kanban: Todo`, drag a card into Todo, and confirm a run appears in the
+list with trigger `kanban` and the card's title.

@@ -34,23 +34,23 @@ a restart; a global concurrency ceiling; firing on card edits other than arrival
 
 Each of these is what makes a decision below cheap.
 
-| Need                     | Mechanism                                                    | Where                       |
-| ------------------------ | ------------------------------------------------------------ | --------------------------- |
-| One entry point per run  | `launchAutomaton({ scope, name, cwd, args, trigger })`       | `automatons/run.ts:230`     |
-| A `trigger` on records   | `RunRecord.trigger`, already documented as taking `"kanban"` | `automatons/run.ts:56`      |
-| One choke point per move | `setStatus` / `createCard`, called by both the human bind and the agent tool | `kanban/board.ts:307,335` |
-| One place boards open    | `board(scope)`, a per-scope cache                            | `kanban/service.ts:41`      |
-| A scope's own defs       | `listAutomatons(scope)`, as cron uses it                     | `automatons/service.ts`     |
-| Layout → cwd             | `scheduledTargets()`                                         | `automatons/schedule.ts:109` |
-| A live-run map           | `runs`, and `isAutomatonRunning(scope, name)`                | `automatons/run.ts:89,557`  |
+| Need                     | Mechanism                                                                    | Where                        |
+| ------------------------ | ---------------------------------------------------------------------------- | ---------------------------- |
+| One entry point per run  | `launchAutomaton({ scope, name, cwd, args, trigger })`                       | `automatons/run.ts:230`      |
+| A `trigger` on records   | `RunRecord.trigger`, already documented as taking `"kanban"`                 | `automatons/run.ts:56`       |
+| One choke point per move | `setStatus` / `createCard`, called by both the human bind and the agent tool | `kanban/board.ts:307,335`    |
+| One place boards open    | `board(scope)`, a per-scope cache                                            | `kanban/service.ts:41`       |
+| A scope's own defs       | `listAutomatons(scope)`, as cron uses it                                     | `automatons/service.ts`      |
+| Layout → cwd             | `scheduledTargets()`                                                         | `automatons/schedule.ts:109` |
+| A live-run map           | `runs`, and `isAutomatonRunning(scope, name)`                                | `automatons/run.ts:89,557`   |
 
 ## Decisions
 
 ### 1. Arrival is the event: entering a column, or being created in one
 
-A `setStatus` whose destination differs from the card's current column fires.
-A `createCard` into the watched column fires — a card typed straight into
-_Inbox_ has arrived there as surely as one dragged in.
+A `setStatus` whose destination differs from the card's current column fires. A
+`createCard` into the watched column fires — a card typed straight into _Inbox_
+has arrived there as surely as one dragged in.
 
 Nothing else does. A `setStatus` to the column the card is already in does not
 (nothing entered); `moveCard` reordering within a column does not (ordering is a
@@ -65,8 +65,8 @@ kanban: "In Progress"
 
 Matched case-insensitively against the board's column names, after trimming.
 Column ids are stable across renames and would survive one, but they are UUIDs:
-nobody hand-writes one, and a file holding one cannot be read to find out what it
-does. Readability wins, consistent with every other key in the format.
+nobody hand-writes one, and a file holding one cannot be read to find out what
+it does. Readability wins, consistent with every other key in the format.
 
 The cost is that renaming a column stops the trigger. That is surfaced, not
 silent — see decision 8.
@@ -81,8 +81,8 @@ for, and filtering to `actor: "human"` would kill it.
 It follows that two automatons can hand a card back and forth indefinitely.
 **The per-card guard does not prevent this** — each run finishes before the next
 begins, so nothing is ever concurrent and nothing is ever dropped. A chain-depth
-cap was considered and rejected as machinery for a hazard nobody has hit;
-the hazard is documented instead, in `docs/automatons.md`, plainly enough that
+cap was considered and rejected as machinery for a hazard nobody has hit; the
+hazard is documented instead, in `docs/automatons.md`, plainly enough that
 someone building a two-automaton chain will read it first.
 
 ### 4. Same card, same automaton, already running → dropped
@@ -106,12 +106,12 @@ scope at once. **Absent means unlimited.** A compiled-in default would be an
 arbitrary number, which is the reason automatons have no turn cap either, and
 unlimited is what "a run per card" plainly means.
 
-A value that is not an integer ≥ 1 is an error on the whole definition, alongside
-a malformed `cron:` or `model:` — a file that says it limits itself and does not
-is the failure this format keeps refusing to ship.
+A value that is not an integer ≥ 1 is an error on the whole definition,
+alongside a malformed `cron:` or `model:` — a file that says it limits itself
+and does not is the failure this format keeps refusing to ship.
 
-On a definition with no `kanban:` it is inert. Manual and cron launches are never
-held: `wip:` describes an arrival rate, and neither of those has one.
+On a definition with no `kanban:` it is inert. Manual and cron launches are
+never held: `wip:` describes an arrival rate, and neither of those has one.
 
 ### 6. A fire over the limit is queued, and re-checked when it drains
 
@@ -123,10 +123,10 @@ cron minute: a schedule comes round again, a card does not.
 Because entries dedupe by card, the queue is bounded by the board's card count
 and needs no cap of its own.
 
-At drain time the entry is re-checked and dropped if the card no longer exists or
-has since left the watched column. That is the point of having waited — a card a
-human pulled back out of _In Progress_ must not be worked ten minutes later
-because it was sitting in a queue.
+At drain time the entry is re-checked and dropped if the card no longer exists
+or has since left the watched column. That is the point of having waited — a
+card a human pulled back out of _In Progress_ must not be worked ten minutes
+later because it was sitting in a queue.
 
 The queue is in memory and dies with the app, like runs themselves
 (`docs/automatons.md`, "Runs do not survive quitting pique"). There is no daemon
@@ -143,9 +143,9 @@ into root's _Review_ fires root's automaton, in root's cwd. The board's owner
 decides, not who did the dragging — which is the same visibility rule
 `resolveBoardScope` already implements.
 
-cwd resolves exactly as the scheduler resolves it, from the saved layout. A scope
-with no layout entry — a closed workspace whose board file is still on disk —
-drops and logs, matching "it does not fire for a closed workspace". The
+cwd resolves exactly as the scheduler resolves it, from the saved layout. A
+scope with no layout entry — a closed workspace whose board file is still on
+disk — drops and logs, matching "it does not fire for a closed workspace". The
 resolution moves out of `schedule.ts` into one shared helper rather than being
 written twice.
 
@@ -181,7 +181,8 @@ button already has, which is what
 [2026-08-04-automatons-design.md](2026-08-04-automatons-design.md) predicted.
 
 The title alone was rejected: titles are not unique and carry no way back to the
-card, so a run could not reliably move or comment on the thing that triggered it.
+card, so a run could not reliably move or comment on the thing that triggered
+it.
 
 ## Architecture
 
@@ -215,8 +216,8 @@ underdelivery the automatons work keeps eliminating.
 The dispatch is fire-and-forget: `setStatus` is synchronous and stays that way,
 the dispatch is kicked off and never awaited, and a refused launch is logged
 rather than thrown back. A card move must not fail because an automaton's
-`prompt:` has a typo. The refusal is still durable — `launchAutomaton` writes its
-own `failed` record either way.
+`prompt:` has a typo. The refusal is still durable — `launchAutomaton` writes
+its own `failed` record either way.
 
 ### Changes to `run.ts`
 
@@ -229,11 +230,12 @@ Three, all small:
   length is the WIP count; its membership is the per-card guard.
 - `launchAutomaton` gains an optional `card` and an optional `onEnd`, called by
   both `finish()` and `stopRun()` after eviction. That drains the queue whether
-  the run finished, failed or was stopped, and avoids a global listener registry:
-  only the kanban dispatcher ever passes one.
+  the run finished, failed or was stopped, and avoids a global listener
+  registry: only the kanban dispatcher ever passes one.
 
 `RunRecord` gains `card?: string`. `trigger` answers what kind of thing fired
-this; the card is what makes "why did _this_ run happen" answerable a week later.
+this; the card is what makes "why did _this_ run happen" answerable a week
+later.
 
 ### Changes to `parse.ts`
 
@@ -244,20 +246,21 @@ every automaton written before the keys existed. A `wipError()` helper alongside
 
 ### UI
 
-`AutomatonForm.svelte` gets a Trigger pair beside the Schedule field: a `<select>`
-over this scope's own board columns, defaulting to "— none —" and writing the
-column's name; and a WIP number input, shown once a column is chosen, blank
-meaning unlimited. A file naming a column the board no longer has keeps its value
-in a `(no such column)` option rather than being silently rewritten to none — the
-trick `modelMissing` already plays in the same form.
+`AutomatonForm.svelte` gets a Trigger pair beside the Schedule field: a
+`<select>` over this scope's own board columns, defaulting to "— none —" and
+writing the column's name; and a WIP number input, shown once a column is
+chosen, blank meaning unlimited. A file naming a column the board no longer has
+keeps its value in a `(no such column)` option rather than being silently
+rewritten to none — the trick `modelMissing` already plays in the same form.
 
-`Automatons.svelte` gets a second badge beside the `cron` one carrying the column
-name, with the same inherited-vs-own tooltip split ("watches _In Progress_ here" /
-"watches _In Progress_ in root; it does not fire here"). When the name matches no
-column, that badge goes error-styled. This is the one place a rename surfaces.
+`Automatons.svelte` gets a second badge beside the `cron` one carrying the
+column name, with the same inherited-vs-own tooltip split ("watches _In
+Progress_ here" / "watches _In Progress_ in root; it does not fire here"). When
+the name matches no column, that badge goes error-styled. This is the one place
+a rename surfaces.
 
-The run detail line already prints `trigger`; with a `card` on the record it also
-prints that card's title when the board still has it.
+The run detail line already prints `trigger`; with a `card` on the record it
+also prints that card's title when the board still has it.
 
 ## Testing
 
@@ -289,16 +292,16 @@ still stands for cron and for the total across automatons.
 ## Deferred
 
 1. **Loop protection.** Decision 3 accepts that two automatons can pass a card
-   back and forth forever. A chain-depth cap — a kanban-triggered run tagging the
-   moves it makes, so a fire past depth N is dropped — is the obvious fix, and
-   needs a run id threaded into `kanbanTools()`. Build it when a loop actually
-   happens.
-2. **A durable queue.** Queued fires die with the app. A card that was waiting is
-   simply not worked, and nothing says so. Run retention (`docs/automatons.md`
-   Deferred #5) is the more pressing storage problem.
+   back and forth forever. A chain-depth cap — a kanban-triggered run tagging
+   the moves it makes, so a fire past depth N is dropped — is the obvious fix,
+   and needs a run id threaded into `kanbanTools()`. Build it when a loop
+   actually happens.
+2. **A durable queue.** Queued fires die with the app. A card that was waiting
+   is simply not worked, and nothing says so. Run retention
+   (`docs/automatons.md` Deferred #5) is the more pressing storage problem.
 3. **A global concurrency ceiling.** `wip:` is per automaton, so ten automatons
    watching ten columns can still start ten runs against one shared model
    runtime.
 4. **Other board events.** Decision 1 fires on arrival only. A card whose
-   subtasks all became done, or one that has sat in a column for a week, are both
-   plausible triggers and neither has been asked for.
+   subtasks all became done, or one that has sat in a column for a week, are
+   both plausible triggers and neither has been asked for.
