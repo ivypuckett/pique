@@ -131,8 +131,11 @@ Deno.test("a stray file with an illegal basename is skipped, not fatal", async (
   });
 });
 
-// The editor sends `tools` on every save; a save path that drops it turns a deliberately
-// restricted automaton back into one with every builtin. Guards the whole round trip.
+// `tools` absent and `tools: []` are semantically different (unrestricted vs. no
+// builtins) and must not collapse into each other on the way through write+read. This
+// only covers saveAutomaton/parse.ts — it does not reach the automatonsSave win.bind
+// handler in desktop.ts, which is separate, untestable here, and where the actual bug
+// (`tools` silently dropped) lived.
 Deno.test("saveAutomaton round-trips an empty tools restriction", async () => {
   await withTempHome(async () => {
     await saveAutomaton("root", "restricted", {
@@ -144,6 +147,19 @@ Deno.test("saveAutomaton round-trips an empty tools restriction", async () => {
     });
     const [a] = await listAutomatons("root");
     assertEquals(a.tools, []);
+  });
+});
+
+Deno.test("saveAutomaton round-trips an absent tools restriction as unrestricted", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "unrestricted", {
+      description: "",
+      prompt: "p",
+      extensions: [],
+      skills: [],
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.tools, undefined);
   });
 });
 
