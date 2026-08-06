@@ -20,6 +20,9 @@ export interface AutomatonBindings {
       prompt: string;
       extensions: string[];
       skills: string[];
+      // Which of pi's builtins the run keeps. Absent and empty are DIFFERENT — absent is
+      // every builtin, `[]` is none — so this is passed through rather than defaulted.
+      tools?: string[];
       // `provider/model-id`, or "" to inherit the scope's chat default.
       model?: string;
       // A five-field cron expression in local time, or "" for launch-button only.

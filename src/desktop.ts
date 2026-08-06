@@ -580,6 +580,7 @@ win.bind("automatonsSave", async (arg) => {
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    tools,
     model,
     cron,
   } = arg as {
@@ -589,6 +590,7 @@ win.bind("automatonsSave", async (arg) => {
     prompt: string;
     extensions: string[];
     skills: string[];
+    tools?: string[];
     model?: string;
     cron?: string;
   };
@@ -597,6 +599,7 @@ win.bind("automatonsSave", async (arg) => {
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    tools,
     model,
     cron,
   });

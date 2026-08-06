@@ -131,6 +131,22 @@ Deno.test("a stray file with an illegal basename is skipped, not fatal", async (
   });
 });
 
+// The editor sends `tools` on every save; a save path that drops it turns a deliberately
+// restricted automaton back into one with every builtin. Guards the whole round trip.
+Deno.test("saveAutomaton round-trips an empty tools restriction", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "restricted", {
+      description: "",
+      prompt: "p",
+      extensions: [],
+      skills: [],
+      tools: [],
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.tools, []);
+  });
+});
+
 // A file that namesIn() saw but that is gone by the time it is read (deleted from
 // another tab, or by an agent run) must not take down the whole listing — same
 // tolerance as an illegal basename or a missing dir. A real filesystem race is too
