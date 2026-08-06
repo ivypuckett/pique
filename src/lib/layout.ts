@@ -14,9 +14,7 @@ export interface ModuleRef {
 }
 
 export interface ColumnState {
-  widthPct: number; // share of the visible row; visible columns sum to 100
   collapsed: boolean; // center is never collapsed
-  savedWidthPct: number; // width restored on expand
   rows: ModuleRef[]; // center: the tab list (N); sides: a single row
   activeTabId: string; // visible right tab; center/left carry it for shape uniformity
 }
@@ -25,37 +23,38 @@ export interface ColumnState {
 // height, sharing the pane's width with the tabs. It isn't a tab (never in col.rows);
 // ctrl+e shows/hides/focuses it.
 export interface ExplorerState {
-  widthPct: number; // the explorer's share of the pane's width; the tabs take the rest
+  widthCh: number; // the explorer's fixed width; the tabs take the rest of the pane
   hidden: boolean;
 }
 
+// Widths are measured in characters, not fractions of the window: the sized pane keeps
+// the same number of columns of text however the window is resized or the workspace
+// tiled, and its sibling absorbs the slack.
 export interface ViewState {
   id: string; // stable across the view's lifetime; keys the tiled workspace
+  chatWidthCh: number; // chat's fixed width; the tabbed pane takes the rest of the row
   center: ColumnState; // chat
   right: ColumnState; // the tabbed pane
   explorer: ExplorerState; // file-tree addon inside the right pane
 }
 
-export const MIN_WIDTH_PCT = 10;
+export const MIN_WIDTH_CH = 10;
 
 export function createInitialView(id = "view-1"): ViewState {
   return {
     id,
+    chatWidthCh: 57,
     center: {
-      widthPct: 60,
       collapsed: false,
-      savedWidthPct: 60,
       activeTabId: "center-1",
       rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
     },
     right: {
-      widthPct: 40,
       collapsed: false,
-      savedWidthPct: 40,
       activeTabId: "right-1",
       rows: [{ id: "right-1", title: "Terminal", kind: "terminal" }],
     },
-    explorer: { widthPct: 50, hidden: false },
+    explorer: { widthCh: 30, hidden: false },
   };
 }
 
@@ -73,29 +72,24 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+// Only the first pane of each pair carries a width; the second one flexes, so a resize
+// sets a single number. `availableCh` is how many characters the two share, which is
+// what keeps the flexible pane from being dragged below its minimum.
 export function resizeBoundary(
   v: ViewState,
   b: Boundary,
-  newFirstPct: number,
+  newFirstCh: number,
+  availableCh: number,
 ): ViewState {
+  const first = clamp(
+    newFirstCh,
+    MIN_WIDTH_CH,
+    Math.max(MIN_WIDTH_CH, availableCh - MIN_WIDTH_CH),
+  );
   if (b === "explorer-tabs") {
-    // The explorer and tabs split the pane's width (their fractions sum to 100).
-    return {
-      ...v,
-      explorer: {
-        ...v.explorer,
-        widthPct: clamp(newFirstPct, MIN_WIDTH_PCT, 100 - MIN_WIDTH_PCT),
-      },
-    };
+    return { ...v, explorer: { ...v.explorer, widthCh: first } };
   }
-  // center-right: chat vs the pane. The two always fill the row, so their sum is fixed.
-  const combined = v.center.widthPct + v.right.widthPct;
-  const first = clamp(newFirstPct, MIN_WIDTH_PCT, combined - MIN_WIDTH_PCT);
-  return {
-    ...v,
-    center: { ...v.center, widthPct: first },
-    right: { ...v.right, widthPct: combined - first },
-  };
+  return { ...v, chatWidthCh: first };
 }
 
 export function fixedPx(v: ViewState): number {
@@ -103,40 +97,24 @@ export function fixedPx(v: ViewState): number {
   return v.right.collapsed ? 0 : SPLITTER_PX;
 }
 
+// The sized pane holds its character width and its sibling takes the rest — until the
+// row is too narrow for both, where the sibling keeps MIN_WIDTH_CH (the floor the
+// splitter enforces too) and the sized one gives up characters instead of vanishing.
+// Widening the window hands them straight back: the stored width never changed.
+export function trackPair(firstCh: number): string {
+  return `minmax(0, ${firstCh}ch) ${SPLITTER_PX}px minmax(${MIN_WIDTH_CH}ch, 1fr)`;
+}
+
 export function gridTemplateColumns(v: ViewState): string {
   // Visual order: chat (center, never collapses) | the pane (right). A collapsed pane
-  // takes no space at all — chat has absorbed its width.
-  if (v.right.collapsed) return `${v.center.widthPct}fr`;
-  return `${v.center.widthPct}fr ${SPLITTER_PX}px ${v.right.widthPct}fr`;
-}
-
-// Collapse/expand use "prior width" semantics: savedWidthPct records the pane's width the
-// instant before it collapsed, and expand restores exactly that. Chat absorbs the freed
-// width and gives it back on expand, so a collapse+expand round-trips perfectly.
-function collapse(v: ViewState): ViewState {
-  return {
-    ...v,
-    center: { ...v.center, widthPct: v.center.widthPct + v.right.widthPct },
-    right: {
-      ...v.right,
-      collapsed: true,
-      savedWidthPct: v.right.widthPct,
-      widthPct: 0,
-    },
-  };
-}
-
-function expand(v: ViewState): ViewState {
-  const target = v.right.savedWidthPct;
-  return {
-    ...v,
-    center: { ...v.center, widthPct: v.center.widthPct - target },
-    right: { ...v.right, collapsed: false, widthPct: target },
-  };
+  // takes no space at all, so chat stretches over the whole row and shrinks back on
+  // expand.
+  if (v.right.collapsed) return "1fr";
+  return trackPair(v.chatWidthCh);
 }
 
 export function toggleCollapse(v: ViewState, _id: SideId): ViewState {
-  return v.right.collapsed ? expand(v) : collapse(v);
+  return { ...v, right: { ...v.right, collapsed: !v.right.collapsed } };
 }
 
 export function setExplorerHidden(v: ViewState, hidden: boolean): ViewState {
@@ -229,9 +207,7 @@ function isModuleRef(r: unknown): boolean {
 function isColumnState(c: unknown): boolean {
   if (typeof c !== "object" || c === null) return false;
   const col = c as Record<string, unknown>;
-  return typeof col.widthPct === "number" &&
-    typeof col.collapsed === "boolean" &&
-    typeof col.savedWidthPct === "number" &&
+  return typeof col.collapsed === "boolean" &&
     typeof col.activeTabId === "string" &&
     Array.isArray(col.rows) && col.rows.every(isModuleRef) &&
     // The center may hold zero tabs (all closed); sides always have rows. When the
@@ -243,7 +219,7 @@ function isColumnState(c: unknown): boolean {
 function isExplorerState(e: unknown): boolean {
   if (typeof e !== "object" || e === null) return false;
   const ex = e as Record<string, unknown>;
-  return typeof ex.widthPct === "number" && typeof ex.hidden === "boolean";
+  return typeof ex.widthCh === "number" && typeof ex.hidden === "boolean";
 }
 
 // Structural guard for persisted state: rejects valid JSON of the wrong shape so a
@@ -251,7 +227,7 @@ function isExplorerState(e: unknown): boolean {
 export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
-  return typeof obj.id === "string" &&
+  return typeof obj.id === "string" && typeof obj.chatWidthCh === "number" &&
     isColumnState(obj.center) && isColumnState(obj.right) &&
     isExplorerState(obj.explorer);
 }

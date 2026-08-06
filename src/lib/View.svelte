@@ -1,6 +1,7 @@
 <script lang="ts">
   import { resizeBoundary } from "./store.ts";
   import { fixedPx, gridTemplateColumns, type ViewState } from "./layout.ts";
+  import { chPx } from "./ch.ts";
   import Column from "./Column.svelte";
   import Splitter from "./Splitter.svelte";
 
@@ -15,12 +16,14 @@
   let centerEl: HTMLElement | undefined = $state();
 
   // The outer splitter sits between chat and the pane; chat is its visually-left column.
+  // Chat is sized in ch, so the pointer's px are converted through one character's width.
   function onDrag(clientX: number) {
     if (!centerEl || !gridEl) return;
     const flexPx = gridEl.clientWidth - fixedPx(view);
-    if (flexPx <= 0) return;
-    const newFirstPx = clientX - centerEl.getBoundingClientRect().left;
-    resizeBoundary(view.id, "center-right", (newFirstPx / flexPx) * 100);
+    const ch = chPx(gridEl);
+    if (flexPx <= 0 || ch <= 0) return;
+    const left = centerEl.getBoundingClientRect().left;
+    resizeBoundary(view.id, "center-right", (clientX - left) / ch, flexPx / ch);
   }
 </script>
 

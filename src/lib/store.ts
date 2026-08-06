@@ -113,9 +113,10 @@ function edit(viewId: string, fn: (v: ViewState) => ViewState): void {
 export function resizeBoundary(
   viewId: string,
   b: Boundary,
-  newFirstPct: number,
+  newFirstCh: number,
+  availableCh: number,
 ): void {
-  edit(viewId, (v) => resize(v, b, newFirstPct));
+  edit(viewId, (v) => resize(v, b, newFirstCh, availableCh));
 }
 
 export function toggleCollapse(viewId: string, id: SideId): void {

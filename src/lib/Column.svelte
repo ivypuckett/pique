@@ -1,6 +1,13 @@
 <script lang="ts">
   import { resizeBoundary, setExplorerHidden, toggleCollapse } from "./store.ts";
-  import { type ColumnId, type ColumnState, type ExplorerState, SPLITTER_PX } from "./layout.ts";
+  import {
+    type ColumnId,
+    type ColumnState,
+    type ExplorerState,
+    SPLITTER_PX,
+    trackPair,
+  } from "./layout.ts";
+  import { chPx } from "./ch.ts";
   import ModuleFrame from "./ModuleFrame.svelte";
   import Splitter from "./Splitter.svelte";
   import TabStrip from "./TabStrip.svelte";
@@ -19,12 +26,15 @@
   const FileTree = registry["filetree"];
   let bodyEl: HTMLElement | undefined = $state();
 
-  // Inner splitter between the explorer and the tab content; the explorer is its left column.
+  // Inner splitter between the explorer and the tab content; the explorer is its left
+  // column, sized in ch, so the pointer's px are converted through one character's width.
   function onExplorerDrag(clientX: number) {
     if (!bodyEl) return;
     const flexPx = bodyEl.clientWidth - SPLITTER_PX;
-    if (flexPx <= 0) return;
-    resizeBoundary(viewId, "explorer-tabs", ((clientX - bodyEl.getBoundingClientRect().left) / flexPx) * 100);
+    const ch = chPx(bodyEl);
+    if (flexPx <= 0 || ch <= 0) return;
+    const left = bodyEl.getBoundingClientRect().left;
+    resizeBoundary(viewId, "explorer-tabs", (clientX - left) / ch, flexPx / ch);
   }
 </script>
 
@@ -56,9 +66,7 @@
     />
     <div
       class="grid min-h-0 min-w-0 flex-1 grid-rows-1"
-      style:grid-template-columns={hidden
-        ? "1fr"
-        : `${explorer!.widthPct}fr ${SPLITTER_PX}px ${100 - explorer!.widthPct}fr`}
+      style:grid-template-columns={hidden ? "1fr" : trackPair(explorer!.widthCh)}
       bind:this={bodyEl}
     >
       {#if !hidden}
