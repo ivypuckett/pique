@@ -1,7 +1,8 @@
 // The board: owns one SQLite connection and every board operation. This single
 // module is the shared surface — the frontend reaches it over win.bind (see the
 // kanban* handlers in desktop.ts) and the pi agent reaches it in-process — so all
-// mutations, logging, and derivation live here and nowhere else.
+// mutations, logging, and derivation live here and nowhere else. It also announces
+// a card's arrivals outward, to whoever openBoard was given a listener for.
 import { DatabaseSync } from "node:sqlite";
 import { SCHEMA } from "./schema.ts";
 
@@ -265,7 +266,10 @@ export function openBoard(
     try {
       opts.onCardArrived({ cardId, title, statusId, statusName: row.name });
     } catch (err) {
-      console.error("kanban: a card-arrival handler failed:", err);
+      console.error(
+        `kanban: card ${cardId} in ${row.name}: its arrival handler failed:`,
+        err,
+      );
     }
   };
 
