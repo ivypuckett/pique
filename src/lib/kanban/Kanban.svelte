@@ -18,8 +18,10 @@
   let board = $state<Board>({ statuses: [], cards: [] });
   let error = $state("");
   const statusName = $derived(new Map(board.statuses.map((s) => [s.id, s.name])));
+  // Cards carry no default title, so an untitled one stands in as "Untitled" wherever
+  // it is named — plain text here, and hint-styled where there is room to style it.
   const cardTitle = $derived(
-    new Map(board.cards.map((c) => [c.id, c.title || "(untitled)"])),
+    new Map(board.cards.map((c) => [c.id, c.title || "Untitled"])),
   );
 
   async function refresh(): Promise<void> {
@@ -153,10 +155,10 @@
   async function addCard(statusId: string): Promise<void> {
     if (!b || !scope) return;
     try {
-      // Number the default title so new cards are distinguishable in the board and
-      // in the parent/predecessor dropdowns until the user renames them.
-      const title = `New card ${board.cards.length + 1}`;
-      const { id } = await b.kanbanCreateCard({ scope, statusId, title });
+      // No default title. A real one ("New card 3") is text the user has to clear
+      // before typing their own; an untitled card shows a hint instead, which the
+      // title they type simply replaces.
+      const { id } = await b.kanbanCreateCard({ scope, statusId });
       await refresh();
       selectedId = id;
       // The drawer renders the title input only once the selection lands, so wait for
@@ -317,6 +319,27 @@
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
   let titleInput = $state<HTMLInputElement | null>(null);
 
+  // Escape gives the selected card up. A field keeps the first Escape for itself — the
+  // ones that revert already handle it, and leaving the field is what the key means
+  // there — so from inside the drawer it takes two presses: out of the field, then off
+  // the card. The modals own the key outright while they are open: the confirm dialog
+  // dismisses on it and marks it handled, which is what `defaultPrevented` catches —
+  // by the time this sees the event, the state that dialog was open for is already
+  // cleared. The reason modal handles no keys, so its own state still has to be read.
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    if (selectedId === null || pending || pendingDelete) return;
+    const el = e.target as HTMLElement | null;
+    if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) {
+      el.blur();
+      return;
+    }
+    selectedId = null;
+    // Cards are buttons, so clicking one also left it focused — closing the drawer but
+    // leaving the ring behind would only half let go of it.
+    if (el?.closest("[data-card-id]")) el.blur();
+  }
+
   // Subtasks: a card's own checklist, not cards of their own. Every edit rewrites the
   // whole list through setMetadata (the board has no per-subtask operation), so all
   // four of these end the same way.
@@ -440,7 +463,12 @@
   }
 </script>
 
-<svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} onresize={measureArrows} />
+<svelte:window
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onresize={measureArrows}
+  onkeydown={onKeydown}
+/>
 
 {#if !b}
   <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
@@ -537,7 +565,11 @@
                 onpointerenter={() => (hoveredId = c.id)}
                 onpointerleave={() => { if (hoveredId === c.id) hoveredId = null; }}
               >
-                <div class="truncate text-sm">{c.title || "(untitled)"}</div>
+                <div
+                  class="truncate text-sm"
+                  class:italic={!c.title}
+                  class:opacity-40={!c.title}
+                >{c.title || "Untitled"}</div>
                 <!-- Subtask progress leads the tag row: it is the card's own state, where
                      the tags are labels put on it. Outlined, so the two don't read alike. -->
                 {#if c.subtasks.length > 0 || Object.keys(c.tags).length > 0}
@@ -607,7 +639,7 @@
              spacing, not just the `for`. Same shape as the sections further down. -->
         <div class="flex flex-col gap-1">
           <label class="text-xs opacity-70" for="k-title">Title</label>
-          <input id="k-title" class="input input-bordered input-sm" bind:this={titleInput} bind:value={selected.title} onblur={saveMetadata} />
+          <input id="k-title" class="input input-bordered input-sm" placeholder="Untitled" bind:this={titleInput} bind:value={selected.title} onblur={saveMetadata} />
         </div>
 
         <div class="flex flex-col gap-1">
@@ -704,7 +736,7 @@
             >
               <option value="">+ Add predecessor…</option>
               {#each addablePredecessors as c (c.id)}
-                <option value={c.id}>{c.title || "(untitled)"}</option>
+                <option value={c.id}>{cardTitle.get(c.id)}</option>
               {/each}
             </select>
           {/if}
@@ -738,7 +770,7 @@
       class="pointer-events-none fixed z-50 max-w-56 truncate rounded border border-primary bg-base-100 px-2 py-1 text-sm shadow-lg"
       style="left: {dragPos.x + 12}px; top: {dragPos.y + 12}px;"
     >
-      {cardTitle.get(drag.cardId) ?? "(untitled)"}
+      {cardTitle.get(drag.cardId) ?? "Untitled"}
     </div>
   {/if}
 
