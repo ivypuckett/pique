@@ -26,7 +26,11 @@ import {
 } from "../chat/agent.ts";
 import { resolveAutomaton } from "./service.ts";
 import { splitModelRef } from "./parse.ts";
-import { resolveExtensionRefs, resolveSkillRefs } from "./resolve.ts";
+import {
+  excludedBuiltins,
+  resolveExtensionRefs,
+  resolveSkillRefs,
+} from "./resolve.ts";
 import { ensureAutomatonDirs, runPath, runsDir, sessionsDir } from "./paths.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
@@ -265,12 +269,17 @@ export async function launchAutomaton(
     ReturnType<typeof resolveExtensionRefs>
   >["customTools"];
   let skillPaths: string[];
+  // Which of pi's builtins to withhold. Resolved with the other refs so a `tools:` naming
+  // something that is not a builtin refuses the launch here, rather than running
+  // unrestricted because the name matched nothing.
+  let excludedToolNames: string[];
   try {
     ({ extensionPaths, customTools } = await resolveExtensionRefs(
       scope,
       def.extensions,
     ));
     skillPaths = await resolveSkillRefs(scope, def.skills);
+    excludedToolNames = excludedBuiltins(def.tools);
   } catch (err) {
     return await fail(err instanceof Error ? err.message : String(err));
   }
@@ -379,8 +388,26 @@ export async function launchAutomaton(
       // a job with a beginning, not a conversation to pick back up.
       sessionManager: SessionManager.create(cwd, sessionsDir(scope)),
       modelRuntime,
+      // pi's denylist (its `excludedToolNames`, under createAgentSession's name for it).
+      // Empty for an automaton with no `tools:` key, which is pi's own default of every
+      // builtin present. Extension tools and `pique:` groups are never in this list —
+      // `extensions:` is what governs those, and the SDK's sibling `tools:` allowlist
+      // would have filtered them too.
+      excludeTools: excludedToolNames,
     });
     session = created.session;
+    // Excluding the un-named builtins is only half of it. pi's default ACTIVE set is
+    // [read, bash, edit, write] — `grep`, `find` and `ls` are registered but inactive —
+    // so an automaton naming `grep` would otherwise exclude the others and still not get
+    // it, a file that reads like a capability and delivers nothing. The SDK's own
+    // `tools:` option would activate them, but it is an allowlist that filters extension
+    // tools and customTools too, which is exactly what must not happen here. So the named
+    // builtins are activated directly, on top of whatever the capability set contributed.
+    if (def.tools !== undefined) {
+      session.setActiveToolsByName([
+        ...new Set([...session.getActiveToolNames(), ...def.tools]),
+      ]);
+    }
     queue = [];
     unsubscribe = session.subscribe((event: unknown) => {
       const mapped = toFrontendEvent(event);

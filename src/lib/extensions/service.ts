@@ -27,7 +27,13 @@ import {
   revokePackage,
   searchExtensions,
 } from "./packages.ts";
-import type { ScopeId } from "../scope/paths.ts";
+import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
+import {
+  chain,
+  ensureScopeDirs,
+  scopeAgentDir,
+  type ScopeId,
+} from "../scope/paths.ts";
 
 export {
   type ExtSearchResult,
@@ -56,6 +62,11 @@ export type ExtensionSource = {
   files: { path: string; text: string }[];
   skills: string[];
   truncated: boolean;
+  // What was on disk when this was read, over the FULL bytes rather than the clamped
+  // `text` above — an enable that quoted the truncated display would be approving less
+  // than it checked. Handed back to `enableExtension` so a file rewritten between
+  // review and Enable cannot be enabled on the strength of the old reading.
+  digest: string;
 };
 
 // A bundled npm entry file can be megabytes, and this crosses win.bind to land in a
@@ -116,9 +127,10 @@ export async function listExtensions(scope: ScopeId): Promise<Extension[]> {
   return out;
 }
 
-// What an agent in `scope` can reach: its own extensions, plus ancestors' enabled LOCAL
-// ones. Packages are deliberately not inherited (packages.ts), so an ancestor's package
-// never appears here — that asymmetry is real and the UI must show it as such.
+// What an agent in `scope` can reach: its own extensions, plus everything its ancestors
+// have enabled — local modules and packages alike. Both origins inherit now; the list
+// has to say so, because it is the only place a user can see why an agent has a tool
+// that this scope never enabled.
 export async function listVisibleExtensions(
   scope: ScopeId,
 ): Promise<Extension[]> {
@@ -131,12 +143,102 @@ export async function listVisibleExtensions(
       state: "enabled",
       scope: l.scope,
     }));
+  for (const ancestor of chain(scope).filter((s) => s !== scope)) {
+    for (const pkg of await listEnabledPackages(ancestor)) {
+      inherited.push({
+        id: extensionId("package", pkg.source),
+        name: pkg.source,
+        origin: "package",
+        state: "enabled",
+        scope: ancestor,
+        source: pkg.source,
+        path: pkg.path,
+      });
+    }
+  }
   return [...inherited, ...await listExtensions(scope)];
+}
+
+// Every extension file an agent in `scope` inherits from its ANCESTORS — the list that
+// becomes `additionalExtensionPaths`. Two kinds, and they arrive by different routes: a
+// local module is a path in the ancestor's extensions/ dir, while a package has to be
+// resolved through the ancestor's package manager to the entry files pi would run. The
+// option takes FILES, so handing it the package's directory would fail with "Cannot find
+// module" and the package would silently never load.
+//
+// A source that will not resolve is skipped rather than thrown: it is usually bytes
+// removed behind pi's back, and one broken package in root must not stop every workspace
+// agent from starting. It still shows up in `extensionLoadErrors`, which loads the same
+// set.
+export async function inheritedExtensionPaths(
+  scope: ScopeId,
+): Promise<string[]> {
+  const paths = await inheritedExtensionFiles(scope);
+  for (const ancestor of chain(scope).filter((s) => s !== scope)) {
+    for (const pkg of await listEnabledPackages(ancestor)) {
+      try {
+        const { extensions } = await resolvePackageFiles(ancestor, pkg.source);
+        paths.push(...extensions);
+      } catch {
+        continue;
+      }
+    }
+  }
+  return paths;
 }
 
 function clamp(text: string): { text: string; truncated: boolean } {
   if (text.length <= MAX_REVIEW_BYTES) return { text, truncated: false };
   return { text: text.slice(0, MAX_REVIEW_BYTES), truncated: true };
+}
+
+// Everything that would actually run, unclamped: what the digest is taken over and what
+// the review pane is then a truncated view of.
+async function fullSource(
+  scope: ScopeId,
+  id: string,
+  state: ExtState,
+): Promise<{ files: { path: string; text: string }[]; skills: string[] }> {
+  const { origin, key } = parseId(id);
+  if (origin === "local") {
+    return {
+      files: [{
+        path: `${key}.ts`,
+        text: await readLocalSource(scope, key, state),
+      }],
+      skills: [],
+    };
+  }
+  const { extensions, skills } = await resolvePackageFiles(scope, key);
+  const files: { path: string; text: string }[] = [];
+  for (const path of extensions) {
+    // A resolved path can be missing if the bytes were removed behind our back; show
+    // the gap rather than failing the whole review.
+    const raw = await Deno.readTextFile(path).catch((e) =>
+      `// unreadable: ${e.message}`
+    );
+    files.push({ path, text: raw });
+  }
+  return { files, skills };
+}
+
+// Paths as well as contents, so swapping which entry files a package resolves to counts
+// as a change even when every individual file still reads the same. NUL separates the
+// fields because it cannot occur in a path and will not occur in source — concatenating
+// them plainly would let a file whose text ends in the next file's name collide.
+async function digestOf(
+  files: { path: string; text: string }[],
+): Promise<string> {
+  const joined = files.map((f) => `${f.path}\u0000${f.text}`).join(
+    "\u0000\u0000",
+  );
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(joined),
+  );
+  return [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // The bytes a human reads before enabling. For a package this resolves the entry files
@@ -147,32 +249,34 @@ export async function readExtension(
   id: string,
   state: ExtState,
 ): Promise<ExtensionSource> {
-  const { origin, key } = parseId(id);
-  if (origin === "local") {
-    const { text, truncated } = clamp(await readLocalSource(scope, key, state));
-    return { files: [{ path: `${key}.ts`, text }], skills: [], truncated };
-  }
-  const { extensions, skills } = await resolvePackageFiles(scope, key);
-  const files: { path: string; text: string }[] = [];
+  const { files, skills } = await fullSource(scope, id, state);
   let truncated = false;
-  for (const path of extensions) {
-    // A resolved path can be missing if the bytes were removed behind our back; show
-    // the gap rather than failing the whole review.
-    const raw = await Deno.readTextFile(path).catch((e) =>
-      `// unreadable: ${e.message}`
-    );
-    const c = clamp(raw);
+  const shown = files.map((f) => {
+    const c = clamp(f.text);
     truncated ||= c.truncated;
-    files.push({ path, text: c.text });
-  }
-  return { files, skills, truncated };
+    return { path: f.path, text: c.text };
+  });
+  return { files: shown, skills, truncated, digest: await digestOf(files) };
 }
 
+// `expectDigest` is the reading the human actually approved. A Library tab can sit open
+// for hours between Review and Enable, and an agent with `write` can rewrite the file in
+// that window — so the check is here rather than in the component, where it would be a
+// courtesy rather than a gate.
 export async function enableExtension(
   scope: ScopeId,
   id: string,
+  expectDigest?: string,
 ): Promise<void> {
   const { origin, key } = parseId(id);
+  if (expectDigest !== undefined) {
+    const { files } = await fullSource(scope, id, "pending");
+    if (await digestOf(files) !== expectDigest) {
+      throw new Error(
+        "This extension changed on disk after you reviewed it — read it again before enabling.",
+      );
+    }
+  }
   if (origin === "local") return await enableLocal(scope, key);
   return await enablePackage(scope, key);
 }
@@ -196,4 +300,30 @@ export async function removeExtension(
   const { origin, key } = parseId(id);
   if (origin === "local") return await removeLocal(scope, key, state);
   return await removePackage(scope, key);
+}
+
+// Which enabled extensions pi could not actually load. An extension that fails to import
+// is still `enabled` by this module's invariant — the file is in the loading set — so
+// nothing in the list distinguishes it from one that works, and pi's own reload swallows
+// the failure (chat/reload_resilience_test.ts probe B). Reading it back off the loader is
+// the only way Library can say so.
+//
+// The loader is built the way chat/agent.ts builds one for a chat agent, minus the
+// prompt layers, so the answer is about the set that scope's agents really load.
+export async function extensionLoadErrors(
+  scope: ScopeId,
+): Promise<Array<{ name: string; error: string }>> {
+  await ensureScopeDirs(scope);
+  const loader = new DefaultResourceLoader({
+    cwd: Deno.cwd(),
+    agentDir: scopeAgentDir(scope),
+    additionalExtensionPaths: await inheritedExtensionPaths(scope),
+  });
+  await loader.reload();
+  const errors: Array<{ path: string; error: string }> =
+    loader.getExtensions().errors ?? [];
+  return errors.map((e) => ({
+    name: e.path.split("/").pop()?.replace(/\.[jt]s$/, "") ?? e.path,
+    error: e.error,
+  }));
 }

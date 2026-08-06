@@ -16,7 +16,16 @@ export interface ExtensionBindings {
   extensionsRead(
     arg: { scope: string; id: string; state: ExtState },
   ): Promise<ExtensionSource>;
-  extensionsEnable(arg: { scope: string; id: string }): Promise<unknown>;
+  // `expectDigest` is the reading the user reviewed; the backend refuses the enable
+  // if the bytes changed since (service.ts:enableExtension).
+  extensionsEnable(
+    arg: { scope: string; id: string; expectDigest?: string },
+  ): Promise<unknown>;
+  // Enabled extensions pi could not load — `enabled` and broken look identical
+  // in the list otherwise.
+  extensionsLoadErrors(
+    arg: { scope: string },
+  ): Promise<Array<{ name: string; error: string }>>;
   extensionsRevoke(arg: { scope: string; id: string }): Promise<unknown>;
   extensionsRemove(
     arg: { scope: string; id: string; state: ExtState },

@@ -34,6 +34,11 @@
   let reviewing = $state<string | null>(null);
   let reviewed = $state<ExtensionSource | null>(null);
 
+  // Enabled extensions pi could not actually import. Listed on their own rather than
+  // marked against a row: a package's failure names a file inside its install tree, not
+  // the source string the row shows, so matching them up would silently miss.
+  let loadErrors = $state<Array<{ name: string; error: string }>>([]);
+
   // `visible` is everything reachable from the selected scope. Only the scope's OWN
   // extensions can be acted on here; inherited ones are managed where they live.
   const ownPending = $derived(visible.filter((e) => e.state === "pending" && e.scope === scope));
@@ -57,11 +62,22 @@
     confirming = true;
   }
 
+  // Both reads are fired without being awaited by the $effect below, so a second scope
+  // switch can land while the first is still in flight. Whatever comes back for a scope
+  // that is no longer selected is dropped rather than painted over the current one.
   async function refreshExts(): Promise<void> {
     if (!ext) return;
+    const forScope = scope;
     try {
-      visible = await ext.extensionsVisible({ scope });
+      const [next, failures] = await Promise.all([
+        ext.extensionsVisible({ scope: forScope }),
+        ext.extensionsLoadErrors({ scope: forScope }).catch(() => []),
+      ]);
+      if (forScope !== scope) return;
+      visible = next;
+      loadErrors = failures;
     } catch (e) {
+      if (forScope !== scope) return;
       extError = e instanceof Error ? e.message : String(e);
     }
   }
@@ -109,6 +125,7 @@
   // The mutations share a shape: run, re-list, report. `notice` is what the user sees
   // on success — each spells out when the change actually takes effect.
   async function extAction(run: () => Promise<unknown>, notice: string): Promise<void> {
+    const forScope = scope;
     busy = true;
     extError = "";
     extNotice = "";
@@ -116,9 +133,11 @@
       await run();
       reviewing = null;
       await refreshExts();
-      extNotice = notice;
+      // A scope switch during the mutation would otherwise report "Enabled X" over a
+      // list that no longer contains X.
+      if (forScope === scope) extNotice = notice;
     } catch (e) {
-      extError = e instanceof Error ? e.message : String(e);
+      if (forScope === scope) extError = e instanceof Error ? e.message : String(e);
     }
     busy = false;
   }
@@ -178,7 +197,8 @@
   <div class="mt-0.5 text-xs opacity-70">
     Extensions add tools and commands to Chat — either a pi package or a module
     written by you or by an agent. Nothing runs until you read its code and enable
-    it here, and then only in Chat modules opened afterwards.
+    it here — then in Chat modules opened afterwards, or in one already open when
+    you type <code>/reload</code> in it.
   </div>
 
   <!-- Awaiting review: both origins, together. Enable stays disabled until the
@@ -207,8 +227,15 @@
                 title={reviewing === extKey(e) ? "" : "Review the code first"}
                 onclick={() =>
                 extAction(
-                  () => ext.extensionsEnable({ scope, id: e.id }),
-                  `Enabled ${e.name}. Open a new Chat module to load it.`,
+                  () =>
+                    ext.extensionsEnable({
+                      scope,
+                      id: e.id,
+                      // What was actually read. The backend refuses the enable if the
+                      // bytes changed since, however long this tab has been open.
+                      expectDigest: reviewed?.digest,
+                    }),
+                  `Enabled ${e.name}. Type /reload in a Chat module to load it there.`,
                 )}
               >Enable</button>
               <button
@@ -237,6 +264,26 @@
     <div class="text-xs opacity-60">Nothing awaiting review.</div>
   {/if}
 
+  <!-- Enabled but unloadable. Without this the row above reads exactly like a working
+       extension: the file IS in pi's loading set, which is what "enabled" means here,
+       and pi's own reload swallows the import failure. -->
+  {#if loadErrors.length > 0}
+    <div class="mt-4 rounded border border-error/50 p-2">
+      <div class="text-xs text-error">
+        Enabled, but {loadErrors.length === 1 ? "one extension" : "these extensions"}
+        failed to load — the agent does not get {loadErrors.length === 1 ? "its" : "their"} tools:
+      </div>
+      <ul class="mt-1 space-y-1">
+        {#each loadErrors as f (f.name)}
+          <li class="text-[0.65rem]">
+            <span class="font-mono opacity-80">{f.name}</span>
+            <span class="opacity-60"> — {f.error.split("\n")[0]}</span>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+
   <!-- Enabled: both origins mixed, distinguished by the badge rather than by
        living in a separate section. Revoke returns to review; Delete removes. -->
   <div class="mt-4 mb-2 text-xs opacity-70">Enabled:</div>
@@ -262,7 +309,7 @@
                 onclick={() =>
                 extAction(
                   () => ext.extensionsRevoke({ scope, id: e.id }),
-                  `Revoked ${e.name}. It is back in Awaiting review; reopen Chat modules to apply.`,
+                  `Revoked ${e.name}. It is back in Awaiting review; /reload a Chat module to apply.`,
                 )}
               >Revoke</button>
               <button
@@ -272,7 +319,7 @@
                 onclick={() =>
                 extAction(
                   () => ext.extensionsRemove({ scope, id: e.id, state: "enabled" }),
-                  `Deleted ${e.name}. Reopen Chat modules to apply.`,
+                  `Deleted ${e.name}. /reload a Chat module to apply.`,
                 )}
               >Delete</button>
             </div>
@@ -288,17 +335,20 @@
   {/if}
 
   <!-- Inherited from root: visible to this workspace's agents, but enabled and
-       revoked in root, so they are read-only here. Packages are deliberately NOT
-       inherited, which is why this group says "modules" — see docs/extensions.md. -->
+       revoked in root, so they are read-only here. Both origins inherit — the badge
+       distinguishes them, the way it does in the Enabled group. -->
   {#if inherited.length > 0}
     <div class="mt-4 mb-2 text-xs opacity-70">
-      Inherited from Root <span class="opacity-60">— modules only; packages are per-scope</span>:
+      Inherited from Root <span class="opacity-60">— enabled and revoked there, not here</span>:
     </div>
     <ul class="max-h-40 divide-y divide-base-300 overflow-y-auto rounded border border-dashed border-base-300">
       {#each inherited as e (extKey(e))}
         <li class="px-3 py-2">
           <div class="flex items-center justify-between gap-2">
-            <span class="truncate font-mono text-xs opacity-70">{e.name}</span>
+            <span class="flex min-w-0 items-center gap-1.5">
+              <span class="badge badge-ghost badge-xs shrink-0">{e.origin}</span>
+              <span class="truncate font-mono text-xs opacity-70" title={e.path ?? e.name}>{e.name}</span>
+            </span>
             <button
               type="button"
               class="btn btn-ghost btn-xs shrink-0"

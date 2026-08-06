@@ -3,6 +3,7 @@ import {
   enableExtension,
   type Extension,
   extensionId,
+  extensionLoadErrors,
   listExtensions,
   listVisibleExtensions,
   parseId,
@@ -17,6 +18,25 @@ import {
   pendingPath,
 } from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
+
+// A module that really does import and register, so "loads" vs "does not load" is a
+// distinction the loader draws rather than one the fixture asserts.
+const HEALTHY_EXTENSION =
+  `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+
+export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "fixture_tool",
+    label: "fixture_tool",
+    description: "service fixture",
+    parameters: Type.Object({}),
+    async execute() {
+      return { content: [{ type: "text", text: "ok" }], details: null };
+    },
+  });
+}
+`;
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const prev = Deno.env.get("HOME");
@@ -156,8 +176,10 @@ Deno.test("root's pending local extensions are not visible to a workspace", asyn
 
 // The asymmetry the merged list has to be honest about: local extensions are inherited
 // from root, packages are not (see docs/extensions.md).
-Deno.test("root's packages are NOT inherited by a workspace", async () => {
+Deno.test("root's packages AWAITING REVIEW are not inherited", async () => {
   await withTempHome(async () => {
+    // Enabled packages do inherit (integration_test.ts); a quarantined one is not
+    // enabled anywhere, so it reaches nobody.
     await seedPendingPackage(ROOT, "npm:pi-crew");
     assertEquals(await listVisibleExtensions("ws-1"), []);
   });
@@ -191,5 +213,125 @@ Deno.test("a pending record that lost its source falls back to the filename", as
       "{}",
     );
     assertEquals((await listExtensions("ws-1"))[0].source, "npm:@scope/pkg");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The review-to-enable window. A Library tab stays open indefinitely, and the chat
+// agent has `write` — so "reviewed at 09:00, enabled at 17:00" is a real sequence, and
+// the bytes in between are not necessarily the ones that were read.
+// ---------------------------------------------------------------------------
+
+Deno.test("enabling with the digest that was reviewed succeeds", async () => {
+  await withTempHome(async () => {
+    await seedLocal("ws-1", "steady", "// the reviewed source");
+    const reviewed = await readExtension("ws-1", "local:steady", "pending");
+
+    await enableExtension("ws-1", "local:steady", reviewed.digest);
+
+    const enabled = (await listExtensions("ws-1")).find((e) =>
+      e.name === "steady"
+    );
+    assertEquals(enabled?.state, "enabled");
+  });
+});
+
+Deno.test("enabling refuses a source that changed after it was reviewed", async () => {
+  await withTempHome(async () => {
+    await seedLocal("ws-1", "swapped", "// the reviewed source");
+    const reviewed = await readExtension("ws-1", "local:swapped", "pending");
+
+    // What an agent with `write` can do while the tab sits open.
+    await Deno.writeTextFile(
+      pendingPath("ws-1", "swapped"),
+      "// something else entirely",
+    );
+
+    let message = "";
+    try {
+      await enableExtension("ws-1", "local:swapped", reviewed.digest);
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+
+    assertEquals(
+      message.includes("changed on disk"),
+      true,
+      `the enable must be refused, got: ${message || "no error"}`,
+    );
+    const after = (await listExtensions("ws-1")).find((e) =>
+      e.name === "swapped"
+    );
+    assertEquals(
+      after?.state,
+      "pending",
+      "and it must still be awaiting review, not enabled",
+    );
+  });
+});
+
+Deno.test("the digest covers the full source, not the truncated display", async () => {
+  await withTempHome(async () => {
+    // Longer than MAX_REVIEW_BYTES, differing only past the clamp: a digest taken over
+    // the displayed text would call these two identical and let the swap through.
+    const head = "//" + "x".repeat(200_000);
+    await seedLocal("ws-1", "long", head + "// before");
+    const reviewed = await readExtension("ws-1", "local:long", "pending");
+    assertEquals(reviewed.truncated, true, "precondition: display is clamped");
+
+    await Deno.writeTextFile(pendingPath("ws-1", "long"), head + "// after");
+    let refused = false;
+    try {
+      await enableExtension("ws-1", "local:long", reviewed.digest);
+    } catch {
+      refused = true;
+    }
+    assertEquals(refused, true, "a change past the clamp must still be caught");
+  });
+});
+
+Deno.test("enabling without a digest still works, for callers that never reviewed", async () => {
+  await withTempHome(async () => {
+    await seedLocal("ws-1", "direct", "// src");
+    await enableExtension("ws-1", "local:direct");
+    const after = (await listExtensions("ws-1")).find((e) =>
+      e.name === "direct"
+    );
+    assertEquals(after?.state, "enabled");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Load failures. An extension that will not import is still `enabled` by this module's
+// invariant, so the list alone cannot distinguish it from one that works.
+// ---------------------------------------------------------------------------
+
+Deno.test("a broken enabled extension is reported, a healthy one is not", async () => {
+  await withTempHome(async () => {
+    await seedLocal("ws-1", "healthy", HEALTHY_EXTENSION);
+    await enableLocal("ws-1", "healthy");
+    await seedLocal("ws-1", "broken", "this is not valid typescript ((((");
+    await enableLocal("ws-1", "broken");
+
+    const errors = await extensionLoadErrors("ws-1");
+
+    assertEquals(
+      errors.map((e) => e.name),
+      ["broken"],
+      "only the one that cannot load is named",
+    );
+    assertEquals(
+      errors[0].error.length > 0,
+      true,
+      "with a reason to show the user",
+    );
+  });
+});
+
+Deno.test("a scope whose extensions all load reports nothing", async () => {
+  await withTempHome(async () => {
+    await seedLocal("ws-1", "fine", HEALTHY_EXTENSION);
+    await enableLocal("ws-1", "fine");
+    assertEquals(await extensionLoadErrors("ws-1"), []);
   });
 });

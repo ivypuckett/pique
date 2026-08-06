@@ -9,11 +9,13 @@ import { assert, assertEquals } from "@std/assert";
 import {
   enableExtension,
   listExtensions,
+  listVisibleExtensions,
   readExtension,
   removeExtension,
   revokeExtension,
 } from "./service.ts";
 import { fetchPackage } from "./packages.ts";
+import { ROOT } from "../scope/paths.ts";
 
 const ENTRY_SOURCE =
   'export default function (pi) { pi.registerTool({ name: "hello" }); }\n';
@@ -116,6 +118,29 @@ Deno.test("removing a pending package clears it from the list", async () => {
     const [pending] = await listExtensions("ws-1");
 
     await removeExtension("ws-1", pending.id, "pending");
+    assertEquals(await listExtensions("ws-1"), []);
+  });
+});
+
+// Packages inherit down the scope chain the way local modules do (scopes.md deferred
+// #1, now built). The list has to show it: an inherited package is the only explanation
+// for a workspace agent holding a tool that workspace never enabled.
+Deno.test("root's enabled package is visible to a workspace, labelled as root's", async () => {
+  await withTempHome(async (home) => {
+    const source = await makePackage(home);
+    await fetchPackage(ROOT, source);
+    const [pending] = await listExtensions(ROOT);
+    await enableExtension(ROOT, pending.id);
+
+    const visible = await listVisibleExtensions("ws-1");
+
+    assertEquals(visible.length, 1);
+    assertEquals(visible[0].origin, "package");
+    assertEquals(visible[0].state, "enabled");
+    // Labelled with the scope that owns it, which is what stops the UI offering
+    // Revoke on something this workspace cannot act on.
+    assertEquals(visible[0].scope, ROOT);
+    // And it stays out of the workspace's OWN list, which is what Library acts on.
     assertEquals(await listExtensions("ws-1"), []);
   });
 });

@@ -21,6 +21,7 @@ description: Sorts new cards into columns and comments its reasoning.
 prompt: daily-triage
 extensions: [pique:kanban, kanban_notes, npm:pi-crew]
 skills: [changelog-style]
+tools: [read, grep]
 model: anthropic/claude-opus-4
 ---
 ```
@@ -29,8 +30,33 @@ The filename minus `.md` is the name — there is no `name:` key, so the two can
 never disagree. Names match `/^[a-z0-9][a-z0-9-]*$/`; a file whose basename does
 not is skipped rather than breaking the listing.
 
-`prompt:` is **required**. `description:`, `extensions:`, `skills:` and `model:`
-are optional. Unknown keys are ignored.
+`prompt:` is **required**. `description:`, `extensions:`, `skills:`, `tools:`
+and `model:` are optional. Unknown keys are ignored.
+
+### `tools:` withholds pi's builtins
+
+`extensions:` says what capability a run gains. `tools:` says which of pi's own
+builtins — `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` — it keeps.
+**Absent and empty are different:** no key at all means every builtin, the
+behaviour of every automaton written before the key existed, while `tools: []`
+means none of them, leaving a run that can call only what its extensions gave
+it.
+
+It restricts builtins **only**. Naming an extension's tool here is an error, not
+a way to filter the capability set — `extensions:` governs that, and nothing in
+`tools:` can widen or narrow it. A name that is not a builtin refuses the
+launch, on the same terms as every other unresolvable reference below.
+
+Two mechanics worth knowing, both in `run.ts`:
+
+- It is implemented as pi's **denylist**, not its allowlist. `allowedToolNames`
+  filters extension tools and `pique:` groups too, so `tools: [read]` under an
+  allowlist would silently strip everything `extensions:` had just resolved —
+  precisely the silent underdelivery this feature set is built to prevent.
+- Excluding is not sufficient on its own. pi's default ACTIVE set is
+  `[read, bash, edit, write]`; `grep`, `find` and `ls` are registered but
+  inactive, so a run naming `grep` would exclude the rest and still not get it.
+  The named builtins are therefore activated explicitly after session creation.
 
 ### `prompt:` is what runs. The body is reserved.
 
@@ -118,15 +144,28 @@ it regardless of `noSkills`, which is the only way a skills-only package can
 work at all (see [extensions.md](extensions.md)). `skills:` is for a scope's own
 loose skills, not for packages'.
 
-### It is not a sandbox
+### It is still not a sandbox
 
-`noExtensions` and `noSkills` govern extension- and skill-provided capability
-only. pi's builtins — `read`, `write`, `edit`, `bash`, `grep` — are present in
-every run regardless of what the file names.
+`noExtensions` and `noSkills` govern extension- and skill-provided capability;
+`tools:` governs pi's builtins. Between them, **an automaton that cannot modify
+the filesystem IS now expressible** — `tools: [read, grep]` leaves a run with no
+`write`, `edit` or `bash` at all, and `automatons/run_integration_test.ts`
+drives that through a real session.
 
-**An automaton that cannot modify the filesystem is not expressible.** If you
-need that, it does not exist yet; see [extensions.md](extensions.md) Deferred
-#1. Do not read an automaton's short `extensions:` list as confinement.
+That is a genuine reduction in reach, and it is not the same as confinement:
+
+- It binds the **model's** tool calls, not the process. Anything an enabled
+  extension does inside its own `execute()` is untouched, and an extension can
+  do whatever Deno can. A run with `tools: []` and one extension that shells out
+  is not restricted in any meaningful sense.
+- Omitting the key is the default, and the default is everything. An automaton
+  written before this existed, or saved by any caller that does not know the
+  key, has every builtin.
+
+So the honest reading of a restricted automaton is "the model was handed a
+smaller set of levers", not "this run is contained". See
+[extensions.md](extensions.md) Deferred #1 for the interception that would make
+the gate itself real.
 
 ### An unresolvable reference refuses the launch
 
@@ -201,9 +240,11 @@ was inherited from root: the run and its record, and everything the run resolves
 against — base prompt, kanban board, working directory, and the model unless the
 file pins one.
 
-One asymmetry worth knowing: packages are not inherited. An automaton in root
-that names a package therefore only launches from a scope where that package is
-enabled.
+Extensions a file names are chain-resolved, packages included — an automaton in
+root that names a root package launches from a workspace too. What the check
+enforces is that a human enabled the package somewhere on the chain, not which
+scope; naming one that nobody enabled still refuses the launch rather than
+letting pi fetch it.
 
 ## Deferred
 
@@ -221,11 +262,12 @@ exists unused, ready for it. An automaton grants no capability its scope has not
 already approved, but it does create an unattended runner, which is worth a
 human reading first.
 
-### 3. Restricting pi's builtins
+### 3. Restricting pi's builtins — built as `tools:`
 
-Per above, `read`/`write`/`edit`/`bash` are always present.
-`session.setActiveToolsByName()` is the mechanism and would layer onto the
-capability set cleanly.
+Shipped; see the file format above. What is still unbuilt is the same control
+for **chat**, which has no `tools:` of its own — a chat agent gets every
+builtin, and there is no surface asking for anything else. Restricting builtins
+matters most where nobody is watching, which is why the automaton got it first.
 
 ### 4. Per-automaton thinking level and base prompt
 

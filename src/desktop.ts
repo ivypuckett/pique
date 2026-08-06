@@ -465,9 +465,20 @@ win.bind("extensionsRead", async (arg) => {
 });
 
 win.bind("extensionsEnable", async (arg) => {
-  const { scope, id } = arg as { scope: string; id: string };
-  await extensions.enableExtension(scope, id);
+  const { scope, id, expectDigest } = arg as {
+    scope: string;
+    id: string;
+    expectDigest?: string;
+  };
+  await extensions.enableExtension(scope, id, expectDigest);
   return true;
+});
+
+// Enabled-but-unloadable extensions, for Library to mark. Builds a loader per call
+// rather than caching: the answer is only interesting right after something changed.
+win.bind("extensionsLoadErrors", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await extensions.extensionLoadErrors(scope);
 });
 
 win.bind("extensionsRevoke", async (arg) => {

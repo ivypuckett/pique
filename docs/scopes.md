@@ -84,7 +84,7 @@ because the old paths were the only copy of the user's boards.
 | **Prompt templates** | `agentDir` + `additionalPromptTemplatePaths` | union, nearest name wins                              |
 | **Skills**           | `skills/service.ts:listVisibleSkills`        | union, nearest name wins                              |
 | **Automatons**       | `automatons/service.ts:resolveAutomaton`     | union, nearest name wins                              |
-| **Packages**         | `agentDir` only                              | **not inherited** (see Deferred #1)                   |
+| **Packages**         | `agentDir` + `additionalExtensionPaths`      | union — resolved to entry files first                 |
 | **Chat defaults**    | `resolveScopeConfig`                         | per key — override one field, inherit the rest        |
 | **cwd**              | `resolveModuleDir`                           | workspace's, else root's, else `$HOME`                |
 | **Kanban board**     | explicit `scope` argument                    | no merge — two boards, one addressable from the other |
@@ -96,8 +96,11 @@ assembled in `chat/agent.ts:startAgent` rather than by pi:
 
 - `agentDir` is the scope's own dir — its approved tools and its installed
   packages.
-- `additionalExtensionPaths` is every tool inherited from an ancestor, globbed
-  to explicit file paths by `tools/service.ts:inheritedExtensionFiles`.
+- `additionalExtensionPaths` is every extension inherited from an ancestor,
+  reduced to explicit file paths by
+  `extensions/service.ts:inheritedExtensionPaths` — an ancestor's local modules
+  directly, and its enabled packages by resolving each source to the entry files
+  pi would run.
 
 Two things about this are easy to get wrong and silent when you do:
 
@@ -201,21 +204,17 @@ live).
 
 ## Deferred
 
-### 1. Inheriting installed packages
+### 1. Inheriting installed packages — built
 
-A workspace agent gets root's local `.ts` extensions, but not root's installed
-npm packages. Wiring that means routing root's package sources through
-`additionalExtensionPaths`, which is dynamic `import()` of an npm package while
-`agentDir` is set — the exact operation a 2026-07-21 bisect blamed for a
-`RefCell already borrowed` panic in deno_core's `ModuleMap` under the desktop
-runtime.
-
-That panic was an upstream deno_core bug, fixed in Deno 2.9.4 (see
-[extensions.md](extensions.md) Known broken #5), so it is no longer a reason to
-defer this. What remains is only that `additionalExtensionPaths` is a
-_different_ code path from `settings.json` packages and has never been exercised
-here. Packages stay per-scope and un-inherited until someone wires it and tests
-it — now an ordinary piece of unbuilt work rather than a blocked one.
+A workspace agent now gets root's enabled npm packages as well as its local
+`.ts` modules. The deferral was about risk that no longer exists: routing root's
+package sources through `additionalExtensionPaths` is dynamic `import()` of an
+npm package with `agentDir` set, which a 2026-07-21 bisect blamed for a
+`RefCell already borrowed` panic in deno_core — an upstream bug fixed in Deno
+2.9.4 ([extensions.md](extensions.md) Known broken #5). Exercised now rather
+than assumed: `chat/scope_integration_test.ts` drives a real local-path package
+enabled in root through to a workspace agent's active tool list, and pins that
+it reaches neither root's own agent nor a sibling workspace.
 
 ### 2. Live reload into running sessions
 

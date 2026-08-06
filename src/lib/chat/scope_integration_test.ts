@@ -5,6 +5,8 @@
 import { assertEquals } from "@std/assert";
 import { activeToolNames, startAgent, stopAgent } from "./agent.ts";
 import { enableLocal } from "../extensions/local.ts";
+import { enableExtension, listExtensions } from "../extensions/service.ts";
+import { fetchPackage } from "../extensions/packages.ts";
 import { ensureExtensionDirs, pendingPath } from "../extensions/paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
@@ -133,6 +135,115 @@ Deno.test("pique's compiled-in tools are present in every scope", async () => {
         true,
         `kanban tools missing in ${scope}`,
       );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Packages, which inherit down the chain the way local modules do. This is the claim
+// scopes.md deferred #1 records as unbuilt: root's INSTALLED packages reaching a
+// workspace agent goes through additionalExtensionPaths, a different code path from
+// the settings.json one a scope's own packages take, and one never exercised here.
+//
+// Network-free by using a local-path package source, the way
+// extensions/integration_test.ts does — pi accepts one wherever it accepts npm:.
+// ---------------------------------------------------------------------------
+
+const PACKAGE_ENTRY =
+  `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+
+export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "pkg_tool",
+    label: "pkg_tool",
+    description: "package fixture",
+    parameters: Type.Object({}),
+    async execute() {
+      return { content: [{ type: "text", text: "ok" }], details: null };
+    },
+  });
+}
+`;
+
+async function makePackage(dir: string): Promise<string> {
+  const pkg = `${dir}/pkg`;
+  await Deno.mkdir(`${pkg}/extensions`, { recursive: true });
+  await Deno.writeTextFile(
+    `${pkg}/package.json`,
+    JSON.stringify({ name: "fixture-pkg", version: "1.0.0" }),
+  );
+  await Deno.writeTextFile(`${pkg}/extensions/pkg_tool.ts`, PACKAGE_ENTRY);
+  return pkg;
+}
+
+// Install into `scope` and enable it there, the whole Library path.
+async function installAndEnable(scope: ScopeId, source: string): Promise<void> {
+  await fetchPackage(scope, source);
+  const pending = (await listExtensions(scope)).find((e) =>
+    e.origin === "package" && e.state === "pending"
+  );
+  if (!pending) throw new Error("the fixture package was not quarantined");
+  await enableExtension(scope, pending.id);
+}
+
+Deno.test("a scope's OWN enabled package reaches its agent", async () => {
+  await withTempHome(async () => {
+    const home = Deno.env.get("HOME")!;
+    await installAndEnable("ws-1", await makePackage(home));
+
+    const ws = await startAgent({ scope: "ws-1" });
+    try {
+      assertEquals(
+        activeToolNames(ws).includes("pkg_tool"),
+        true,
+        "precondition: the settings.json path works",
+      );
+    } finally {
+      stopAgent(ws);
+    }
+  });
+});
+
+Deno.test("a workspace agent inherits root's enabled packages", async () => {
+  await withTempHome(async () => {
+    const home = Deno.env.get("HOME")!;
+    await installAndEnable(ROOT, await makePackage(home));
+
+    const ws = await startAgent({ scope: "ws-1" });
+    try {
+      assertEquals(
+        activeToolNames(ws).includes("pkg_tool"),
+        true,
+        "root's package must reach a workspace agent, as root's local modules do",
+      );
+    } finally {
+      stopAgent(ws);
+    }
+  });
+});
+
+Deno.test("a workspace's own package stays out of root and out of siblings", async () => {
+  await withTempHome(async () => {
+    const home = Deno.env.get("HOME")!;
+    await installAndEnable("ws-1", await makePackage(home));
+
+    const root = await startAgent({ scope: ROOT });
+    const sibling = await startAgent({ scope: "ws-2" });
+    try {
+      assertEquals(
+        activeToolNames(root).includes("pkg_tool"),
+        false,
+        "inheritance runs down the chain, never up",
+      );
+      assertEquals(
+        activeToolNames(sibling).includes("pkg_tool"),
+        false,
+        "and never sideways",
+      );
+    } finally {
+      stopAgent(root);
+      stopAgent(sibling);
     }
   });
 });

@@ -161,3 +161,54 @@ Deno.test("valid but non-object frontmatter is reported, not thrown", () => {
   assertEquals(a.prompt, "");
   assertEquals(a.error, "prompt: required");
 });
+
+// ---------------------------------------------------------------------------
+// `tools:` — which of pi's builtins a run may call. The distinction the tests below
+// exist for is absent vs empty: one means "every builtin", the other means "none", and
+// collapsing them either strips a working automaton or silently unrestricts a
+// deliberately restricted one.
+// ---------------------------------------------------------------------------
+
+Deno.test("an automaton with no tools: key is unrestricted, not empty", () => {
+  const a = parseAutomaton("t", '---\nprompt: "job"\n---\n');
+  assertEquals(a.tools, undefined);
+});
+
+Deno.test("tools: [] parses as a real restriction rather than as absent", () => {
+  const a = parseAutomaton("t", '---\nprompt: "job"\ntools: []\n---\n');
+  assertEquals(a.tools, []);
+});
+
+Deno.test("tools: names are kept in order", () => {
+  const a = parseAutomaton(
+    "t",
+    '---\nprompt: "job"\ntools: ["read", "grep"]\n---\n',
+  );
+  assertEquals(a.tools, ["read", "grep"]);
+});
+
+Deno.test("a non-list tools: value restricts to nothing rather than failing open", () => {
+  const a = parseAutomaton("t", '---\nprompt: "job"\ntools: "read"\n---\n');
+  assertEquals(
+    a.tools,
+    [],
+    "a limit that cannot be read must not become no limit",
+  );
+});
+
+Deno.test("tools: survives a file round-trip, empty list included", () => {
+  for (const tools of [undefined, [], ["read"], ["read", "bash"]]) {
+    const text = automatonFile({
+      description: "d",
+      prompt: "job",
+      extensions: [],
+      skills: [],
+      tools,
+    });
+    assertEquals(
+      parseAutomaton("t", text).tools,
+      tools,
+      `round-trip lost tools: ${JSON.stringify(tools)}`,
+    );
+  }
+});

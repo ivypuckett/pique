@@ -33,12 +33,24 @@
   // resolves by load order (prompts/service.ts) and the label has to say.
   const inheritedPrompts = $derived(scopeIsRoot ? [] : rootPrompts.filter((p) => p.state === "live"));
 
+  // Fired without being awaited by the $effect below, so two fast scope switches can
+  // land out of order. Both the scope AND scopeIsRoot are captured up front: reading
+  // the prop again after an await would mix one scope's list with the other's answer to
+  // "does this scope inherit".
   async function refreshPrompts(): Promise<void> {
     if (!prompts) return;
+    const forScope = scope;
+    const forIsRoot = scopeIsRoot;
     try {
-      ownPrompts = await prompts.promptsList({ scope });
-      rootPrompts = scopeIsRoot ? [] : await prompts.promptsList({ scope: ROOT });
+      const [own, inheritedFromRoot] = await Promise.all([
+        prompts.promptsList({ scope: forScope }),
+        forIsRoot ? Promise.resolve([]) : prompts.promptsList({ scope: ROOT }),
+      ]);
+      if (forScope !== scope) return;
+      ownPrompts = own;
+      rootPrompts = inheritedFromRoot;
     } catch (e) {
+      if (forScope !== scope) return;
       promptError = e instanceof Error ? e.message : String(e);
     }
   }
@@ -51,6 +63,7 @@
   // extra step: every mutation here changes what `/` offers, so the live conversations
   // re-read their menus.
   async function promptAction(run: () => Promise<unknown>, notice: string): Promise<void> {
+    const forScope = scope;
     promptBusy = true;
     promptError = "";
     promptNotice = "";
@@ -60,9 +73,11 @@
       draft = null;
       await refreshPrompts();
       refreshChatCommands();
-      promptNotice = notice;
+      // Switching scope mid-mutation would otherwise leave "Saved X" over another
+      // scope's list.
+      if (forScope === scope) promptNotice = notice;
     } catch (e) {
-      promptError = e instanceof Error ? e.message : String(e);
+      if (forScope === scope) promptError = e instanceof Error ? e.message : String(e);
     }
     promptBusy = false;
   }

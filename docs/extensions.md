@@ -74,6 +74,15 @@ For a package this is possible because `resolveExtensionSources()` works on a
 source that is installed but _not_ configured (verified 2026-08-03) — so you
 read the entry files pi would execute, not a source string you typed.
 
+**The reading is what gets enabled.** `readExtension` returns a SHA-256 digest
+of the full bytes — not the clamped text the review pane shows, or a long file
+could differ past the cut and still match — and Enable hands it back.
+`enableExtension` re-reads and refuses on a mismatch, so a Library tab left open
+between reviewing in the morning and enabling in the afternoon cannot approve
+something an agent rewrote in between. The check is in the service rather than
+the component deliberately: in the component it would be a courtesy that any
+other caller could skip.
+
 **What the gate is:** a curation and visibility boundary. Nothing becomes a
 persistent, silently-loaded capability without a human reading it first.
 
@@ -89,10 +98,19 @@ Local extensions are inherited: a workspace agent loads its own scope's
 `extensions/` plus root's, assembled in `chat/agent.ts` via
 `additionalExtensionPaths`.
 
-**Packages are not inherited** — install them per scope. This is deliberate, not
-an oversight; see [scopes.md](scopes.md) deferred #1. The Extensions list labels
-the inherited group accordingly, because one merged list would otherwise imply a
-symmetry that does not exist.
+**Packages are inherited too**, as of the same wiring. They travel a different
+route to get there: a local module is already a file path, while a package has
+to be resolved through its owning scope's package manager to the entry files pi
+would run, because `additionalExtensionPaths` takes FILES — handing it the
+package's directory fails with "Cannot find module" and it silently never loads.
+`service.ts:inheritedExtensionPaths` is where both are assembled, and
+`chat/scope_integration_test.ts` drives root's package through to a workspace
+agent's tool list.
+
+Only ENABLED packages inherit; one awaiting review is not enabled anywhere. A
+source that will not resolve is skipped rather than thrown, so one broken
+package in root cannot stop every workspace agent from starting — it still shows
+up under `extensionLoadErrors`, which loads the same set.
 
 ---
 
@@ -168,6 +186,15 @@ enabling it adds zero entries to `getActiveToolNames()`. This looks identical to
 a broken install. The review pane lists the skills a package ships partly so
 this is visible before enabling.
 
+The genuinely broken case is now distinguishable from it: an extension that
+fails to **import** is still `enabled` by this module's invariant — the file is
+in pi's loading set — and pi's reload swallows the error, so nothing in the list
+sets it apart. `service.ts:extensionLoadErrors` reads them back off a loader
+built the way `chat/agent.ts` builds one, and Library lists them above Enabled.
+They are shown as their own group rather than marked against a row, because a
+package's failure names a file inside its install tree rather than the source
+string the row shows, and matching the two up would quietly miss.
+
 ---
 
 ## Deferred
@@ -180,10 +207,17 @@ resolves inside the scope's `agent/` dir. Blocking `bash` reliably is the hard
 part — it means inspecting a shell command string for writes to a path, which is
 not robustly decidable. Expect to catch the common cases, not all of them.
 
-Restricting the tool set outright is the other half, and also unbuilt since
-profiles were removed. pi still takes an `allowedToolNames` allowlist at session
-creation and exposes `setActiveToolsByName` on a live session, so the mechanism
-is there — what is missing is anything in pique that decides what to pass.
+Restricting the tool set outright is the other half, and is now built **for
+automatons only**: an automaton file's `tools:` key names which builtins its run
+keeps ([automatons.md](automatons.md)). It is implemented with pi's denylist
+rather than its `allowedToolNames` allowlist, because the allowlist filters
+extension tools and `pique:` groups too — a restriction meant to remove `bash`
+would silently remove everything the run's `extensions:` had just resolved.
+
+Chat has no equivalent and no surface asking for one; a chat agent still gets
+every builtin. That asymmetry is deliberate rather than pending: an automaton
+runs unattended, which is where a smaller set of levers is worth the
+configuration.
 
 **Choosing what loads is not the same as containment, and cannot substitute for
 it.** `DefaultResourceLoader` takes `noExtensions` / `noSkills` /

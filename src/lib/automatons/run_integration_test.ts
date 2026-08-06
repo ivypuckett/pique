@@ -296,8 +296,9 @@ Deno.test("a run loads the extension it names and NOT the one the scope enabled 
       true,
       "a named pique: group must contribute its tools",
     );
-    // The capability set governs extensions and skills only. pi's builtins are in every
-    // session regardless — this is not a sandbox, and must not be mistaken for one.
+    // With no `tools:` key the capability set governs extensions and skills only, and
+    // pi's builtins are all present — the behaviour of every automaton written before
+    // that key existed. Restricting them is opt-in, below.
     assertEquals(
       tools.includes("read"),
       true,
@@ -531,5 +532,115 @@ Deno.test("stopping a run mid-flight leaves exactly one stopped record", async (
       1,
       "a stopped run is one record, not two",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 3 — `tools:`, which withholds pi's builtins.
+//
+// The claim worth driving through a real session is not that `read` disappears; it is
+// that withholding builtins does NOT take the run's own capability set with it. pi
+// applies its allowlist to extension tools and customTools as well as builtins, so a
+// naive `allowedToolNames: ["read"]` would silently strip everything `extensions:`
+// resolved — and the run would do less than its file says while reporting success.
+// ---------------------------------------------------------------------------
+
+Deno.test("a run naming tools: keeps exactly those builtins, and all of its extensions", async () => {
+  await withTempHome(async (cwd) => {
+    await defineAndApprove(SCOPE, "named_tool");
+    await savePrompt(SCOPE, "job", { description: "fixture", body: "say ok" });
+    await saveAutomaton(SCOPE, "restricted", {
+      description: "fixture",
+      prompt: "job",
+      extensions: ["named_tool", "pique:kanban"],
+      skills: [],
+      tools: ["read", "grep"],
+    });
+
+    const id = await launchAutomaton({ scope: SCOPE, name: "restricted", cwd });
+    const tools = activeToolNamesOfRun(id);
+
+    assertEquals(tools.includes("read"), true, "a named builtin stays");
+    assertEquals(tools.includes("grep"), true, "a named builtin stays");
+    assertEquals(
+      tools.includes("bash"),
+      false,
+      "an unnamed builtin must be withheld",
+    );
+    assertEquals(tools.includes("write"), false, "and so must the rest");
+    assertEquals(tools.includes("edit"), false, "and so must the rest");
+
+    // The whole point of excluding rather than allowlisting.
+    assertEquals(
+      tools.includes("named_tool"),
+      true,
+      "the extension the automaton named must survive the restriction",
+    );
+    assertEquals(
+      tools.includes("kanban_get_board"),
+      true,
+      "and so must a pique: group",
+    );
+
+    await stopRun(id);
+  });
+});
+
+Deno.test("a run with tools: [] gets no builtins at all, only what it named", async () => {
+  await withTempHome(async (cwd) => {
+    await defineAndApprove(SCOPE, "named_tool");
+    await savePrompt(SCOPE, "job", { description: "fixture", body: "say ok" });
+    await saveAutomaton(SCOPE, "bare", {
+      description: "fixture",
+      prompt: "job",
+      extensions: ["named_tool"],
+      skills: [],
+      tools: [],
+    });
+
+    const id = await launchAutomaton({ scope: SCOPE, name: "bare", cwd });
+    const tools = activeToolNamesOfRun(id);
+
+    for (const builtin of ["read", "bash", "edit", "write", "grep"]) {
+      assertEquals(
+        tools.includes(builtin),
+        false,
+        `tools: [] must withhold ${builtin}`,
+      );
+    }
+    assertEquals(
+      tools.includes("named_tool"),
+      true,
+      "an empty tools: is a restriction on builtins, not on the capability set",
+    );
+
+    await stopRun(id);
+  });
+});
+
+Deno.test("a tools: name that is not a builtin refuses the launch", async () => {
+  await withTempHome(async (cwd) => {
+    await savePrompt(SCOPE, "job", { description: "fixture", body: "say ok" });
+    await saveAutomaton(SCOPE, "typo", {
+      description: "fixture",
+      prompt: "job",
+      extensions: [],
+      skills: [],
+      tools: ["reed"],
+    });
+
+    let raised = "";
+    try {
+      await launchAutomaton({ scope: SCOPE, name: "typo", cwd });
+    } catch (err) {
+      raised = err instanceof Error ? err.message : String(err);
+    }
+    assertStringIncludes(raised, "not a pi builtin");
+
+    // And it is recorded as failed rather than leaving nothing behind, the way every
+    // other refused launch is.
+    const [record] = await listRuns(SCOPE);
+    assertEquals(record.status, "failed");
+    assertStringIncludes(record.error ?? "", "not a pi builtin");
   });
 });

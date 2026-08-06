@@ -7,6 +7,7 @@
 // loses nothing, and it is never sent to a model. `prompt:` is what runs
 // (docs/automatons.md).
 import { extract } from "@std/front-matter/yaml";
+export { PI_BUILTIN_TOOLS } from "./builtins.ts";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
 // signature and can cross the win.bind boundary as a JSON value.
@@ -17,6 +18,15 @@ export type Automaton = {
   prompt: string;
   extensions: string[];
   skills: string[];
+  // Which of pi's builtins (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) the
+  // run may call. ABSENT and EMPTY are different: absent means every builtin, the
+  // behaviour of every automaton written before this key existed, while `[]` means none
+  // of them — a run that can only call what `extensions:` gave it. That distinction is
+  // why this is `string[] | undefined` rather than a list defaulting to all.
+  //
+  // It restricts pi's builtins ONLY. Extension tools and `pique:` groups are governed by
+  // `extensions:`, and nothing here can widen or narrow that.
+  tools?: string[];
   // Which model the run uses, as `provider/model-id`. Absent means the scope's chat
   // default — what every automaton used before this key existed.
   model?: string;
@@ -101,12 +111,17 @@ export function parseAutomaton(name: string, text: string): Automaton {
   // an absent one, per the type comment above.
   const prompt = (str(attrs.prompt) ?? "").trim();
   const model = (str(attrs.model) ?? "").trim();
+  // Absent stays absent; a present-but-not-a-list value reads as an empty restriction
+  // rather than as "unrestricted", because a `tools:` the writer meant as a limit must
+  // never fail open.
+  const tools = attrs.tools === undefined ? undefined : strList(attrs.tools);
   return {
     name,
     description: str(attrs.description) ?? "",
     prompt,
     extensions: strList(attrs.extensions),
     skills: strList(attrs.skills),
+    tools,
     // "" and absent are the same thing — inherit the scope's default.
     model: model || undefined,
     body: body.trim(),
@@ -131,6 +146,7 @@ export function automatonFile(
     prompt: string;
     extensions: string[];
     skills: string[];
+    tools?: string[];
     model?: string;
   },
 ): string {
@@ -143,6 +159,9 @@ export function automatonFile(
     `prompt: ${JSON.stringify(a.prompt)}`,
     `extensions: ${list(a.extensions)}`,
     `skills: ${list(a.skills)}`,
+    // Written whenever it is defined, INCLUDING when empty: `tools: []` is a real
+    // restriction, and omitting it would silently hand the run every builtin back.
+    ...(a.tools ? [`tools: ${list(a.tools)}`] : []),
     // Omitted rather than written empty, so a file inheriting the scope's model looks
     // like every automaton written before the key existed.
     ...(model ? [`model: ${JSON.stringify(model)}`] : []),

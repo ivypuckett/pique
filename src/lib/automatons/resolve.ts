@@ -11,11 +11,12 @@
 //
 //   pique:<group>   a compiled-in tool group (customTools, not a path)
 //   <local name>    a `.ts` module in a scope's LIVE extensions dir, chain-resolved
-//   anything else   a package source, which must already be enabled in this scope
+//   anything else   a package source, which must already be enabled on the chain
 //
 // The last check is what stops an automaton from being a way around the review gate:
 // pi would happily fetch and load `npm:anything` handed to additionalExtensionPaths.
-// Packages are not inherited (docs/extensions.md), so only the launching scope counts.
+// Chain-resolved like local modules, since packages inherit too (docs/extensions.md) —
+// what the check enforces is that a HUMAN enabled it somewhere, not where.
 // Runs Deno-side only.
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { kanbanTools } from "../kanban/agent-tools.ts";
@@ -26,6 +27,9 @@ import { livePath } from "../extensions/paths.ts";
 import { resolveSkillPath } from "../skills/service.ts";
 import { skillsDir } from "../skills/paths.ts";
 import { chain, type ScopeId } from "../scope/paths.ts";
+import { PI_BUILTIN_TOOLS } from "./builtins.ts";
+
+export { PI_BUILTIN_TOOLS };
 
 // pique's compiled-in tool groups, nameable exactly as extensions are. Every group is
 // scope-bound: it acts on the scope the run belongs to.
@@ -37,6 +41,28 @@ export const BUILTIN_GROUPS: Record<
   "extension-authoring": extensionAuthoringTools,
   "prompt-authoring": promptAuthoringTools,
 };
+
+// An automaton's `tools:` → the builtins to EXCLUDE at session creation. Exclusion
+// rather than pi's `allowedToolNames` on purpose: an allowlist filters extension tools
+// and `pique:` groups too, so naming `tools: ["read"]` would silently strip everything
+// `extensions:` had just resolved — the exact silent-underdelivery this module exists to
+// prevent. Excluding the un-named builtins leaves the capability set alone.
+//
+// `undefined` means no restriction, which is every automaton written before the key
+// existed. An empty list is a restriction: exclude all of them.
+export function excludedBuiltins(tools: string[] | undefined): string[] {
+  if (tools === undefined) return [];
+  for (const name of tools) {
+    if (!(PI_BUILTIN_TOOLS as readonly string[]).includes(name)) {
+      throw new Error(
+        `not a pi builtin: ${JSON.stringify(name)} (one of ${
+          PI_BUILTIN_TOOLS.join(", ")
+        }; extension tools belong in extensions:)`,
+      );
+    }
+  }
+  return PI_BUILTIN_TOOLS.filter((b) => !tools.includes(b));
+}
 
 // A local extension name — the shape extensions/paths.ts constrains filenames to. The
 // `pique:` prefix cannot collide with one, because this admits no colon.
@@ -142,10 +168,18 @@ export async function resolveExtensionRefs(
     // is rejected even when its absolute equivalent is enabled. Fails closed, not a
     // bug: it means an automaton file can't rely on a path that depends on where a
     // pique process happens to be running from.
-    enabled ??= (await listEnabledPackages(scope)).map((p) => p.source);
+    // Enabled anywhere on the chain, matching how a chat agent loads them and how
+    // resolveLocal above already treats local modules. An inherited package is not a
+    // way around the review gate: a human enabled it in the scope that owns it.
+    if (!enabled) {
+      enabled = [];
+      for (const s of chain(scope)) {
+        for (const p of await listEnabledPackages(s)) enabled.push(p.source);
+      }
+    }
     if (!enabled.includes(ref)) {
       throw new Error(
-        `package not enabled in this scope: ${
+        `package not enabled in this scope or any it inherits: ${
           JSON.stringify(ref)
         } (enable it in Library → Extensions)`,
       );

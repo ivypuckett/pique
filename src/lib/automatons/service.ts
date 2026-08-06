@@ -105,6 +105,10 @@ export async function saveAutomaton(
     prompt: string;
     extensions: string[];
     skills: string[];
+    // Absent means unrestricted; see parse.ts. Passed through rather than defaulted, so
+    // a caller that does not know about the key cannot turn `tools: []` into every
+    // builtin by omitting it.
+    tools?: string[];
     model?: string;
   },
 ): Promise<void> {

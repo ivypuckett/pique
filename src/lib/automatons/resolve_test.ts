@@ -1,6 +1,8 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   BUILTIN_GROUPS,
+  excludedBuiltins,
+  PI_BUILTIN_TOOLS,
   resolveExtensionRefs,
   resolveSkillRefs,
 } from "./resolve.ts";
@@ -11,7 +13,7 @@ import {
 } from "../extensions/paths.ts";
 import { enablePackage } from "../extensions/packages.ts";
 import { skillsDir } from "../skills/paths.ts";
-import type { ScopeId } from "../scope/paths.ts";
+import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const prev = Deno.env.get("HOME");
@@ -162,6 +164,31 @@ Deno.test("an enabled package source resolves into extensionPaths", async () => 
   });
 });
 
+// Packages inherit down the chain now (docs/extensions.md), so an automaton defined in
+// root that names a root package launches from a workspace too. Before this, a run that
+// a chat agent in the same scope could have performed would refuse to start.
+Deno.test("a package enabled in ROOT resolves for a workspace run", async () => {
+  await withTempHome(async () => {
+    await enablePackage(ROOT, "npm:inherited-pkg");
+
+    const r = await resolveExtensionRefs("ws-1", ["npm:inherited-pkg"]);
+    assertEquals(r.extensionPaths, ["npm:inherited-pkg"]);
+  });
+});
+
+// Inheritance runs one way only, exactly as it does for every other resource.
+Deno.test("a package enabled in a WORKSPACE does not resolve for root", async () => {
+  await withTempHome(async () => {
+    await enablePackage("ws-1", "npm:workspace-only-pkg");
+
+    await assertRejects(
+      () => resolveExtensionRefs(ROOT, ["npm:workspace-only-pkg"]),
+      Error,
+      "package not enabled",
+    );
+  });
+});
+
 // A path-shaped ref is neither a `pique:` group nor a legal local name (extensions
 // names never contain "/" or "."), so it falls to the package-source check — and
 // isValidSource accepts bare paths, so it is rejected as an unenabled package rather
@@ -228,4 +255,46 @@ Deno.test("empty ref lists resolve to empty, which is a real capability set", as
     assertEquals(r.customTools, []);
     assertEquals(await resolveSkillRefs("ws-1", []), []);
   });
+});
+
+// ---------------------------------------------------------------------------
+// `tools:` → excluded builtins. An unresolvable ref raises here for the same reason
+// every other ref does: an unattended run that quietly does less than its file says is
+// worse than one that refuses to start.
+// ---------------------------------------------------------------------------
+
+Deno.test("no tools: key excludes nothing", () => {
+  assertEquals(excludedBuiltins(undefined), []);
+});
+
+Deno.test("tools: [] excludes every builtin", () => {
+  assertEquals([...excludedBuiltins([])].sort(), [...PI_BUILTIN_TOOLS].sort());
+});
+
+Deno.test("naming some builtins excludes exactly the rest", () => {
+  assertEquals(excludedBuiltins(["read", "grep"]).sort(), [
+    "bash",
+    "edit",
+    "find",
+    "ls",
+    "write",
+  ]);
+});
+
+Deno.test("a name that is not a builtin raises rather than restricting nothing", () => {
+  assertThrows(
+    () => excludedBuiltins(["read", "bahs"]),
+    Error,
+    "not a pi builtin",
+  );
+});
+
+// The likeliest mistake: naming an extension's tool here, where it does nothing. It
+// must not read as "allow only this" and silently leave every builtin in place.
+Deno.test("an extension's tool name is rejected, not silently accepted", () => {
+  assertThrows(
+    () => excludedBuiltins(["kanban_get_board"]),
+    Error,
+    "extensions:",
+  );
 });

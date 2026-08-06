@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { automatonBindings, type AutomatonInfo } from "./bindings.ts";
+  import { PI_BUILTIN_TOOLS as PI_BUILTINS } from "./builtins.ts";
   import { extensionBindings } from "../extensions/bindings.ts";
   import { type ModelOption, providerBindings } from "../chat/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
@@ -40,6 +41,13 @@
   let prompt = $state(initial?.prompt ?? "");
   let extensionRefs = $state<string[]>([...(initial?.extensions ?? [])]);
   let skillRefs = $state<string[]>([...(initial?.skills ?? [])]);
+  // pi's builtins this run may call. `undefined` is "no restriction" and is NOT the same
+  // as the empty list, so the checkbox group is gated behind its own toggle rather than
+  // inferring the difference from an empty selection — and an existing restriction is
+  // carried through a save untouched, because dropping the key would quietly hand a
+  // deliberately-restricted automaton every builtin back.
+  let restrictTools = $state(initial?.tools !== undefined);
+  let toolRefs = $state<string[]>([...(initial?.tools ?? [])]);
   // `provider/model-id`. Starts empty only for the moment before loadOptions seeds it
   // with the scope's default — the picker has no "inherit" entry, so what it shows is
   // always the model the run will use.
@@ -168,6 +176,7 @@
           prompt,
           extensions: extensionRefs,
           skills: skillRefs,
+          tools: restrictTools ? toolRefs : undefined,
           model,
         }),
       `Saved ${n}.`,
@@ -288,6 +297,44 @@
             <span class="truncate opacity-50">{o.hint}</span>
           </label>
         {/each}
+      </div>
+    {/if}
+  </fieldset>
+
+  <fieldset class="flex flex-col gap-1">
+    <legend class="text-xs opacity-70">Built-in tools</legend>
+    <label class="flex items-center gap-2 text-xs">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-xs shrink-0"
+        checked={restrictTools}
+        onchange={() => (restrictTools = !restrictTools)}
+      />
+      <span>Restrict which of pi's built-ins this run may call</span>
+    </label>
+    {#if restrictTools}
+      <div class="rounded border border-base-300 p-2">
+        {#each PI_BUILTINS as t (t)}
+          <label class="flex items-center gap-2 py-0.5 text-xs">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-xs shrink-0"
+              checked={toolRefs.includes(t)}
+              onchange={() => (toolRefs = toggle(toolRefs, t))}
+            />
+            <span class="font-mono">{t}</span>
+          </label>
+        {/each}
+        {#if toolRefs.length === 0}
+          <div class="mt-1 text-[0.65rem] opacity-60">
+            None selected — the run can call only the tools its extensions provide.
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="text-[0.65rem] opacity-60">
+        Unrestricted: every built-in, including <span class="font-mono">bash</span>,
+        <span class="font-mono">write</span> and <span class="font-mono">edit</span>.
       </div>
     {/if}
   </fieldset>

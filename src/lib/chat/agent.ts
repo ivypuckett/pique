@@ -120,7 +120,7 @@ import {
 import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
-import { inheritedExtensionFiles } from "../extensions/local.ts";
+import { inheritedExtensionPaths } from "../extensions/service.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
@@ -225,7 +225,7 @@ export async function startAgent(
   const resourceLoader = new DefaultResourceLoader({
     cwd,
     agentDir,
-    additionalExtensionPaths: await inheritedExtensionFiles(scope),
+    additionalExtensionPaths: await inheritedExtensionPaths(scope),
     // Prompt templates inherit the same way, but the option takes DIRECTORIES here (it is
     // additionalExtensionPaths that insists on files), so ancestors' whole prompts/ dirs
     // are handed over. pi loads its own agentDir's dir first and its expander takes the
