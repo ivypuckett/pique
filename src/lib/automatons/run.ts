@@ -235,11 +235,11 @@ export async function reconcileRuns(): Promise<void> {
 // A run's end handler, called once the run is out of the Map. Never allowed to throw: it
 // belongs to a caller (the kanban dispatcher), and its failure must not become this
 // module's problem when the run itself finished cleanly.
-function notifyEnd(run: Run): void {
+function notifyEnd(id: string, run: Run): void {
   try {
     run.onEnd?.();
   } catch (err) {
-    console.error("automaton run: its end handler failed:", err);
+    console.error(`automaton run ${id}: its end handler failed:`, err);
   }
 }
 
@@ -512,7 +512,7 @@ export async function launchAutomaton(
     } catch (err) {
       console.error(`automaton run ${id}: could not dispose its session:`, err);
     }
-    notifyEnd(run);
+    notifyEnd(id, run);
   };
   session
     .prompt(message)
@@ -620,7 +620,7 @@ export async function stopRun(id: string): Promise<void> {
   run.stopped = true;
   runs.delete(id);
   run.unsubscribe();
-  notifyEnd(run);
+  notifyEnd(id, run);
   await patchRunRecord(run.scope, id, {
     status: "stopped",
     endedAt: new Date().toISOString(),

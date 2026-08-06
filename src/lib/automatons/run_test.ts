@@ -269,7 +269,8 @@ Deno.test("a refused kanban launch records the card that fired it", async () => 
 });
 
 // Nothing is running, so this is the empty case — the guard's floor. The populated case
-// needs a real session and is covered by run_integration_test.ts.
+// needs a real session, which this file's temp-HOME harness cannot produce, and is not
+// covered yet.
 Deno.test("liveRunsOf is empty when nothing is running", () => {
   assertEquals(liveRunsOf("root", "worker"), []);
 });
