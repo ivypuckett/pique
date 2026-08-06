@@ -131,6 +131,7 @@ import {
   scopeAgentDir,
   type ScopeId,
   scopeSessionsDir,
+  scopeViewSessionsDir,
 } from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -190,10 +191,12 @@ export async function ensureRuntime() {
 
 // Start an agent in `scope` and return its id. The scope is the workspace the Chat
 // module lives in (root included); everything the agent can see — tools, model
-// defaults, working directory, Kanban board — is resolved against it. By default it
-// picks the conversation back up where it was left; `fresh` starts a new one.
+// defaults, working directory, Kanban board — is resolved against it. `view` is the
+// view inside that workspace, and it decides one thing only: which conversation this
+// is. By default the agent picks that conversation back up where it was left;
+// `fresh` starts a new one.
 export async function startAgent(
-  opts: { cwd?: string; scope?: ScopeId; fresh?: boolean } = {},
+  opts: { cwd?: string; scope?: ScopeId; view?: string; fresh?: boolean } = {},
 ): Promise<string> {
   const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
@@ -203,6 +206,12 @@ export async function startAgent(
   const config = await resolveScopeConfig(scope);
   const { provider, modelId, thinking } = resolveChatDefaults(config);
   const cwd = resolveModuleDir(opts.cwd, await readJson("settings"));
+  // The view owns the conversation, so it owns the directory the session files live
+  // in. A caller that names no view — the integration tests, which only care about
+  // tools — falls back to the scope's dir and shares one thread there.
+  const sessionDir = opts.view
+    ? scopeViewSessionsDir(scope, opts.view)
+    : scopeSessionsDir(scope);
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   // Tools compiled into pique, all bound to this scope: define_extension and
@@ -248,15 +257,15 @@ export async function startAgent(
     // sessionManager below is given its dir explicitly rather than deriving it here.
     agentDir,
     resourceLoader,
-    // The conversation is written to <scope>/sessions as pi JSONL, appended as it
-    // happens, so quitting mid-stream still leaves everything up to that point on disk.
-    // continueRecent reopens the newest session recorded for THIS cwd — passing an
-    // explicit sessionDir is what makes it filter by cwd rather than take the newest
+    // The conversation is written to <scope>/sessions/<view> as pi JSONL, appended as
+    // it happens, so quitting mid-stream still leaves everything up to that point on
+    // disk. continueRecent reopens the newest session recorded for THIS cwd — passing
+    // an explicit sessionDir is what makes it filter by cwd rather than take the newest
     // file outright — and pi replays its messages into the agent's context. `fresh`
     // is the deliberate reset: a new file, an empty transcript, the old one kept.
     sessionManager: opts.fresh
-      ? SessionManager.create(cwd, scopeSessionsDir(scope))
-      : SessionManager.continueRecent(cwd, scopeSessionsDir(scope)),
+      ? SessionManager.create(cwd, sessionDir)
+      : SessionManager.continueRecent(cwd, sessionDir),
     modelRuntime,
   });
   const session = created.session;

@@ -1,8 +1,9 @@
-// One chat conversation per workspace, shared by every view's chat pane. Views stay
-// mounted and only toggle visibility, so each view renders its own <Chat>; they all
-// resolve to the same ChatSession here (keyed by workspaceId) and thus show the same
-// transcript, input, model, and streaming state. The backend agent starts on the first
-// pane's retain() and stops when the last one releases (i.e. the workspace closes).
+// One chat conversation per view: a workspace's views each hold their own thread, so
+// two views side by side are two contexts rather than one transcript shown twice.
+// Sessions are keyed by workspace AND view here; what the view does NOT get its own of
+// is the scope — tools, model defaults, board and cwd all still resolve against the
+// workspace (see scope/paths.ts). The backend agent starts on the pane's retain() and
+// stops when it releases (i.e. the view or its workspace closes).
 import { get, type Writable, writable } from "svelte/store";
 import {
   chatBindings,
@@ -59,6 +60,7 @@ function createSession(
   key: string,
   cwd: string | undefined,
   workspaceId: string | undefined,
+  viewId: string | undefined,
 ): ChatSession {
   const b = chatBindings();
   // The scope this conversation runs in — what its defaults are read from and
@@ -159,7 +161,7 @@ function createSession(
     }
   }
 
-  // `fresh` asks the backend to begin a new conversation rather than resume the scope's
+  // `fresh` asks the backend to begin a new conversation rather than resume the view's
   // saved one.
   function start(fresh?: boolean) {
     if (!b) {
@@ -174,7 +176,12 @@ function createSession(
     const gen = ++generation;
     const current = () => alive && gen === generation;
     (async () => {
-      const started = await b.chatStart({ cwd, scope: workspaceId, fresh });
+      const started = await b.chatStart({
+        cwd,
+        scope: workspaceId,
+        view: viewId,
+        fresh,
+      });
       // What the resumed conversation already holds, read before the id is published so
       // a start that loses the race cannot paint its transcript over the winner's.
       const history = await b.chatHistory({ id: started.id });
@@ -273,8 +280,9 @@ function createSession(
     },
     release() {
       if (--refs > 0) return;
-      // Last pane gone (workspace closed): stop the agent and drop the session so a
-      // future workspace with the same id starts fresh.
+      // The pane is gone (the view or its workspace closed): stop the agent and drop
+      // the session so a future view with the same id starts a fresh one — which then
+      // resumes whatever that view last had on disk.
       alive = false;
       if (id) b?.chatStop({ id }).catch(() => {});
       id = undefined;
@@ -293,11 +301,17 @@ export function refreshChatCommands(): void {
   for (const s of sessions.values()) s.refreshCommands().catch(() => {});
 }
 
-export function chatSession(workspaceId?: string, cwd?: string): ChatSession {
-  const key = workspaceId ?? "";
+// The session belonging to one view of one workspace. Both parts key it: the same view
+// id exists in every workspace, and a workspace holds several views.
+export function chatSession(
+  workspaceId?: string,
+  viewId?: string,
+  cwd?: string,
+): ChatSession {
+  const key = `${workspaceId ?? ""}/${viewId ?? ""}`;
   let s = sessions.get(key);
   if (!s) {
-    s = createSession(key, cwd, workspaceId);
+    s = createSession(key, cwd, workspaceId, viewId);
     sessions.set(key, s);
   }
   return s;

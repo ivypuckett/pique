@@ -12,7 +12,12 @@ import { chatSession, formatReloadNotice } from "./store.ts";
 // the saved conversation the real backend hands back: agents started with fresh:true get
 // none, matching SessionManager.create vs continueRecent.
 function fakeBindings(resumed: Item[] = []) {
-  const started: { id: string; fresh?: boolean }[] = [];
+  const started: {
+    id: string;
+    scope?: string;
+    view?: string;
+    fresh?: boolean;
+  }[] = [];
   const stopped: string[] = [];
   const queues = new Map<string, ChatEvent[]>();
   const histories = new Map<string, Item[]>();
@@ -26,7 +31,7 @@ function fakeBindings(resumed: Item[] = []) {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
       const id = `agent-${next++}`;
-      started.push({ id, fresh: arg.fresh });
+      started.push({ id, scope: arg.scope, view: arg.view, fresh: arg.fresh });
       queues.set(id, []);
       histories.set(id, arg.fresh ? [] : resumed);
       return Promise.resolve({ id });
@@ -112,7 +117,7 @@ const SAVED: Item[] = [
 
 Deno.test("a started session shows the conversation the backend resumed", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-resume-1");
+    const s = chatSession("ws-resume-1", "view-1");
     s.retain();
     await settle();
 
@@ -137,7 +142,7 @@ Deno.test("a started session shows the conversation the backend resumed", async 
 
 Deno.test("a new chat starts fresh and drops the resumed transcript", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-resume-2");
+    const s = chatSession("ws-resume-2", "view-1");
     s.retain();
     await settle();
     assertEquals(get(s.items), SAVED);
@@ -159,7 +164,7 @@ Deno.test("a new chat starts fresh and drops the resumed transcript", async () =
 
 Deno.test("a new chat drops the transcript the old agent streamed", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-restart-1");
+    const s = chatSession("ws-restart-1", "view-1");
     s.retain();
     await settle();
 
@@ -192,7 +197,7 @@ Deno.test("a new chat drops the transcript the old agent streamed", async () => 
 
 Deno.test("a late reply from the old agent cannot land in the new transcript", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-restart-2");
+    const s = chatSession("ws-restart-2", "view-1");
     s.retain();
     await settle();
 
@@ -214,19 +219,64 @@ Deno.test("a late reply from the old agent cannot land in the new transcript", a
 
 Deno.test("release stops the agent and drops the session", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-restart-4");
+    const s = chatSession("ws-restart-4", "view-1");
     s.retain();
     await settle();
     s.release();
     await settle();
 
     assertEquals(f.stopped, ["agent-1"]);
-    // A fresh session for the same workspace starts a new agent rather than reusing one.
-    chatSession("ws-restart-4").retain();
+    // A fresh session for the same view starts a new agent rather than reusing one.
+    chatSession("ws-restart-4", "view-1").retain();
     await settle();
     assertEquals(f.started.length, 2);
-    chatSession("ws-restart-4").release();
+    chatSession("ws-restart-4", "view-1").release();
   });
+});
+
+// ---------------------------------------------------------------------------
+// One conversation per VIEW, not per workspace. Two views of one workspace are two
+// contexts; the backend keeps them apart by view (chat/agent.ts's sessionDir), so the
+// view id has to reach it and the two panes must not share a store.
+// ---------------------------------------------------------------------------
+
+Deno.test("two views of one workspace hold separate conversations", async () => {
+  await withFakeBackend(async (f) => {
+    const left = chatSession("ws-views", "view-1");
+    const right = chatSession("ws-views", "view-2");
+    left.retain();
+    right.retain();
+    await settle();
+
+    assertEquals(
+      f.started.map((x) => [x.scope, x.view]),
+      [["ws-views", "view-1"], ["ws-views", "view-2"]],
+      "each view starts its own agent, in the same scope",
+    );
+
+    f.emit("agent-1", { kind: "text", delta: " — left only" });
+    await settle();
+    assertEquals(get(left.items).at(-1), {
+      role: "assistant",
+      text: "still here — left only",
+    });
+    assertEquals(
+      get(right.items),
+      SAVED,
+      "one view's reply must not appear in the other",
+    );
+
+    // Nor is the compose state shared — the input is per view like the transcript.
+    left.input.set("half a thought");
+    assertEquals(get(right.input), "");
+
+    // Closing one view stops only its agent.
+    left.release();
+    await settle();
+    assertEquals(f.stopped, ["agent-1"]);
+
+    right.release();
+  }, SAVED);
 });
 
 // ---------------------------------------------------------------------------
@@ -237,7 +287,7 @@ Deno.test("release stops the agent and drops the session", async () => {
 
 Deno.test("/reload is handled by pique and never sent to the model", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-reload-1");
+    const s = chatSession("ws-reload-1", "view-1");
     s.retain();
     await settle();
     f.setReloadSummary({ added: ["new_tool"], removed: [], failed: [] });
@@ -270,7 +320,7 @@ Deno.test("/reload is handled by pique and never sent to the model", async () =>
 
 Deno.test("/reload re-lists the command menu, since an extension can add commands", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-reload-2");
+    const s = chatSession("ws-reload-2", "view-1");
     s.retain();
     await settle();
     const before = f.listedCommandsCount();
@@ -290,7 +340,7 @@ Deno.test("/reload re-lists the command menu, since an extension can add command
 
 Deno.test("ordinary text is still sent to the model", async () => {
   await withFakeBackend(async (f) => {
-    const s = chatSession("ws-reload-3");
+    const s = chatSession("ws-reload-3", "view-1");
     s.retain();
     await settle();
 

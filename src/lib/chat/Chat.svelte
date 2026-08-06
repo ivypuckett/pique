@@ -3,14 +3,15 @@
   import type { CommandInfo, ThinkingLevel } from "./bindings.ts";
   import { chatSession } from "./store.ts";
 
-  let { title, cwd, workspaceId }: { title: string; cwd?: string; workspaceId?: string } =
+  let { title, cwd, workspaceId, viewId }: { title: string; cwd?: string; workspaceId?: string; viewId?: string } =
     $props();
 
-  // The conversation lives in a per-workspace session, so every view's chat pane shows
-  // the same transcript and input. This component is a thin view over it. workspaceId is
-  // fixed for this instance (the tree is keyed by it) and cwd only seeds a new session,
-  // so we deliberately read both once at creation — untrack tells Svelte that's intended.
-  const session = untrack(() => chatSession(workspaceId, cwd));
+  // The conversation lives in a session of this view's own, so each view of a workspace
+  // has its own transcript, input and streaming state. This component is a thin view
+  // over it. workspaceId and viewId are fixed for this instance (the tree is keyed by
+  // both) and cwd only seeds a new session, so we deliberately read all three once at
+  // creation — untrack tells Svelte that's intended.
+  const session = untrack(() => chatSession(workspaceId, viewId, cwd));
   const { items, input, ready, streaming, models, level } = session;
   const commands = session.commands;
 
@@ -101,8 +102,8 @@
     return () => ro.disconnect();
   });
 
-  // Retain the shared session while any pane is mounted; the agent stops when the last
-  // one (the workspace's final view) releases.
+  // Retain this view's session while the pane is mounted; the agent stops when it
+  // releases — when the view, or the workspace holding it, closes.
   onMount(() => {
     session.retain();
     return () => session.release();

@@ -1,12 +1,15 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   assertScopeId,
+  assertViewId,
   chain,
   ROOT,
   scopeAgentDir,
   scopeBoardPath,
   scopeConfigPath,
   scopeDir,
+  scopeSessionsDir,
+  scopeViewSessionsDir,
 } from "./paths.ts";
 
 function withHome(home: string, fn: () => void): void {
@@ -63,4 +66,33 @@ Deno.test("scope ids cannot escape the scopes directory", () => {
 
 Deno.test("scope ids accept root and workspace slugs", () => {
   for (const ok of ["root", "ws-1", "ws-42"]) assertScopeId(ok);
+});
+
+Deno.test("each view's conversations live in a directory of their own", () => {
+  withHome("/home/x", () => {
+    assertEquals(
+      scopeSessionsDir("ws-1"),
+      "/home/x/.pique/scopes/ws-1/sessions",
+    );
+    assertEquals(
+      scopeViewSessionsDir("ws-1", "view-2"),
+      "/home/x/.pique/scopes/ws-1/sessions/view-2",
+      "one thread per view, since continueRecent scans a flat directory",
+    );
+    assertEquals(
+      scopeViewSessionsDir(ROOT, "view-1"),
+      "/home/x/.pique/scopes/root/sessions/view-1",
+    );
+  });
+});
+
+Deno.test("view ids cannot escape the scope's sessions directory", () => {
+  for (const bad of ["../evil", "a/b", "/abs", "", ".", "View-1"]) {
+    assertThrows(() => assertViewId(bad), Error, "invalid view id");
+    assertThrows(
+      () => scopeViewSessionsDir("ws-1", bad),
+      Error,
+      "invalid view id",
+    );
+  }
 });

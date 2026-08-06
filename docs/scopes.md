@@ -50,7 +50,8 @@ Each scope owns one directory:
     pending/     reserved for define_automaton; nothing writes here yet
     runs/        one JSON record per run
     sessions/    each run's transcript, as pi session JSONL
-  sessions/      this scope's saved chat conversations, as pi session JSONL
+  sessions/      saved chat conversations, as pi session JSONL
+    view-N/      one directory per view — each view holds its own conversation
   board.db       this scope's Kanban board
 ```
 
@@ -63,6 +64,14 @@ the opposite reason — pi's discovery there is exactly what is wanted.
 these under its own default session path. A chat resumes the newest session
 recorded for its working directory, which is what makes a conversation survive
 closing pique; "New chat" starts another and leaves the old file in place.
+
+The conversation belongs to the **view**, not the workspace: two views side by
+side are two threads, and only the scope around them — tools, model defaults,
+board, cwd — is shared. pi's `continueRecent` scans one flat directory, so
+keeping the threads apart means keeping the directories apart, one per view id
+(`scopeViewSessionsDir`). View ids are reused when a view is closed and another
+opened, exactly as workspace ids are, so a new `view-2` resumes what the last
+`view-2` was saying.
 
 Anything genuinely app-wide stays in `~/.pique/settings.json` (theme, git scan
 depth). The layout tree stays in `~/.pique/layout.json`, which is also where

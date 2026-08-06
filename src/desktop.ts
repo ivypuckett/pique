@@ -86,12 +86,13 @@ win.bind("termKill", async (arg) => {
 });
 
 win.bind("chatStart", async (arg) => {
-  const { cwd, scope, fresh } = arg as {
+  const { cwd, scope, view, fresh } = arg as {
     cwd?: string;
     scope?: string;
+    view?: string;
     fresh?: boolean;
   };
-  return { id: await chat.startAgent({ cwd, scope, fresh }) };
+  return { id: await chat.startAgent({ cwd, scope, view, fresh }) };
 });
 
 win.bind("chatHistory", async (arg) => {

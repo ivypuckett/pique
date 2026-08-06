@@ -4,10 +4,11 @@ A harness to get you curious.
 
 ## Decisions
 
-1. A single workspace is meant to have a single chat window between a user and
-   agent. That agent may have subagents, but the goal is that the user is given
-   one thread for one context. Because of this, chat windows are sticky between
-   views.
+1. A view is one thread for one context: its own chat window, and the modules
+   sitting beside it. A workspace groups several of those — they share its
+   directory, tools, prefs and board, but not a conversation. (Chat windows used
+   to be sticky between views; one conversation per view is what lets a single
+   workspace carry parallel lines of work.)
 2. System prompts can do more harm than good. Not specifying one within pique
    removes it entirely.
 
@@ -28,7 +29,8 @@ Notes:
 - Workspaces tile vertically and views horizontally.
 - The default workspace exists to allow an agent to manage the harness. In
   practice, it centralizes/defaults most settings.
-- Chats are sticky between views inside the same workspace.
+- Each view holds its own chat; what views inside a workspace share is
+  everything else — its directory, tools, prefs and board.
 
 ### Agent Structure
 

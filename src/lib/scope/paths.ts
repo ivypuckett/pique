@@ -26,6 +26,12 @@ export function assertScopeId(id: string): void {
   if (!ID_RE.test(id)) throw new Error(`invalid scope id: ${id}`);
 }
 
+// A view id ("view-N") names a directory under the scope's sessions dir, so it is
+// held to the same rule.
+export function assertViewId(id: string): void {
+  if (!ID_RE.test(id)) throw new Error(`invalid view id: ${id}`);
+}
+
 // Scopes an agent in `id` resolves against, furthest ancestor FIRST so a later
 // entry overrides an earlier one. Root resolves against itself alone — a workspace
 // can see root, root can never see a workspace.
@@ -57,9 +63,18 @@ export function scopeAgentDir(id: ScopeId): string {
 
 // Where this scope's chat conversations persist, as pi session JSONL. Kept out of
 // agent/ because that dir is pi's agentDir and pi would then also find these under
-// its own default session path; here they stay pique's, one thread per cwd per scope.
+// its own default session path; here they stay pique's. Holds one subdirectory per
+// view rather than session files of its own.
 export function scopeSessionsDir(id: ScopeId): string {
   return `${scopeDir(id)}/sessions`;
+}
+
+// Where ONE view's chat conversations persist. Each view runs its own conversation,
+// and pi's continueRecent picks the newest session in a single flat directory — so
+// separate threads mean separate directories, one per view.
+export function scopeViewSessionsDir(id: ScopeId, view: string): string {
+  assertViewId(view);
+  return `${scopeSessionsDir(id)}/${view}`;
 }
 
 export function scopeConfigPath(id: ScopeId): string {
