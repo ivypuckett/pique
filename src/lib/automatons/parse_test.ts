@@ -153,6 +153,43 @@ Deno.test("a model round-trips, and an unset one writes no key", () => {
   assertEquals(parseAutomaton("t", without).model, undefined);
 });
 
+Deno.test("an absent cron means launch-button only, not an error", () => {
+  const a = parseAutomaton("triage", "---\nprompt: p\n---\n");
+  assertEquals(a.cron, undefined);
+  assertEquals(a.error, undefined);
+});
+
+Deno.test("a cron schedule is kept verbatim", () => {
+  const a = parseAutomaton(
+    "triage",
+    '---\nprompt: p\ncron: "0 9 * * 1-5"\n---\n',
+  );
+  assertEquals(a.cron, "0 9 * * 1-5");
+  assertEquals(a.error, undefined);
+});
+
+// Same reasoning as the model ref: a schedule that cannot be parsed would otherwise
+// mean an automaton that says it runs daily and silently never fires.
+Deno.test("an unparseable cron is an error on the definition", () => {
+  const a = parseAutomaton("triage", '---\nprompt: p\ncron: "0 9 * *"\n---\n');
+  assertEquals(a.error?.startsWith("cron:"), true);
+  // A bad model still outranks it — the run cannot happen at all without one.
+  const both = parseAutomaton(
+    "triage",
+    '---\nprompt: p\nmodel: opus\ncron: "nope"\n---\n',
+  );
+  assertEquals(both.error?.startsWith("model:"), true);
+});
+
+Deno.test("a cron round-trips, and an unset one writes no key", () => {
+  const base = { description: "d", prompt: "p", extensions: [], skills: [] };
+  const scheduled = automatonFile({ ...base, cron: "*/15 * * * *" });
+  assertEquals(parseAutomaton("t", scheduled).cron, "*/15 * * * *");
+  const without = automatonFile({ ...base, cron: "" });
+  assertEquals(without.includes("cron:"), false);
+  assertEquals(parseAutomaton("t", without).cron, undefined);
+});
+
 // The YAML is well-formed but not an object (a bare scalar/null document), so
 // extract() succeeds with attrs of that shape. This must fall through to the normal
 // "no prompt" report rather than throwing when the code reads attrs.prompt.

@@ -267,6 +267,16 @@
                   {#if a.scope !== scope}
                     <span class="badge badge-ghost badge-xs shrink-0">inherited</span>
                   {/if}
+                  <!-- A schedule fires in the scope that OWNS the file, so an inherited
+                       one is shown but does not fire here (docs/automatons.md). -->
+                  {#if a.cron}
+                    <span
+                      class="badge badge-outline badge-xs shrink-0 font-mono"
+                      title={a.scope === scope
+                        ? `Runs on the schedule ${a.cron} (local time) while pique is open`
+                        : `Scheduled ${a.cron} in ${a.scope}; it does not fire here`}
+                    >{a.cron}</span>
+                  {/if}
                   {#if a.scope === scope}
                     <button
                       type="button"

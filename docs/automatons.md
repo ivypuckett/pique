@@ -2,8 +2,8 @@
 
 An **automaton** is a named agent that runs without a conversation. It is one
 markdown file naming a prompt template to send plus the exact extensions and
-skills its run may load, and it is launched by a button in the Automatons
-module.
+skills its run may load, and it is launched by a button in the Automatons module
+or by a `cron:` schedule of its own.
 
 A Chat module is a thread you tend. An automaton is a job. The two ask different
 questions — a chat asks "what did it say", a run asks "did it finish, and what
@@ -23,6 +23,7 @@ extensions: [pique:kanban, kanban_notes, npm:pi-crew]
 skills: [changelog-style]
 tools: [read, grep]
 model: anthropic/claude-opus-4
+cron: "0 9 * * 1-5"
 ---
 ```
 
@@ -30,8 +31,8 @@ The filename minus `.md` is the name — there is no `name:` key, so the two can
 never disagree. Names match `/^[a-z0-9][a-z0-9-]*$/`; a file whose basename does
 not is skipped rather than breaking the listing.
 
-`prompt:` is **required**. `description:`, `extensions:`, `skills:`, `tools:`
-and `model:` are optional. Unknown keys are ignored.
+`prompt:` is **required**. `description:`, `extensions:`, `skills:`, `tools:`,
+`model:` and `cron:` are optional. Unknown keys are ignored.
 
 ### `tools:` withholds pi's builtins
 
@@ -112,6 +113,52 @@ compiled-in default. A run that used a model other than the one its file names
 would be discovered long after it finished.
 
 The thinking level still comes from the scope for every run; see Deferred #4.
+
+### `cron:` fires it without a button
+
+`cron:` is a five-field expression in **this machine's local time**: minute,
+hour, day-of-month, month, day-of-week. No key means the Launch button is the
+only way it runs, which is what every automaton did before the key existed.
+
+`*`, `5`, `1-5`, `*/15` and `9-17/2` are all accepted, in comma-separated lists.
+Names (`mon`, `jan`), `@daily`, seconds and `L`/`W`/`#` are not: each is a
+second syntax to explain for a schedule nobody has asked for yet. A restricted
+day-of-month **and** day-of-week are OR'd, as Vixie cron does — `0 8 1 * 1` is
+"the 1st, and every Monday", not "the 1st if it is a Monday".
+
+An expression that does not parse is an error on the whole definition, alongside
+a missing `prompt:` and a malformed `model:`. It makes the automaton
+unlaunchable until fixed, which is deliberate: a file claiming to run daily that
+silently never does is the failure this format keeps refusing to ship. The
+editor checks the field as you type, so a broken one is not written in the first
+place.
+
+Four things the schedule does **not** do:
+
+- **It is not inherited.** An automaton is launchable from every scope that
+  inherits it; its schedule fires only in the scope whose directory holds the
+  file. Otherwise one `cron:` in root would fire a run per open workspace every
+  time it came round, each in a different directory. The list shows an inherited
+  automaton's schedule, greyed by the same "inherited" badge — it says what that
+  file does where it lives, not what will happen here.
+- **It does not fire while the previous run is going.** A fire arriving with
+  that automaton still running in that scope is dropped, not queued: a job that
+  takes longer than its interval would otherwise stack sessions against one
+  shared model runtime. Nothing is recorded, because nothing ran — the drop is
+  logged and the next fire is simply the next one that matches.
+- **It does not catch up.** A minute that passed while pique was closed, or
+  while the laptop was asleep, is gone. There is no last-fired state on disk and
+  no burst of runs at startup. A schedule is a statement about when pique is
+  running.
+- **It does not fire for a closed workspace.** The scheduler walks the scopes in
+  the saved layout, not the directories under `~/.pique/scopes/` — closing a
+  workspace leaves its directory behind, and firing runs into a workspace the
+  user thinks is gone is the wrong surprise.
+
+Mechanically it is `automatons/schedule.ts`: a 20-second timer that evaluates
+each **minute** exactly once and calls the same `launchAutomaton` the button
+does, with `trigger: "cron"`. It adds a caller, not a mechanism — which was the
+whole point of that seam.
 
 ## The capability set
 
@@ -214,20 +261,23 @@ and shown on the run. Reading it off the automaton instead would answer with
 whatever the scope's default is _today_, which is not necessarily what produced
 last week's transcript.
 
-Every record carries a `trigger`, which is `manual` today. It exists now so the
-shape does not change when card-move and cron triggers land, and so "why did
-this fire?" stays answerable.
+Every record carries a `trigger`: `manual` for the button, `cron` for a
+schedule, and `kanban` once the card-move trigger lands. It is what keeps "why
+did this fire?" answerable.
 
 Stop is available while a run is `running`. There is no turn or wall-clock cap:
 any number would be arbitrary, and an automaton killed mid-edit is worse than
-one running long in a list you are watching. That calculus changes when runs
-start firing unattended.
+one running long in a list you are watching. A scheduled run is the case that
+tests this — nobody is watching the list — but the schedule's own re-entrancy
+rule bounds the damage to one run at a time per automaton, which is what a cap
+was wanted for.
 
 ### Runs do not survive quitting pique
 
 A run lives in the app's memory, so closing pique ends it. Any record left
 `running` is repaired to `failed` with "interrupted by shutdown" at the next
-start, rather than leaving a row that would never change.
+start, rather than leaving a row that would never change. This is also why a
+schedule only fires while pique is open: there is no daemon behind it.
 
 ## Scope
 
@@ -238,7 +288,8 @@ root's. See [scopes.md](scopes.md).
 Two things always belong to the **launching** scope, even when the definition
 was inherited from root: the run and its record, and everything the run resolves
 against — base prompt, kanban board, working directory, and the model unless the
-file pins one.
+file pins one. A `cron:` schedule is the one part of a definition that does not
+inherit at all: it fires in the scope holding the file and nowhere else.
 
 Extensions a file names are chain-resolved, packages included — an automaton in
 root that names a root package launches from a workspace too. What the check
@@ -248,12 +299,14 @@ letting pi fetch it.
 
 ## Deferred
 
-### 1. Card-move and cron triggers
+### 1. The card-move trigger
 
-The reason the feature exists, and deliberately not in the first cut. Both are
-callers of the same `launchAutomaton` entry point the button uses. What neither
-has yet is a decision about re-entrancy: whether a card moved twice launches
-twice, and whether a schedule fires while the previous run is still going.
+Cron shipped; see `cron:` above. The card-move trigger is the other caller of
+the same `launchAutomaton` entry point, and the question it still owes an answer
+to is the one cron answered with "drop it": whether a card moved twice launches
+twice. Cron's rule — at most one live run per automaton per scope — is the
+obvious starting point, but a card carries an identity a schedule does not, so
+"already running for this card" may be the better unit.
 
 ### 2. `define_automaton`
 
@@ -278,9 +331,13 @@ Both are the same shape of addition as `model:` — a frontmatter key read in
 
 ### 5. Run retention
 
-Nothing prunes `runs/`. Fine for a button; a schedule would grow it without
-bound.
+Nothing prunes `runs/` or `sessions/`. That was tolerable while every run came
+from a button press. It no longer is: `*/15 * * * *` writes ~35,000 records a
+year, plus a session JSONL each, and the module's list reads every one of them
+to show the five most recent. This is now the first thing cron owes.
 
 ### 6. Concurrency
 
-Nothing limits how many runs go at once, and they share one model runtime.
+Nothing limits how many runs go at once, and they share one model runtime. The
+schedule's re-entrancy rule is per automaton, so ten automatons sharing one
+`0 9 * * *` still start ten runs at nine o'clock.

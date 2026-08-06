@@ -110,6 +110,7 @@ export async function saveAutomaton(
     // builtin by omitting it.
     tools?: string[];
     model?: string;
+    cron?: string;
   },
 ): Promise<void> {
   assertAutomatonName(name);

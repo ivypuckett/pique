@@ -2,6 +2,7 @@
   import { onMount, untrack } from "svelte";
   import { automatonBindings, type AutomatonInfo } from "./bindings.ts";
   import { PI_BUILTIN_TOOLS as PI_BUILTINS } from "./builtins.ts";
+  import { cronError } from "./cron.ts";
   import { extensionBindings } from "../extensions/bindings.ts";
   import { type ModelOption, providerBindings } from "../chat/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
@@ -52,6 +53,9 @@
   // with the scope's default — the picker has no "inherit" entry, so what it shows is
   // always the model the run will use.
   let model = $state(initial?.model ?? "");
+  // A five-field cron expression, in this machine's local time. Empty is the default and
+  // means the Launch button is the only way this runs.
+  let cron = $state(initial?.cron ?? "");
 
   let templates = $state<PromptInfo[]>([]);
   let models = $state<ModelOption[]>([]);
@@ -148,6 +152,11 @@
     model !== "" && !models.some((m) => `${m.provider}/${m.id}` === model),
   );
 
+  // Checked as it is typed, by the same function the backend parses with. A schedule
+  // saved broken would be a definition that says it runs daily and never does — the
+  // parser marks it an error, but catching it here means it is never written at all.
+  const scheduleError = $derived(cron.trim() === "" ? undefined : cronError(cron));
+
   function toggle(list: string[], value: string): string[] {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
@@ -178,6 +187,7 @@
           skills: skillRefs,
           tools: restrictTools ? toolRefs : undefined,
           model,
+          cron: cron.trim(),
         }),
       `Saved ${n}.`,
     );
@@ -255,6 +265,25 @@
       The run uses this model whatever the scope's chat is later set to. A run whose
       model is unavailable fails rather than falling back.
     </div>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label class="text-xs opacity-70" for="a-cron">Schedule</label>
+    <input
+      id="a-cron"
+      class="input input-bordered input-sm font-mono"
+      placeholder="0 9 * * 1-5 — leave empty to run only when launched"
+      bind:value={cron}
+    />
+    {#if scheduleError}
+      <div class="break-all text-[0.65rem] text-error">{scheduleError}</div>
+    {:else}
+      <div class="text-[0.65rem] opacity-50">
+        minute hour day-of-month month day-of-week, in this machine's local time. Fires
+        only in this scope, only while pique is running, and never while its previous
+        run is still going.
+      </div>
+    {/if}
   </div>
 
   <fieldset class="flex flex-col gap-1">
@@ -351,7 +380,7 @@
     <button
       type="button"
       class="btn btn-primary btn-xs"
-      disabled={busy || name.trim() === "" || prompt === ""}
+      disabled={busy || name.trim() === "" || prompt === "" || scheduleError !== undefined}
       onclick={save}
     >Save</button>
   </div>

@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
+  layoutScopes,
   readJson,
   resolveGitScanDepth,
   resolveModuleDir,
@@ -126,4 +127,30 @@ Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () =
     resolveGitScanDepth({ workspace: { gitScanDepth: "4" as any } }),
     3,
   );
+});
+
+// Rail order, root first — the order the scheduler walks scopes in, and the order
+// ctrl+j j/k walks them on screen.
+Deno.test("layoutScopes lists root then the numbered workspaces, with their overrides", () => {
+  assertEquals(
+    layoutScopes({
+      root: { id: "root", cwd: "/proj/x" },
+      workspaces: [{ id: "ws-1" }, { id: "ws-2", cwd: "/proj/y" }],
+      activeId: "ws-1",
+    }),
+    [
+      { id: "root", cwd: "/proj/x" },
+      { id: "ws-1", cwd: undefined },
+      { id: "ws-2", cwd: "/proj/y" },
+    ],
+  );
+});
+
+// The layout file is user-visible and may predate any of this, so every field is
+// guarded — a malformed one must yield "no scopes", not a throw inside a timer.
+Deno.test("layoutScopes tolerates a missing or malformed layout", () => {
+  assertEquals(layoutScopes(null), []);
+  assertEquals(layoutScopes({}), []);
+  assertEquals(layoutScopes({ root: "nope", workspaces: 3 }), []);
+  assertEquals(layoutScopes({ root: { id: "" }, workspaces: [null, 7] }), []);
 });

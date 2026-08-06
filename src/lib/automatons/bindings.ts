@@ -22,6 +22,8 @@ export interface AutomatonBindings {
       skills: string[];
       // `provider/model-id`, or "" to inherit the scope's chat default.
       model?: string;
+      // A five-field cron expression in local time, or "" for launch-button only.
+      cron?: string;
     },
   ): Promise<unknown>;
   automatonsDelete(arg: { scope: string; name: string }): Promise<unknown>;

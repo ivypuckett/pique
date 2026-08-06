@@ -5,9 +5,9 @@
 // makes yesterday's runs listable after a restart. The in-memory Map holds only live
 // runs; the records outlive the process.
 //
-// `launchAutomaton` is the SINGLE entry point. The button calls it today; a kanban
-// card reaching a column and a cron schedule will call the same function, which is
-// why `trigger` is recorded from the first run rather than added later.
+// `launchAutomaton` is the SINGLE entry point. The button calls it, schedule.ts's cron
+// clock calls it, and a kanban card reaching a column will call the same function —
+// which is why `trigger` is recorded from the first run rather than added later.
 //
 // A run cannot outlive the app: quitting mid-run leaves a `running` record describing
 // nothing, which reconcileRuns() fixes at startup.
@@ -73,6 +73,9 @@ type Session = any;
 
 interface Run {
   scope: ScopeId;
+  // Which definition this run is of. Held so the scheduler can ask whether a schedule's
+  // previous run is still going without reading every record off disk each minute.
+  automaton: string;
   session: Session;
   unsubscribe: () => void;
   queue: ChatEvent[];
@@ -176,8 +179,8 @@ export async function listRuns(scope: ScopeId): Promise<RunRecord[]> {
 //
 // This assumes ONE pique per machine: a second instance starting while the first has a
 // live run would mark that run's record failed while it is still going. Records carry no
-// owning pid, so there is nothing to tell the two apart. Worth revisiting before the cron
-// trigger makes long runs ordinary (docs/automatons.md deferred #1).
+// owning pid, so there is nothing to tell the two apart — and now that schedules fire
+// runs unattended (schedule.ts), a second instance is likelier to land on one.
 export async function reconcileRuns(): Promise<void> {
   const scopes: string[] = [];
   try {
@@ -439,6 +442,7 @@ export async function launchAutomaton(
   // step threw; reaching here means the try completed and it is set.
   const run: Run = {
     scope,
+    automaton: name,
     session,
     unsubscribe: unsubscribe!,
     queue,
@@ -544,6 +548,17 @@ export async function runHistory(scope: ScopeId, id: string): Promise<Item[]> {
 // something the record or the JSONL preserves.
 export function activeToolNamesOfRun(id: string): string[] {
   return runs.get(id)?.session.getActiveToolNames() ?? [];
+}
+
+// Is a run of this definition still going in this scope? The scheduler's re-entrancy
+// check (schedule.ts). Answered from the live Map rather than from the records: the Map
+// is what "still going" means — a `running` record can also be one this process has
+// never seen, which reconcileRuns has not repaired yet.
+export function isAutomatonRunning(scope: ScopeId, name: string): boolean {
+  for (const run of runs.values()) {
+    if (run.scope === scope && run.automaton === name) return true;
+  }
+  return false;
 }
 
 export async function stopRun(id: string): Promise<void> {

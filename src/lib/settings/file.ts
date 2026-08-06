@@ -82,6 +82,33 @@ export function resolveGitScanDepth(settings: Json): number {
   return fallback;
 }
 
+// Every scope that currently EXISTS, with its own cwd override — root first, then the
+// numbered workspaces, in rail order. The layout is the session tree (session.ts's
+// SessionState), so this reads the same `id`/`cwd` pair the module launchers already do.
+//
+// It is how the scheduler decides where to look for schedules (automatons/schedule.ts).
+// The layout rather than the scopes directory on disk, deliberately: closing a workspace
+// leaves ~/.pique/scopes/ws-N behind, and a schedule in a workspace the user has closed
+// firing runs into a directory they think is gone is the wrong surprise.
+export function layoutScopes(layout: Json): { id: string; cwd?: string }[] {
+  const obj = (v: Json): { [k: string]: Json } | undefined =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? v as { [k: string]: Json }
+      : undefined;
+  const one = (v: Json): { id: string; cwd?: string } | undefined => {
+    const w = obj(v);
+    const id = w?.id;
+    if (typeof id !== "string" || id === "") return undefined;
+    return { id, cwd: typeof w?.cwd === "string" ? w.cwd : undefined };
+  };
+  const root = obj(layout)?.root;
+  const rest = obj(layout)?.workspaces;
+  return [
+    ...(root === undefined ? [] : [one(root)]),
+    ...(Array.isArray(rest) ? rest.map(one) : []),
+  ].filter((w): w is { id: string; cwd?: string } => w !== undefined);
+}
+
 // Working directory for one spawned module: its own workspace's override when set
 // (leading `~` expanded), else the root workspace's, else $HOME — the cwd half of
 // the scope inheritance chain. The override is a raw string threaded down from the

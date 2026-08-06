@@ -581,6 +581,7 @@ win.bind("automatonsSave", async (arg) => {
     extensions: extensionRefs,
     skills: skillRefs,
     model,
+    cron,
   } = arg as {
     scope: string;
     name: string;
@@ -589,6 +590,7 @@ win.bind("automatonsSave", async (arg) => {
     extensions: string[];
     skills: string[];
     model?: string;
+    cron?: string;
   };
   await automatonService.saveAutomaton(scope, name, {
     description,
@@ -596,6 +598,7 @@ win.bind("automatonsSave", async (arg) => {
     extensions: extensionRefs,
     skills: skillRefs,
     model,
+    cron,
   });
   return true;
 });
@@ -678,5 +681,10 @@ await (await import("./lib/scope/migrate.ts")).migrateToScopes();
 // A run lives in this process's memory, so every `running` record on disk belongs to a
 // process that is gone. Turn those into `failed` before anything lists them.
 await automatons.reconcileRuns();
+// The cron trigger. After reconcileRuns, which the scheduler's "is it still running?"
+// check depends on — a stale `running` record must be repaired before a schedule can
+// consult the live map. Nothing catches up: minutes that passed while pique was closed
+// are gone (automatons/schedule.ts).
+(await import("./lib/automatons/schedule.ts")).startScheduler();
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

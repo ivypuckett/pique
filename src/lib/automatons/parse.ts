@@ -7,6 +7,7 @@
 // loses nothing, and it is never sent to a model. `prompt:` is what runs
 // (docs/automatons.md).
 import { extract } from "@std/front-matter/yaml";
+import { cronError } from "./cron.ts";
 export { PI_BUILTIN_TOOLS } from "./builtins.ts";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
@@ -30,6 +31,10 @@ export type Automaton = {
   // Which model the run uses, as `provider/model-id`. Absent means the scope's chat
   // default — what every automaton used before this key existed.
   model?: string;
+  // A five-field cron expression, in local time. Absent means the automaton runs only
+  // when a human presses Launch — which is every automaton written before this key
+  // existed, and stays the default.
+  cron?: string;
   // Reserved. Never interpreted; see the module comment.
   body: string;
   // Set when the file cannot be launched as written. The automaton is still returned
@@ -111,6 +116,7 @@ export function parseAutomaton(name: string, text: string): Automaton {
   // an absent one, per the type comment above.
   const prompt = (str(attrs.prompt) ?? "").trim();
   const model = (str(attrs.model) ?? "").trim();
+  const cron = (str(attrs.cron) ?? "").trim();
   // Absent stays absent; a present-but-not-a-list value reads as an empty restriction
   // rather than as "unrestricted", because a `tools:` the writer meant as a limit must
   // never fail open.
@@ -124,11 +130,16 @@ export function parseAutomaton(name: string, text: string): Automaton {
     tools,
     // "" and absent are the same thing — inherit the scope's default.
     model: model || undefined,
+    // "" and absent are both "launch button only".
+    cron: cron || undefined,
     body: body.trim(),
-    // One error field, so a file missing its prompt reports that first; the model is
-    // checked only once there is something to run.
+    // One error field, so a file missing its prompt reports that first; the model and
+    // the schedule are checked only once there is something to run. A bad `cron:` is an
+    // error on the whole definition rather than a schedule that is merely ignored: a
+    // file that says it runs daily and silently never does is the failure this module
+    // keeps refusing to ship.
     error: prompt
-      ? (model ? modelError(model) : undefined)
+      ? (model && modelError(model)) || (cron && cronError(cron)) || undefined
       : "prompt: required",
   };
 }
@@ -148,11 +159,13 @@ export function automatonFile(
     skills: string[];
     tools?: string[];
     model?: string;
+    cron?: string;
   },
 ): string {
   const list = (xs: string[]) =>
     `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
   const model = a.model?.trim();
+  const cron = a.cron?.trim();
   return [
     "---",
     `description: ${JSON.stringify(a.description)}`,
@@ -165,6 +178,9 @@ export function automatonFile(
     // Omitted rather than written empty, so a file inheriting the scope's model looks
     // like every automaton written before the key existed.
     ...(model ? [`model: ${JSON.stringify(model)}`] : []),
+    // Same treatment: no key at all is "launch button only", so clearing the form's
+    // schedule field removes the schedule rather than leaving an empty one behind.
+    ...(cron ? [`cron: ${JSON.stringify(cron)}`] : []),
     "---",
     "",
   ].join("\n");
