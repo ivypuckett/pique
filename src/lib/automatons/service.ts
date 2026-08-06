@@ -111,6 +111,10 @@ export async function saveAutomaton(
     tools?: string[];
     model?: string;
     cron?: string;
+    kanban?: string;
+    // Absent is unlimited; see parse.ts. Passed through rather than defaulted for the
+    // same reason `tools` is.
+    wip?: number;
   },
 ): Promise<void> {
   assertAutomatonName(name);

@@ -27,6 +27,10 @@ export interface AutomatonBindings {
       model?: string;
       // A five-field cron expression in local time, or "" for launch-button only.
       cron?: string;
+      // The board column whose arrivals fire this, or "" for no card trigger.
+      kanban?: string;
+      // Max concurrent runs of this automaton in this scope; undefined is unlimited.
+      wip?: number;
     },
   ): Promise<unknown>;
   automatonsDelete(arg: { scope: string; name: string }): Promise<unknown>;

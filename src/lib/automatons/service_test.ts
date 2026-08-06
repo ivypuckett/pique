@@ -189,3 +189,20 @@ Deno.test("a file that vanishes between listing and reading is dropped, not fata
     }
   });
 });
+
+Deno.test("saveAutomaton round-trips the kanban trigger and its wip limit", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "worker", {
+      description: "",
+      prompt: "work",
+      extensions: [],
+      skills: [],
+      kanban: "In Progress",
+      wip: 2,
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.kanban, "In Progress");
+    assertEquals(a.wip, 2);
+    assertEquals(a.error, undefined);
+  });
+});

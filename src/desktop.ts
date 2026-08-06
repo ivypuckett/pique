@@ -569,10 +569,10 @@ win.bind("automatonsVisible", async (arg) => {
 });
 
 win.bind("automatonsSave", async (arg) => {
-  // Renamed on the way out of the destructure: `extensions` and `skills` are also the
-  // names of two module-level service imports at the top of this file, and shadowing
-  // them here would make any later service call inside this handler resolve to a
-  // string[] instead.
+  // Renamed on the way out of the destructure: `extensions`, `skills`, and `kanban` are
+  // also the names of module-level service imports at the top of this file, and
+  // shadowing them here would make any later service call inside this handler resolve
+  // to the arg's value instead.
   const {
     scope,
     name,
@@ -583,6 +583,8 @@ win.bind("automatonsSave", async (arg) => {
     tools,
     model,
     cron,
+    kanban: kanbanColumn,
+    wip,
   } = arg as {
     scope: string;
     name: string;
@@ -593,6 +595,8 @@ win.bind("automatonsSave", async (arg) => {
     tools?: string[];
     model?: string;
     cron?: string;
+    kanban?: string;
+    wip?: number;
   };
   await automatonService.saveAutomaton(scope, name, {
     description,
@@ -602,6 +606,8 @@ win.bind("automatonsSave", async (arg) => {
     tools,
     model,
     cron,
+    kanban: kanbanColumn,
+    wip,
   });
   return true;
 });
