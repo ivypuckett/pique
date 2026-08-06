@@ -8,6 +8,7 @@
 // (docs/automatons.md).
 import { extract } from "@std/front-matter/yaml";
 import { cronError } from "./cron.ts";
+import { isValidWip, wipError } from "./wip.ts";
 export { PI_BUILTIN_TOOLS } from "./builtins.ts";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
@@ -87,23 +88,6 @@ function modelError(ref: string): string | undefined {
   return provider && modelId
     ? undefined
     : `model: expected "provider/model-id", got ${JSON.stringify(ref)}`;
-}
-
-// The one place the `wip:` rule is written. The field-derivation site needs the
-// narrowed `number` type to keep `wip` typed, and wipError needs the message — a second
-// copy of the predicate would let the two drift.
-function isValidWip(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 1;
-}
-
-// The error message for a `wip:` value, or undefined when it is fine. The `cronError` of
-// this module: a limit that is not a limit — `0`, `1.5`, `"3"` — must fail the definition
-// rather than be quietly ignored, or a file that says it holds itself to three at a time
-// would run unbounded.
-export function wipError(value: unknown): string | undefined {
-  return isValidWip(value)
-    ? undefined
-    : `wip: expected a whole number of 1 or more, got ${JSON.stringify(value)}`;
 }
 
 export function parseAutomaton(name: string, text: string): Automaton {
