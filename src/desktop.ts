@@ -689,5 +689,15 @@ await automatons.reconcileRuns();
 // consult the live map. Nothing catches up: minutes that passed while pique was closed
 // are gone (automatons/schedule.ts).
 (await import("./lib/automatons/schedule.ts")).startScheduler();
+// The kanban trigger. Registered rather than imported by kanban/service.ts, which cannot
+// import this module graph without closing a cycle through the pique:kanban tools. After
+// reconcileRuns for the same reason the scheduler is: the dispatcher's guards consult the
+// live map, and a stale `running` record must be repaired first.
+{
+  const kanbanTrigger = await import("./lib/automatons/kanban.ts");
+  kanban.setCardArrivedHandler((scope, arrival) => {
+    void kanbanTrigger.dispatchArrival(scope, arrival);
+  });
+}
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
