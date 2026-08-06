@@ -89,12 +89,19 @@ function modelError(ref: string): string | undefined {
     : `model: expected "provider/model-id", got ${JSON.stringify(ref)}`;
 }
 
+// The one place the `wip:` rule is written. The field-derivation site needs the
+// narrowed `number` type to keep `wip` typed, and wipError needs the message — a second
+// copy of the predicate would let the two drift.
+function isValidWip(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1;
+}
+
 // The error message for a `wip:` value, or undefined when it is fine. The `cronError` of
 // this module: a limit that is not a limit — `0`, `1.5`, `"3"` — must fail the definition
 // rather than be quietly ignored, or a file that says it holds itself to three at a time
 // would run unbounded.
 export function wipError(value: unknown): string | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1
+  return isValidWip(value)
     ? undefined
     : `wip: expected a whole number of 1 or more, got ${JSON.stringify(value)}`;
 }
@@ -159,9 +166,7 @@ export function parseAutomaton(name: string, text: string): Automaton {
     kanban: kanban || undefined,
     // Kept only when it is a usable limit; a bad value is reported as the definition's
     // error below rather than stored as a number it is not.
-    wip: typeof wip === "number" && Number.isInteger(wip) && wip >= 1
-      ? wip
-      : undefined,
+    wip: isValidWip(wip) ? wip : undefined,
     body: body.trim(),
     // One error field, so a file missing its prompt reports that first; the model and
     // the schedule are checked only once there is something to run. A bad `cron:` is an
@@ -199,6 +204,7 @@ export function automatonFile(
     `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
   const model = a.model?.trim();
   const cron = a.cron?.trim();
+  const kanban = a.kanban?.trim();
   return [
     "---",
     `description: ${JSON.stringify(a.description)}`,
@@ -216,7 +222,7 @@ export function automatonFile(
     ...(cron ? [`cron: ${JSON.stringify(cron)}`] : []),
     // Same treatment as `cron:` — omitted rather than written empty, so clearing the
     // form's column picker removes the trigger instead of leaving a blank one behind.
-    ...(a.kanban?.trim() ? [`kanban: ${JSON.stringify(a.kanban.trim())}`] : []),
+    ...(kanban ? [`kanban: ${JSON.stringify(kanban)}`] : []),
     ...(a.wip === undefined ? [] : [`wip: ${a.wip}`]),
     "---",
     "",
