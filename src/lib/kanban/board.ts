@@ -38,6 +38,20 @@ export type Board = {
   cards: CardRow[];
 };
 
+// A card ARRIVING in a column: a setStatus that changed its column, or a createCard.
+// The board's only outward event, and the whole of what it says — it knows nothing about
+// who listens (automatons/kanban.ts, wired up in kanban/service.ts).
+//
+// Not fired for a reorder within a column, a metadata edit or a connection change: none
+// of those is an arrival, and firing on them would relaunch a job because somebody fixed
+// a typo in a title.
+export type CardArrival = {
+  cardId: string;
+  title: string;
+  statusId: string;
+  statusName: string;
+};
+
 export type Actor = "human" | "agent";
 
 export type LogRow = {
@@ -132,7 +146,10 @@ function hydrate(rows: RawCard[]): CardRow[] {
 
 export function openBoard(
   dbPath: string,
-  opts: { defaultStatuses: { name: string }[] },
+  opts: {
+    defaultStatuses: { name: string }[];
+    onCardArrived?: (arrival: CardArrival) => void;
+  },
 ): BoardHandle {
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode=WAL");
@@ -237,6 +254,21 @@ export function openBoard(
       reason,
     );
 
+  // Fire-and-forget: the write has already committed, and a consumer's failure must not
+  // fail it. An unknown statusId announces nothing rather than a column with no name.
+  const announce = (cardId: string, statusId: string, title: string): void => {
+    if (!opts.onCardArrived) return;
+    const row = db.prepare("SELECT name FROM statuses WHERE id = ?").get(
+      statusId,
+    ) as { name: string } | undefined;
+    if (!row) return;
+    try {
+      opts.onCardArrived({ cardId, title, statusId, statusName: row.name });
+    } catch (err) {
+      console.error("kanban: a card-arrival handler failed:", err);
+    }
+  };
+
   return {
     raw: db,
     getBoard() {
@@ -309,6 +341,7 @@ export function openBoard(
       db.prepare(
         "INSERT INTO cards (id, status_id, position, title, description) VALUES (?,?,?,?,?)",
       ).run(id, statusId, nextPosition(statusId), title, description);
+      announce(id, statusId, title);
       return id;
     },
 
@@ -351,6 +384,9 @@ export function openBoard(
         reason,
         actor,
       );
+      // Only a change of column is an arrival. `prev` is the row as it was BEFORE the
+      // update, and a move leaves the title alone, so it is the right source for both.
+      if (prev.status_id !== statusId) announce(cardId, statusId, prev.title);
     },
 
     setMetadata({ cardId, title, description, tags, subtasks, actor }) {

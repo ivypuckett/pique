@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { type BoardHandle, openBoard } from "./board.ts";
+import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";
 
 const DEFAULTS = [{ name: "Backlog" }, { name: "Todo" }, {
   name: "In Progress",
@@ -14,6 +14,22 @@ function fresh(): { b: BoardHandle; status: (name: string) => string } {
 
 function card(b: BoardHandle, id: string) {
   return b.getBoard().cards.find((c) => c.id === id)!;
+}
+
+// fresh(), plus the arrivals the board announced. Same seeded columns, so `status(name)`
+// works the same way.
+function watched(): {
+  b: BoardHandle;
+  status: (name: string) => string;
+  arrivals: CardArrival[];
+} {
+  const arrivals: CardArrival[] = [];
+  const b = openBoard(":memory:", {
+    defaultStatuses: DEFAULTS,
+    onCardArrived: (a) => arrivals.push(a),
+  });
+  const byName = new Map(b.getBoard().statuses.map((s) => [s.name, s.id]));
+  return { b, status: (n) => byName.get(n)!, arrivals };
 }
 
 Deno.test("openBoard creates the three tables", () => {
@@ -427,5 +443,90 @@ Deno.test("deleteCard prunes predecessor refs to it", () => {
   b.setConnections({ cardId: dep, predecessors: [gone], actor: "human" });
   b.deleteCard(gone);
   assertEquals(card(b, dep).predecessors, []);
+  b.close();
+});
+
+Deno.test("a card entering a column announces its arrival", () => {
+  const { b, status, arrivals } = watched();
+  const id = b.createCard({
+    statusId: status("Backlog"),
+    title: "Ship it",
+    actor: "human",
+  });
+  arrivals.length = 0;
+  b.setStatus({
+    cardId: id,
+    statusId: status("Todo"),
+    reason: "starting",
+    actor: "human",
+  });
+  assertEquals(arrivals, [{
+    cardId: id,
+    title: "Ship it",
+    statusId: status("Todo"),
+    statusName: "Todo",
+  }]);
+  b.close();
+});
+
+// Nothing entered, so nothing arrived. Without this a "move" onto the column a card is
+// already in would relaunch the job that is already working it.
+Deno.test("a setStatus onto the card's current column announces nothing", () => {
+  const { b, status, arrivals } = watched();
+  const id = b.createCard({
+    statusId: status("Backlog"),
+    title: "Ship it",
+    actor: "human",
+  });
+  arrivals.length = 0;
+  b.setStatus({
+    cardId: id,
+    statusId: status("Backlog"),
+    reason: "no-op",
+    actor: "human",
+  });
+  assertEquals(arrivals, []);
+  b.close();
+});
+
+// A card typed straight into a column has arrived there as surely as one dragged in.
+Deno.test("a card created in a column announces its arrival", () => {
+  const { b, status, arrivals } = watched();
+  const id = b.createCard({
+    statusId: status("Todo"),
+    title: "New",
+    actor: "agent",
+  });
+  assertEquals(arrivals, [{
+    cardId: id,
+    title: "New",
+    statusId: status("Todo"),
+    statusName: "Todo",
+  }]);
+  b.close();
+});
+
+// The card DID move. A consumer that throws must not make the board disagree with what
+// the user just saw happen.
+Deno.test("a throwing arrival handler does not fail the move", () => {
+  const b = openBoard(":memory:", {
+    defaultStatuses: DEFAULTS,
+    onCardArrived: () => {
+      throw new Error("boom");
+    },
+  });
+  const byName = new Map(b.getBoard().statuses.map((s) => [s.name, s.id]));
+  const id = b.createCard({
+    statusId: byName.get("Backlog")!,
+    title: "Ship it",
+    actor: "human",
+  });
+  b.setStatus({
+    cardId: id,
+    statusId: byName.get("Todo")!,
+    reason: "starting",
+    actor: "human",
+  });
+  assertEquals(b.getBoard().cards[0].statusId, byName.get("Todo")!);
   b.close();
 });
