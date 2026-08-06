@@ -35,6 +35,17 @@ export type Automaton = {
   // when a human presses Launch — which is every automaton written before this key
   // existed, and stays the default.
   cron?: string;
+  // The board column whose arrivals fire this automaton, matched case-insensitively
+  // against the board's column names (automatons/kanban.ts). Absent means no card ever
+  // fires it, which stays the default. Only the SHAPE is checked here — whether the
+  // column exists needs a board, which this module deliberately does not have, so the
+  // Automatons list is what flags a name no column matches.
+  kanban?: string;
+  // The most runs of this automaton that may be live in one scope at once. Absent means
+  // UNLIMITED: a compiled-in default would be an arbitrary number, and unlimited is what
+  // "a run per card" plainly means. Inert without `kanban:` — a manual or cron launch is
+  // never held.
+  wip?: number;
   // Reserved. Never interpreted; see the module comment.
   body: string;
   // Set when the file cannot be launched as written. The automaton is still returned
@@ -78,6 +89,16 @@ function modelError(ref: string): string | undefined {
     : `model: expected "provider/model-id", got ${JSON.stringify(ref)}`;
 }
 
+// The error message for a `wip:` value, or undefined when it is fine. The `cronError` of
+// this module: a limit that is not a limit — `0`, `1.5`, `"3"` — must fail the definition
+// rather than be quietly ignored, or a file that says it holds itself to three at a time
+// would run unbounded.
+export function wipError(value: unknown): string | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1
+    ? undefined
+    : `wip: expected a whole number of 1 or more, got ${JSON.stringify(value)}`;
+}
+
 export function parseAutomaton(name: string, text: string): Automaton {
   const empty = {
     name,
@@ -117,6 +138,8 @@ export function parseAutomaton(name: string, text: string): Automaton {
   const prompt = (str(attrs.prompt) ?? "").trim();
   const model = (str(attrs.model) ?? "").trim();
   const cron = (str(attrs.cron) ?? "").trim();
+  const kanban = (str(attrs.kanban) ?? "").trim();
+  const wip = attrs.wip;
   // Absent stays absent; a present-but-not-a-list value reads as an empty restriction
   // rather than as "unrestricted", because a `tools:` the writer meant as a limit must
   // never fail open.
@@ -132,6 +155,13 @@ export function parseAutomaton(name: string, text: string): Automaton {
     model: model || undefined,
     // "" and absent are both "launch button only".
     cron: cron || undefined,
+    // "" and absent are both "no card fires this".
+    kanban: kanban || undefined,
+    // Kept only when it is a usable limit; a bad value is reported as the definition's
+    // error below rather than stored as a number it is not.
+    wip: typeof wip === "number" && Number.isInteger(wip) && wip >= 1
+      ? wip
+      : undefined,
     body: body.trim(),
     // One error field, so a file missing its prompt reports that first; the model and
     // the schedule are checked only once there is something to run. A bad `cron:` is an
@@ -139,7 +169,8 @@ export function parseAutomaton(name: string, text: string): Automaton {
     // file that says it runs daily and silently never does is the failure this module
     // keeps refusing to ship.
     error: prompt
-      ? (model && modelError(model)) || (cron && cronError(cron)) || undefined
+      ? (model && modelError(model)) || (cron && cronError(cron)) ||
+        (wip !== undefined && wipError(wip)) || undefined
       : "prompt: required",
   };
 }
@@ -160,6 +191,8 @@ export function automatonFile(
     tools?: string[];
     model?: string;
     cron?: string;
+    kanban?: string;
+    wip?: number;
   },
 ): string {
   const list = (xs: string[]) =>
@@ -181,6 +214,10 @@ export function automatonFile(
     // Same treatment: no key at all is "launch button only", so clearing the form's
     // schedule field removes the schedule rather than leaving an empty one behind.
     ...(cron ? [`cron: ${JSON.stringify(cron)}`] : []),
+    // Same treatment as `cron:` — omitted rather than written empty, so clearing the
+    // form's column picker removes the trigger instead of leaving a blank one behind.
+    ...(a.kanban?.trim() ? [`kanban: ${JSON.stringify(a.kanban.trim())}`] : []),
+    ...(a.wip === undefined ? [] : [`wip: ${a.wip}`]),
     "---",
     "",
   ].join("\n");

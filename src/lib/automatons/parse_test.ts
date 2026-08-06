@@ -249,3 +249,78 @@ Deno.test("tools: survives a file round-trip, empty list included", () => {
     );
   }
 });
+
+Deno.test("kanban: names the column whose arrivals fire the automaton", () => {
+  const a = parseAutomaton(
+    "worker",
+    `---\nprompt: work\nkanban: "In Progress"\n---\n`,
+  );
+  assertEquals(a.kanban, "In Progress");
+  assertEquals(a.error, undefined);
+});
+
+// Absent is the default and means no card ever fires it — every automaton written
+// before the key existed.
+Deno.test("no kanban: key leaves the automaton button-and-cron only", () => {
+  const a = parseAutomaton("worker", `---\nprompt: work\n---\n`);
+  assertEquals(a.kanban, undefined);
+  assertEquals(a.wip, undefined);
+});
+
+Deno.test("wip: caps concurrent runs and must be a whole number of 1 or more", () => {
+  const ok = parseAutomaton(
+    "worker",
+    `---\nprompt: work\nkanban: "Doing"\nwip: 3\n---\n`,
+  );
+  assertEquals(ok.wip, 3);
+  assertEquals(ok.error, undefined);
+
+  for (const bad of ["0", "-1", "1.5", '"3"']) {
+    const a = parseAutomaton(
+      "worker",
+      `---\nprompt: work\nkanban: "Doing"\nwip: ${bad}\n---\n`,
+    );
+    assertEquals(a.wip, undefined, `wip: ${bad} must not be kept`);
+    assertEquals(
+      a.error?.startsWith("wip:"),
+      true,
+      `wip: ${bad} must be an error, got ${a.error}`,
+    );
+  }
+});
+
+// A limit with no trigger is inert, not an error: manual and cron launches are never
+// held, so there is nothing wrong with the file — just nothing for the key to do.
+Deno.test("wip: without kanban: parses clean", () => {
+  const a = parseAutomaton("worker", `---\nprompt: work\nwip: 2\n---\n`);
+  assertEquals(a.error, undefined);
+  assertEquals(a.wip, 2);
+});
+
+Deno.test("automatonFile round-trips kanban: and wip:", () => {
+  const text = automatonFile({
+    description: "d",
+    prompt: "work",
+    extensions: [],
+    skills: [],
+    kanban: "In Progress",
+    wip: 2,
+  });
+  const a = parseAutomaton("worker", text);
+  assertEquals(a.kanban, "In Progress");
+  assertEquals(a.wip, 2);
+  assertEquals(a.error, undefined);
+});
+
+// Omitted rather than written empty, so a file with no trigger looks like every
+// automaton written before the keys existed.
+Deno.test("automatonFile omits an absent kanban: and wip:", () => {
+  const text = automatonFile({
+    description: "d",
+    prompt: "work",
+    extensions: [],
+    skills: [],
+  });
+  assertEquals(text.includes("kanban:"), false);
+  assertEquals(text.includes("wip:"), false);
+});
