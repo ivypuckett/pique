@@ -25,11 +25,10 @@ import { cronMatches, parseCron } from "./cron.ts";
 import type { Automaton } from "./parse.ts";
 import { listAutomatons } from "./service.ts";
 import { isAutomatonRunning, launchAutomaton } from "./run.ts";
-import { layoutScopes, readJson, resolveModuleDir } from "../settings/file.ts";
+import { scheduledTargets, type Target } from "./targets.ts";
 import type { ScopeId } from "../scope/paths.ts";
 
-// A scope the scheduler looks in, and the directory its runs would work in.
-export type Target = { scope: ScopeId; cwd: string };
+export type { Target };
 
 // What tickOnce needs from the rest of the app. Injected so the tick's rules —
 // which definitions fire, and what stops one from firing — are testable without a
@@ -101,19 +100,6 @@ export async function tickOnce(now: Date, deps: TickDeps): Promise<void> {
       }
     }
   }
-}
-
-// Where the scheduler looks, read from the saved layout: the scopes that currently
-// exist, each with the directory its runs would work in. Exported so a test can drive a
-// tick against real files on disk rather than a stubbed listing.
-export async function scheduledTargets(): Promise<Target[]> {
-  const layout = await readJson("layout");
-  return layoutScopes(layout).map((w) => ({
-    scope: w.id,
-    // The same resolution a module gets: the workspace's own override, else root's,
-    // else $HOME. A scheduled run must work where a launched one would.
-    cwd: resolveModuleDir(w.cwd, layout),
-  }));
 }
 
 const liveDeps: TickDeps = {
