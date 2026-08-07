@@ -20,10 +20,17 @@ export interface AutomatonBindings {
       prompt: string;
       extensions: string[];
       skills: string[];
+      // Which of pi's builtins the run keeps. Absent and empty are DIFFERENT — absent is
+      // every builtin, `[]` is none — so this is passed through rather than defaulted.
+      tools?: string[];
       // `provider/model-id`, or "" to inherit the scope's chat default.
       model?: string;
       // A five-field cron expression in local time, or "" for launch-button only.
       cron?: string;
+      // The board column whose arrivals fire this, or "" for no card trigger.
+      kanban?: string;
+      // Max concurrent runs of this automaton in this scope; undefined is unlimited.
+      wip?: number;
     },
   ): Promise<unknown>;
   automatonsDelete(arg: { scope: string; name: string }): Promise<unknown>;

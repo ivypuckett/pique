@@ -4,7 +4,7 @@
 // Each scope owns one board at ~/.pique/scopes/<id>/board.db. Root's is the shared
 // board: a workspace can address it (scope "root"), while root has no way to name a
 // workspace's — the visibility rule from scope/paths.ts `chain`. Runs Deno-side only.
-import { type BoardHandle, openBoard } from "./board.ts";
+import { type BoardHandle, type CardArrival, openBoard } from "./board.ts";
 import {
   ROOT,
   scopeBoardPath,
@@ -34,6 +34,20 @@ export function resolveBoardScope(
   return ref === "root" ? ROOT : scope;
 }
 
+// Who hears a card arrive. Registered at boot by desktop.ts rather than imported,
+// because the consumer (automatons/kanban.ts) reaches the automaton runner, which reaches
+// the pique:kanban tools, which reach this module — a static import here would close that
+// cycle. `undefined` is the ordinary state in a test and in web-dev: arrivals are dropped.
+let handler:
+  | ((scope: ScopeId, arrival: CardArrival) => void)
+  | undefined;
+
+export function setCardArrivedHandler(
+  fn: ((scope: ScopeId, arrival: CardArrival) => void) | undefined,
+): void {
+  handler = fn;
+}
+
 const handles = new Map<string, BoardHandle>();
 
 // The scope's board, opened (and seeded with the default columns) on first use, then
@@ -42,7 +56,12 @@ export async function board(scope: ScopeId): Promise<BoardHandle> {
   let h = handles.get(scope);
   if (!h) {
     await Deno.mkdir(scopeDir(scope), { recursive: true });
-    h = openBoard(scopeBoardPath(scope), { defaultStatuses: DEFAULT_STATUSES });
+    h = openBoard(scopeBoardPath(scope), {
+      defaultStatuses: DEFAULT_STATUSES,
+      // Read at call time, not captured, so a board opened before the handler was
+      // registered still reports its arrivals.
+      onCardArrived: (arrival) => handler?.(scope, arrival),
+    });
     handles.set(scope, h);
   }
   return h;

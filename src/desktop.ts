@@ -569,10 +569,10 @@ win.bind("automatonsVisible", async (arg) => {
 });
 
 win.bind("automatonsSave", async (arg) => {
-  // Renamed on the way out of the destructure: `extensions` and `skills` are also the
-  // names of two module-level service imports at the top of this file, and shadowing
-  // them here would make any later service call inside this handler resolve to a
-  // string[] instead.
+  // Renamed on the way out of the destructure: `extensions`, `skills`, and `kanban` are
+  // also the names of module-level service imports at the top of this file, and
+  // shadowing them here would make any later service call inside this handler resolve
+  // to the arg's value instead.
   const {
     scope,
     name,
@@ -580,8 +580,11 @@ win.bind("automatonsSave", async (arg) => {
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    tools,
     model,
     cron,
+    kanban: kanbanColumn,
+    wip,
   } = arg as {
     scope: string;
     name: string;
@@ -589,16 +592,22 @@ win.bind("automatonsSave", async (arg) => {
     prompt: string;
     extensions: string[];
     skills: string[];
+    tools?: string[];
     model?: string;
     cron?: string;
+    kanban?: string;
+    wip?: number;
   };
   await automatonService.saveAutomaton(scope, name, {
     description,
     prompt,
     extensions: extensionRefs,
     skills: skillRefs,
+    tools,
     model,
     cron,
+    kanban: kanbanColumn,
+    wip,
   });
   return true;
 });
@@ -686,5 +695,15 @@ await automatons.reconcileRuns();
 // consult the live map. Nothing catches up: minutes that passed while pique was closed
 // are gone (automatons/schedule.ts).
 (await import("./lib/automatons/schedule.ts")).startScheduler();
+// The kanban trigger. Registered rather than imported by kanban/service.ts, which cannot
+// import this module graph without closing a cycle through the pique:kanban tools. After
+// reconcileRuns for the same reason the scheduler is: the dispatcher's guards consult the
+// live map, and a stale `running` record must be repaired first.
+{
+  const kanbanTrigger = await import("./lib/automatons/kanban.ts");
+  kanban.setCardArrivedHandler((scope, arrival) => {
+    void kanbanTrigger.dispatchArrival(scope, arrival);
+  });
+}
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));

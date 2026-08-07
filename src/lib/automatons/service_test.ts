@@ -131,6 +131,38 @@ Deno.test("a stray file with an illegal basename is skipped, not fatal", async (
   });
 });
 
+// `tools` absent and `tools: []` are semantically different (unrestricted vs. no
+// builtins) and must not collapse into each other on the way through write+read. This
+// only covers saveAutomaton/parse.ts — it does not reach the automatonsSave win.bind
+// handler in desktop.ts, which is separate, untestable here, and where the actual bug
+// (`tools` silently dropped) lived.
+Deno.test("saveAutomaton round-trips an empty tools restriction", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "restricted", {
+      description: "",
+      prompt: "p",
+      extensions: [],
+      skills: [],
+      tools: [],
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.tools, []);
+  });
+});
+
+Deno.test("saveAutomaton round-trips an absent tools restriction as unrestricted", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "unrestricted", {
+      description: "",
+      prompt: "p",
+      extensions: [],
+      skills: [],
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.tools, undefined);
+  });
+});
+
 // A file that namesIn() saw but that is gone by the time it is read (deleted from
 // another tab, or by an agent run) must not take down the whole listing — same
 // tolerance as an illegal basename or a missing dir. A real filesystem race is too
@@ -155,5 +187,22 @@ Deno.test("a file that vanishes between listing and reading is dropped, not fata
     } finally {
       Deno.readTextFile = original;
     }
+  });
+});
+
+Deno.test("saveAutomaton round-trips the kanban trigger and its wip limit", async () => {
+  await withTempHome(async () => {
+    await saveAutomaton("root", "worker", {
+      description: "",
+      prompt: "work",
+      extensions: [],
+      skills: [],
+      kanban: "In Progress",
+      wip: 2,
+    });
+    const [a] = await listAutomatons("root");
+    assertEquals(a.kanban, "In Progress");
+    assertEquals(a.wip, 2);
+    assertEquals(a.error, undefined);
   });
 });

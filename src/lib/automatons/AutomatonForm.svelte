@@ -2,8 +2,11 @@
   import { onMount, untrack } from "svelte";
   import { automatonBindings, type AutomatonInfo } from "./bindings.ts";
   import { PI_BUILTIN_TOOLS as PI_BUILTINS } from "./builtins.ts";
+  import { normalizeColumn } from "./column.ts";
   import { cronError } from "./cron.ts";
+  import { wipError } from "./wip.ts";
   import { extensionBindings } from "../extensions/bindings.ts";
+  import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
   import { type ModelOption, providerBindings } from "../chat/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
   import { skillBindings } from "../skills/bindings.ts";
@@ -27,6 +30,7 @@
   const skills = skillBindings();
   const providers = providerBindings();
   const scopes = scopeBindings();
+  const kanban = kanbanBindings();
 
   // The fields below are seeded from the prop at construction and never re-derived — a
   // list refresh landing mid-edit must not overwrite what is being typed. `untrack` says
@@ -56,6 +60,14 @@
   // A five-field cron expression, in this machine's local time. Empty is the default and
   // means the Launch button is the only way this runs.
   let cron = $state(initial?.cron ?? "");
+  // The columns of THIS scope's own board — the only board that can fire this file, since
+  // the trigger does not inherit (docs/automatons.md).
+  let columns = $state<StatusRow[]>([]);
+  // The column whose arrivals fire this automaton, by name. Empty is the default: no card
+  // ever fires it.
+  let kanbanColumn = $state(initial?.kanban ?? "");
+  // Max concurrent runs. Empty means unlimited — there is no compiled-in default.
+  let wip = $state(initial?.wip === undefined ? "" : String(initial.wip));
 
   let templates = $state<PromptInfo[]>([]);
   let models = $state<ModelOption[]>([]);
@@ -117,6 +129,23 @@
         const d = await scopes.scopeChatDefaults({ scope });
         model = `${d.provider}/${d.modelId}`;
       }
+      if (kanban) {
+        try {
+          columns = (await kanban.kanbanGetBoard({ scope })).statuses;
+          // The file's spelling and the board's may differ in case or padding and still
+          // be the same column to the dispatcher. Snap to the board's spelling: the
+          // <option> values are the board's exact names, so leaving the file's variant
+          // bound would match no option and render the picker BLANK while the value
+          // silently survives. Saving then writes the spelling the board shows.
+          const canonical = columns.find(
+            (c) => normalizeColumn(c.name) === normalizeColumn(kanbanColumn),
+          );
+          if (canonical && canonical.name !== kanbanColumn) kanbanColumn = canonical.name;
+        } catch {
+          // A board that cannot be read leaves the picker with only the file's own value,
+          // which is still editable. Not worth failing the whole form for.
+        }
+      }
       if (skills) {
         skillOptions = (await skills.skillsVisible({ scope })).map((s) => ({
           value: s.name,
@@ -157,6 +186,28 @@
   // parser marks it an error, but catching it here means it is never written at all.
   const scheduleError = $derived(cron.trim() === "" ? undefined : cronError(cron));
 
+  // The same treatment `modelMissing` gives an unavailable model: a column the board no
+  // longer has stays selected rather than being silently rewritten to "no trigger".
+  // Matched the way the DISPATCHER matches, so the form cannot call a trigger broken
+  // that would in fact fire.
+  const columnMissing = $derived(
+    kanbanColumn !== "" &&
+      !columns.some((c) => normalizeColumn(c.name) === normalizeColumn(kanbanColumn)),
+  );
+
+  // Checked as it is typed, by the same function the backend parses with — a limit that
+  // is not a limit must never be written in the first place. Only while a column is
+  // chosen: the field is hidden without one, so a message from it could disable Save
+  // with nothing on screen to explain why, and `wip` is not written then either.
+  const wipMessage = $derived(
+    kanbanColumn === "" || wip.trim() === ""
+      ? undefined
+      // `Number("abc")` is NaN, which JSON-quotes as `null` — report what was actually
+      // typed instead. Corrected here rather than in wip.ts, which parse.ts also calls
+      // with raw YAML values that are genuinely null.
+      : wipError(Number.isNaN(Number(wip)) ? wip.trim() : Number(wip)),
+  );
+
   function toggle(list: string[], value: string): string[] {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
@@ -188,6 +239,11 @@
           tools: restrictTools ? toolRefs : undefined,
           model,
           cron: cron.trim(),
+          kanban: kanbanColumn,
+          // Only meaningful with a column to limit. Dropped without one, or clearing the
+          // trigger would leave a `wip:` behind in the file — `automatonFile` writes the
+          // key whenever it is defined.
+          wip: kanbanColumn === "" || wip.trim() === "" ? undefined : Number(wip),
         }),
       `Saved ${n}.`,
     );
@@ -286,6 +342,44 @@
     {/if}
   </div>
 
+  <div class="flex flex-col gap-1">
+    <label class="text-xs opacity-70" for="a-kanban">Kanban column</label>
+    <select id="a-kanban" class="select select-bordered select-sm" bind:value={kanbanColumn}>
+      <option value="">— none —</option>
+      {#if columnMissing}
+        <option value={kanbanColumn}>{kanbanColumn} (no such column)</option>
+      {/if}
+      {#each columns as c (c.id)}
+        <option value={c.name}>{c.name}</option>
+      {/each}
+    </select>
+    <div class="text-[0.65rem] opacity-50">
+      A card arriving in this column — moved in, or created there, by a human or an agent
+      — launches this automaton on that card. Only this scope's own board fires it, and
+      only while pique is running.
+    </div>
+  </div>
+
+  {#if kanbanColumn !== ""}
+    <div class="flex flex-col gap-1">
+      <label class="text-xs opacity-70" for="a-wip">Concurrent runs</label>
+      <input
+        id="a-wip"
+        class="input input-bordered input-sm"
+        placeholder="leave empty for no limit"
+        bind:value={wip}
+      />
+      {#if wipMessage}
+        <div class="break-all text-[0.65rem] text-error">{wipMessage}</div>
+      {:else}
+        <div class="text-[0.65rem] opacity-50">
+          The most runs of this automaton at once. Cards over the limit wait their turn,
+          and one that has left the column by then is dropped rather than worked late.
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   <fieldset class="flex flex-col gap-1">
     <legend class="text-xs opacity-70">Extensions</legend>
     {#if extensionRows.length === 0}
@@ -380,7 +474,8 @@
     <button
       type="button"
       class="btn btn-primary btn-xs"
-      disabled={busy || name.trim() === "" || prompt === "" || scheduleError !== undefined}
+      disabled={busy || name.trim() === "" || prompt === "" || scheduleError !== undefined ||
+        wipMessage !== undefined}
       onclick={save}
     >Save</button>
   </div>

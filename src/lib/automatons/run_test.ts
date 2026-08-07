@@ -2,6 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   launchAutomaton,
   listRuns,
+  liveRunsOf,
   reconcileRuns,
   runHistory,
   writeRunRecord,
@@ -244,4 +245,32 @@ Deno.test("runHistory of a run with no session file is empty, not an error", asy
     assertEquals(await runHistory("ws-1", "aaa"), []);
     assertEquals(await runHistory("ws-1", "nosuchrun"), []);
   });
+});
+
+// A refused launch never reaches the live Map, so this is the one place the card can be
+// observed without a model runtime: it must be on the durable record, because "why did
+// this run happen" is what the record exists to answer a week later.
+Deno.test("a refused kanban launch records the card that fired it", async () => {
+  await withTempHome(async () => {
+    await assertRejects(() =>
+      launchAutomaton({
+        scope: "root",
+        name: "nope",
+        cwd: "/tmp",
+        trigger: "kanban",
+        card: "card-1",
+      })
+    );
+    const [record] = await listRuns("root");
+    assertEquals(record.status, "failed");
+    assertEquals(record.trigger, "kanban");
+    assertEquals(record.card, "card-1");
+  });
+});
+
+// Nothing is running, so this is the empty case — the guard's floor. The populated case
+// needs a real session, which this file's temp-HOME harness cannot produce, and is not
+// covered yet.
+Deno.test("liveRunsOf is empty when nothing is running", () => {
+  assertEquals(liveRunsOf("root", "worker"), []);
 });

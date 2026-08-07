@@ -8,6 +8,7 @@
 // (docs/automatons.md).
 import { extract } from "@std/front-matter/yaml";
 import { cronError } from "./cron.ts";
+import { isValidWip, wipError } from "./wip.ts";
 export { PI_BUILTIN_TOOLS } from "./builtins.ts";
 
 // A type alias rather than an interface, so it keeps TypeScript's implicit index
@@ -35,6 +36,17 @@ export type Automaton = {
   // when a human presses Launch — which is every automaton written before this key
   // existed, and stays the default.
   cron?: string;
+  // The board column whose arrivals fire this automaton, matched case-insensitively
+  // against the board's column names (automatons/kanban.ts). Absent means no card ever
+  // fires it, which stays the default. Only the SHAPE is checked here — whether the
+  // column exists needs a board, which this module deliberately does not have, so the
+  // Automatons list is what flags a name no column matches.
+  kanban?: string;
+  // The most runs of this automaton that may be live in one scope at once. Absent means
+  // UNLIMITED: a compiled-in default would be an arbitrary number, and unlimited is what
+  // "a run per card" plainly means. Inert without `kanban:` — a manual or cron launch is
+  // never held.
+  wip?: number;
   // Reserved. Never interpreted; see the module comment.
   body: string;
   // Set when the file cannot be launched as written. The automaton is still returned
@@ -117,6 +129,8 @@ export function parseAutomaton(name: string, text: string): Automaton {
   const prompt = (str(attrs.prompt) ?? "").trim();
   const model = (str(attrs.model) ?? "").trim();
   const cron = (str(attrs.cron) ?? "").trim();
+  const kanban = (str(attrs.kanban) ?? "").trim();
+  const wip = attrs.wip;
   // Absent stays absent; a present-but-not-a-list value reads as an empty restriction
   // rather than as "unrestricted", because a `tools:` the writer meant as a limit must
   // never fail open.
@@ -132,6 +146,11 @@ export function parseAutomaton(name: string, text: string): Automaton {
     model: model || undefined,
     // "" and absent are both "launch button only".
     cron: cron || undefined,
+    // "" and absent are both "no card fires this".
+    kanban: kanban || undefined,
+    // Kept only when it is a usable limit; a bad value is reported as the definition's
+    // error below rather than stored as a number it is not.
+    wip: isValidWip(wip) ? wip : undefined,
     body: body.trim(),
     // One error field, so a file missing its prompt reports that first; the model and
     // the schedule are checked only once there is something to run. A bad `cron:` is an
@@ -139,7 +158,8 @@ export function parseAutomaton(name: string, text: string): Automaton {
     // file that says it runs daily and silently never does is the failure this module
     // keeps refusing to ship.
     error: prompt
-      ? (model && modelError(model)) || (cron && cronError(cron)) || undefined
+      ? (model && modelError(model)) || (cron && cronError(cron)) ||
+        (wip !== undefined && wipError(wip)) || undefined
       : "prompt: required",
   };
 }
@@ -160,12 +180,15 @@ export function automatonFile(
     tools?: string[];
     model?: string;
     cron?: string;
+    kanban?: string;
+    wip?: number;
   },
 ): string {
   const list = (xs: string[]) =>
     `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
   const model = a.model?.trim();
   const cron = a.cron?.trim();
+  const kanban = a.kanban?.trim();
   return [
     "---",
     `description: ${JSON.stringify(a.description)}`,
@@ -181,6 +204,10 @@ export function automatonFile(
     // Same treatment: no key at all is "launch button only", so clearing the form's
     // schedule field removes the schedule rather than leaving an empty one behind.
     ...(cron ? [`cron: ${JSON.stringify(cron)}`] : []),
+    // Same treatment as `cron:` — omitted rather than written empty, so clearing the
+    // form's column picker removes the trigger instead of leaving a blank one behind.
+    ...(kanban ? [`kanban: ${JSON.stringify(kanban)}`] : []),
+    ...(a.wip === undefined ? [] : [`wip: ${a.wip}`]),
     "---",
     "",
   ].join("\n");

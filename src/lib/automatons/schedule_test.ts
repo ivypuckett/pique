@@ -1,10 +1,6 @@
 import { assertEquals } from "@std/assert";
-import {
-  isDue,
-  scheduledTargets,
-  type TickDeps,
-  tickOnce,
-} from "./schedule.ts";
+import { isDue, type TickDeps, tickOnce } from "./schedule.ts";
+import { scheduledTargets } from "./targets.ts";
 import { listAutomatons, saveAutomaton } from "./service.ts";
 import { writeJson } from "../settings/file.ts";
 import type { Automaton } from "./parse.ts";

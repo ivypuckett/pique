@@ -57,6 +57,10 @@ export type RunRecord = {
   // first run so the record shape does not change when they land.
   trigger: string;
   args?: string;
+  // The card that fired this run, for `trigger: "kanban"`. `trigger` says what KIND of
+  // thing fired it; this says which one, which is what makes an old run legible after the
+  // board has moved on. Absent for every other trigger.
+  card?: string;
   // The model the run actually used, as `provider/model-id`, recorded once it has been
   // resolved — so a finished run says which model produced it rather than leaving the
   // reader to guess from whatever the scope's default happens to be TODAY. Absent on a
@@ -76,6 +80,14 @@ interface Run {
   // Which definition this run is of. Held so the scheduler can ask whether a schedule's
   // previous run is still going without reading every record off disk each minute.
   automaton: string;
+  // The card this run is working, when a kanban arrival started it. Held so the
+  // dispatcher's two guards — one run per card, at most `wip:` at once — are answered
+  // from this Map rather than by reading every record off disk.
+  card?: string;
+  // Called once, after this run leaves the Map, whatever its terminal status. The kanban
+  // dispatcher passes one to drain its queue; nothing else does, which is why this is a
+  // per-launch option rather than a module-level listener registry.
+  onEnd?: () => void;
   session: Session;
   unsubscribe: () => void;
   queue: ChatEvent[];
@@ -220,6 +232,17 @@ export async function reconcileRuns(): Promise<void> {
   }
 }
 
+// A run's end handler, called once the run is out of the Map. Never allowed to throw: it
+// belongs to a caller (the kanban dispatcher), and its failure must not become this
+// module's problem when the run itself finished cleanly.
+function notifyEnd(id: string, run: Run): void {
+  try {
+    run.onEnd?.();
+  } catch (err) {
+    console.error(`automaton run ${id}: its end handler failed:`, err);
+  }
+}
+
 // Launch `name` in `scope` and return the run id. Everything the run can reach —
 // model, base prompt, board, working directory — resolves against `scope`, even when
 // the definition itself was inherited from an ancestor.
@@ -234,9 +257,11 @@ export async function launchAutomaton(
     cwd: string;
     args?: string;
     trigger?: string;
+    card?: string;
+    onEnd?: () => void;
   },
 ): Promise<string> {
-  const { scope, name, cwd, args } = opts;
+  const { scope, name, cwd, args, card } = opts;
   const trigger = opts.trigger ?? "manual";
   const id = crypto.randomUUID();
   const startedAt = new Date().toISOString();
@@ -259,6 +284,7 @@ export async function launchAutomaton(
       error: message,
       trigger,
       args,
+      card,
     });
     throw new Error(message);
   };
@@ -425,6 +451,7 @@ export async function launchAutomaton(
       startedAt,
       trigger,
       args,
+      card,
       model: `${provider}/${modelId}`,
       sessionFile: session.sessionFile,
     });
@@ -443,6 +470,8 @@ export async function launchAutomaton(
   const run: Run = {
     scope,
     automaton: name,
+    card,
+    onEnd: opts.onEnd,
     session,
     unsubscribe: unsubscribe!,
     queue,
@@ -483,6 +512,7 @@ export async function launchAutomaton(
     } catch (err) {
       console.error(`automaton run ${id}: could not dispose its session:`, err);
     }
+    notifyEnd(id, run);
   };
   session
     .prompt(message)
@@ -561,6 +591,28 @@ export function isAutomatonRunning(scope: ScopeId, name: string): boolean {
   return false;
 }
 
+// The live CARD runs of this definition in this scope, as the cards they are working.
+// Its LENGTH is the `wip:` count and its MEMBERSHIP is the per-card guard — the kanban
+// dispatcher needs both, and asking once keeps them consistent with each other. Same Map,
+// and the same reasoning, as isAutomatonRunning above.
+//
+// A run no card started — the Launch button, a `cron:` — is deliberately NOT counted.
+// `wip:` holds card fires only (docs/automatons.md), and the mechanical reason is that
+// only a card fire carries the dispatcher's onEnd: a manual run occupying a slot would
+// free it, on ending, with nothing to notice, leaving cards queued behind a limit that
+// is no longer reached.
+export function liveRunsOf(scope: ScopeId, name: string): string[] {
+  const cards: string[] = [];
+  for (const run of runs.values()) {
+    if (
+      run.scope === scope && run.automaton === name && run.card !== undefined
+    ) {
+      cards.push(run.card);
+    }
+  }
+  return cards;
+}
+
 export async function stopRun(id: string): Promise<void> {
   const run = runs.get(id);
   // `stopped` already set means finish() or an earlier stopRun owns the outcome.
@@ -574,6 +626,7 @@ export async function stopRun(id: string): Promise<void> {
   run.stopped = true;
   runs.delete(id);
   run.unsubscribe();
+  notifyEnd(id, run);
   await patchRunRecord(run.scope, id, {
     status: "stopped",
     endedAt: new Date().toISOString(),

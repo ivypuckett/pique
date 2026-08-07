@@ -20,13 +20,21 @@ import {
   activeToolNamesOfRun,
   launchAutomaton,
   listRuns,
+  liveRunsOf,
   readRun,
   runHistory,
   type RunRecord,
   stopRun,
 } from "./run.ts";
+import { dispatchArrival } from "./kanban.ts";
 import { saveAutomaton } from "./service.ts";
 import { sessionsDir } from "./paths.ts";
+import {
+  board,
+  closeAllBoards,
+  setCardArrivedHandler,
+} from "../kanban/service.ts";
+import { writeJson } from "../settings/file.ts";
 import { activeToolNames, startAgent, stopAgent } from "../chat/agent.ts";
 import { enableLocal } from "../extensions/local.ts";
 import { ensureExtensionDirs, pendingPath } from "../extensions/paths.ts";
@@ -642,5 +650,143 @@ Deno.test("a tools: name that is not a builtin refuses the launch", async () => 
     const [record] = await listRuns(SCOPE);
     assertEquals(record.status, "failed");
     assertStringIncludes(record.error ?? "", "not a pi builtin");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 4 — the kanban trigger, end to end.
+//
+// Every layer of the trigger is unit-tested against injected deps; this one proves they
+// are CONNECTED. Nothing is stubbed but the model: board.setStatus → the service's
+// arrival handler → dispatchArrival → launchAutomaton → a record on disk.
+//
+// The automaton names a prompt template that does not exist, so the launch is REFUSED —
+// which is the point. A refused launch still writes its `failed` record, so the whole
+// chain is observable without a model runtime ever being reached.
+//
+// One seam this cannot cover: desktop.ts is what registers the handler in production and
+// a test cannot import it, so the test registers its own. This proves the chain works
+// when wired, not that the boot wiring exists.
+// ---------------------------------------------------------------------------
+
+Deno.test("a card moved into the watched column fires the automaton", async () => {
+  await withTempHome(async (cwd) => {
+    // Root has to be IN the layout or the dispatcher declines to fire: the layout is
+    // where a triggered run's cwd comes from (targets.ts).
+    await writeJson("layout", { root: { id: "root", cwd } });
+    await saveAutomaton("root", "worker", {
+      description: "",
+      prompt: "no-such-template",
+      extensions: [],
+      skills: [],
+      kanban: "Todo",
+    });
+    setCardArrivedHandler((scope, arrival) => {
+      void dispatchArrival(scope, arrival);
+    });
+    try {
+      const b = await board("root");
+      const statuses = b.getBoard().statuses;
+      const backlog = statuses.find((s) => s.name === "Backlog")!;
+      const todo = statuses.find((s) => s.name === "Todo")!;
+      // Created in a column nothing watches, so only the MOVE below can be what fired.
+      const cardId = b.createCard({
+        statusId: backlog.id,
+        title: "Fix the login bug",
+        actor: "human",
+      });
+      b.setStatus({
+        cardId,
+        statusId: todo.id,
+        reason: "starting",
+        actor: "human",
+      });
+
+      // The handler is synchronous into a fire-and-forget dispatch, so there is nothing
+      // to await — the record appearing IS the completion signal.
+      await until(
+        "the arrival to reach a run record",
+        async () => (await listRuns("root")).length > 0,
+      );
+
+      const [record] = await listRuns("root");
+      assertEquals(record.automaton, "worker");
+      assertEquals(record.trigger, "kanban");
+      assertEquals(record.card, cardId);
+      assertEquals(record.status, "failed");
+      // `$1` is the card id, `$2` its title as one quoted positional.
+      assertEquals(record.args, `${cardId} "Fix the login bug"`);
+      // Not merely "some refusal": this is the refusal of the definition saved above.
+      // Without it a launch that never found the file — the temp HOME not being the one
+      // saveAutomaton wrote into — would satisfy every other assertion here.
+      assertStringIncludes(record.error ?? "", "prompt template not found");
+    } finally {
+      // Both are module-level state that would otherwise leak into whatever runs next:
+      // the handler fires for every later board, and a cached handle holds a board.db
+      // inside a temp HOME this helper is about to delete.
+      setCardArrivedHandler(undefined);
+      closeAllBoards();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 5 — the two things the kanban queue rests on, against real runs.
+//
+// Both are observable ONLY here. Every dispatcher test injects its own deps, so the
+// queue drains happily in kanban_test.ts with `notifyEnd` deleted from run.ts and with
+// `liveRunsOf` counting runs no card started — while in production every queue stops
+// draining and every manual run eats a `wip:` slot nothing gives back.
+// ---------------------------------------------------------------------------
+
+Deno.test("liveRunsOf reports a live run's card, and only card runs", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+
+    let ended = 0;
+    const carded = await launchAutomaton({
+      scope: SCOPE,
+      name: "triage",
+      cwd,
+      card: "card-7",
+      trigger: "kanban",
+      onEnd: () => ended++,
+    });
+    // The Launch button's shape — same definition, same scope, no card — live at the
+    // same moment, so the filter is doing work rather than reading an empty Map.
+    const manual = await launchAutomaton({ scope: SCOPE, name: "triage", cwd });
+    assertEquals(liveRunsOf(SCOPE, "triage"), ["card-7"]);
+
+    release();
+    await awaitFinished(carded);
+    await awaitFinished(manual);
+    // finish() patches the record, evicts, and only then notifies; the eviction awaited
+    // above is not proof the handler ran.
+    await until("the card run's end handler to be called", () => ended === 1);
+    assertEquals(liveRunsOf(SCOPE, "triage"), []);
+  });
+});
+
+// The other terminal path. A run the user stops frees its `wip:` slot exactly as a
+// finished one does, so it has to drain the queue exactly as a finished one does.
+Deno.test("a stopped run reaches its end handler too", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+
+    let ended = 0;
+    const id = await launchAutomaton({
+      scope: SCOPE,
+      name: "triage",
+      cwd,
+      card: "card-8",
+      trigger: "kanban",
+      onEnd: () => ended++,
+    });
+    // Parked on the gate: provably mid-flight rather than merely young.
+    await received;
+    await stopRun(id);
+
+    assertEquals(ended, 1);
+    assertEquals(liveRunsOf(SCOPE, "triage"), []);
   });
 });
