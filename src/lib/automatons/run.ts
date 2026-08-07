@@ -591,18 +591,24 @@ export function isAutomatonRunning(scope: ScopeId, name: string): boolean {
   return false;
 }
 
-// The live runs of this definition in this scope, as the cards they are working
-// (undefined for a run no card started). Its LENGTH is the `wip:` count and its
-// MEMBERSHIP is the per-card guard — the kanban dispatcher needs both, and asking once
-// keeps them consistent with each other. Same Map, and the same reasoning, as
-// isAutomatonRunning above.
-export function liveRunsOf(
-  scope: ScopeId,
-  name: string,
-): (string | undefined)[] {
-  const cards: (string | undefined)[] = [];
+// The live CARD runs of this definition in this scope, as the cards they are working.
+// Its LENGTH is the `wip:` count and its MEMBERSHIP is the per-card guard — the kanban
+// dispatcher needs both, and asking once keeps them consistent with each other. Same Map,
+// and the same reasoning, as isAutomatonRunning above.
+//
+// A run no card started — the Launch button, a `cron:` — is deliberately NOT counted.
+// `wip:` holds card fires only (docs/automatons.md), and the mechanical reason is that
+// only a card fire carries the dispatcher's onEnd: a manual run occupying a slot would
+// free it, on ending, with nothing to notice, leaving cards queued behind a limit that
+// is no longer reached.
+export function liveRunsOf(scope: ScopeId, name: string): string[] {
+  const cards: string[] = [];
   for (const run of runs.values()) {
-    if (run.scope === scope && run.automaton === name) cards.push(run.card);
+    if (
+      run.scope === scope && run.automaton === name && run.card !== undefined
+    ) {
+      cards.push(run.card);
+    }
   }
   return cards;
 }

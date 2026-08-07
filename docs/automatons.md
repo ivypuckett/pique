@@ -215,8 +215,11 @@ Two guards, and no others:
 be live in one scope at once. **Absent means unlimited**, because a compiled-in
 default would be an arbitrary number and unlimited is what "a run per card"
 plainly means. A value that is not a usable limit is an error on the whole
-definition, alongside a malformed `cron:` or `model:`. It holds card fires only:
-the Launch button and a `cron:` are never held.
+definition, alongside a malformed `cron:` or `model:`. It counts card fires
+only, and in both directions: the Launch button and a `cron:` are never held by
+it, and neither do they occupy one of its slots. A run no card started is not
+what the limit is about, and it could not free a slot legibly either — what
+drains the queue is a card run ending.
 
 The queue lives in memory, so **it dies with the app**, as the runs themselves
 do. Cards waiting for a slot when pique closes are not waiting at the next

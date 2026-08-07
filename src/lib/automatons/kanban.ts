@@ -37,9 +37,9 @@ export interface DispatchDeps {
   // A scope's OWN definitions, never its inherited ones. See decision 1.
   list: (scope: ScopeId) => Promise<Automaton[]>;
   cwd: (scope: ScopeId) => Promise<string | undefined>;
-  // The live runs of this definition, as the cards they are working. Length is the wip
-  // count, membership is the per-card guard.
-  live: (scope: ScopeId, name: string) => (string | undefined)[];
+  // The live CARD runs of this definition, as the cards they are working. Length is the
+  // wip count, membership is the per-card guard.
+  live: (scope: ScopeId, name: string) => string[];
   // Which column this card is in NOW, or undefined when it is gone. The drain re-check.
   columnOf: (scope: ScopeId, cardId: string) => Promise<string | undefined>;
   launch: (opts: {
@@ -83,27 +83,81 @@ export function pendingCards(scope: ScopeId, name: string): string[] {
   return (queues.get(key(scope, name)) ?? []).map((p) => p.cardId);
 }
 
+// In-flight guard-and-launch, one per automaton. Both guards below are check-then-act
+// across the whole of deps.launch(), and launchAutomaton does not register the run until
+// after it has resolved refs, imported packages and built a session — hundreds of ms in
+// which deps.live() still answers as if nothing had started. Arrivals are dispatched
+// fire-and-forget, so without this two of them read the same live count and both fire,
+// past `wip:` and even onto the same card. Chaining each call onto the previous one for
+// that automaton makes the read and the launch inseparable. (The cron trigger is safe
+// from this only because tickOnce awaits its launches in order.)
+//
+// Per automaton and not global, so a slow launch of one definition cannot delay another's
+// arrivals. An entry is dropped once its chain settles, so this holds only what is
+// actually in flight.
+//
+// Known limit: this covers the CARD path only — the Launch button and a `cron:` call
+// launchAutomaton directly. Sound today because neither carries a card and liveRunsOf
+// counts only runs that do, so neither can land inside another's window and push it past
+// `wip:`. Anything that ever launches WITH a card without coming through here puts both
+// guards back to check-then-act, and closing that off for good needs run.ts to register a
+// run before it resolves one — a larger change than a trigger should make.
+const chains = new Map<string, Promise<unknown>>();
+
 // One fire: launched, dropped with a log, or put on the queue to wait for a slot. Shared
-// by the arrival path and the drain path so both apply the same two guards.
-async function startOrQueue(
+// by the arrival path and the drain path so both apply the same two guards, and
+// serialized per automaton — see `chains`.
+//
+// Answers whether a run of this card is now going, which is how drain() knows the pass
+// consumed a slot. A REFUSED launch answers false: it creates no run, so no onEnd will
+// ever come for it, and treating it as a start would strand every card behind it.
+function startOrQueue(
   scope: ScopeId,
   a: Automaton,
   card: Pending,
   cwd: string,
   deps: DispatchDeps,
-): Promise<void> {
+): Promise<boolean> {
+  const k = key(scope, a.name);
+  const tail = (chains.get(k) ?? Promise.resolve())
+    .then(() => guarded(scope, a, card, cwd, deps))
+    .catch((err) => {
+      // guarded() swallows a refused launch itself, so anything arriving here is a defect
+      // in the guards. Absorbed all the same: a rejected tail would reject every arrival
+      // that later chains onto it, and dispatchArrival must never raise.
+      console.error(`automaton kanban: ${k} could not be dispatched:`, err);
+      return false;
+    });
+  chains.set(k, tail);
+  return tail.finally(() => {
+    // Only the last one out clears the entry; anything that chained on in the meantime
+    // owns it now.
+    if (chains.get(k) === tail) chains.delete(k);
+  });
+}
+
+// The guards themselves — the stretch that must not interleave, so it is reached through
+// startOrQueue and never called directly.
+async function guarded(
+  scope: ScopeId,
+  a: Automaton,
+  card: Pending,
+  cwd: string,
+  deps: DispatchDeps,
+): Promise<boolean> {
   const live = deps.live(scope, a.name);
   if (live.includes(card.cardId)) {
     console.warn(
       `automaton kanban: ${scope}/${a.name} is already running ${card.cardId}; skipping`,
     );
-    return;
+    // A run of this card IS going — it holds the slot, and its end drains again.
+    return true;
   }
   if (a.wip !== undefined && live.length >= a.wip) {
     const q = queues.get(key(scope, a.name)) ?? [];
     if (!q.some((p) => p.cardId === card.cardId)) q.push(card);
     queues.set(key(scope, a.name), q);
-    return;
+    return false;
   }
   try {
     await deps.launch({
@@ -115,18 +169,20 @@ async function startOrQueue(
       args: `${card.cardId} ${JSON.stringify(card.title)}`,
       card: card.cardId,
       trigger: "kanban",
-      // Only set when there is a limit: with no `wip:` nothing ever queues, so there is
-      // nothing to drain.
-      onEnd: a.wip === undefined
-        ? undefined
-        : () => void drain(scope, a, cwd, deps),
+      // Unconditional, though only a definition with a `wip:` can queue anything: the
+      // limit can be edited ON while a run started without one is still going, and that
+      // run ending is then the only thing that can drain what queued behind it. A drain
+      // with nothing waiting costs one Map lookup.
+      onEnd: () => void drain(scope, a, cwd, deps),
     });
   } catch (err) {
     // A refused launch has already written its own `failed` record with the reason
     // (run.ts's fail()), which is the durable half. This is the log half, which for a
     // manual launch is the error thrown at whoever pressed the button.
     console.error(`automaton kanban: ${scope}/${a.name} refused:`, err);
+    return false;
   }
+  return true;
 }
 
 // One waiting card, started. Called when a run of that automaton ends and a slot frees.
@@ -136,8 +192,8 @@ async function drain(
   cwd: string,
   deps: DispatchDeps,
 ): Promise<void> {
-  // At most ONE card is started per pass. The loop exists only to skip over cards that
-  // have left the column, which cost nothing and free no slot.
+  // At most ONE card is STARTED per pass. The loop exists only to move past cards that
+  // free no slot: one that has left the column, and one whose launch was refused.
   for (;;) {
     const q = queues.get(key(scope, a.name));
     if (!q || q.length === 0) return;
@@ -167,10 +223,11 @@ async function drain(
       // Keep going: the slot this card would have taken is still free.
       continue;
     }
-    // Whether that launched or hit the per-card guard, this pass is done; the next run to
-    // end drains again.
-    await startOrQueue(scope, a, next, cwd, deps);
-    return;
+    // A started fire ends the pass: the next run to end drains again. A REFUSED one does
+    // not — it leaves no run behind to drain, so stopping here would strand the rest of
+    // the queue until something else happened to arrive. Bounded: each pass of this loop
+    // has already shifted a card off.
+    if (await startOrQueue(scope, a, next, cwd, deps)) return;
   }
 }
 

@@ -46,17 +46,17 @@ function deps(
   defs: Automaton[],
   opts: {
     cwd?: string | undefined;
-    live?: (scope: string, name: string) => (string | undefined)[];
+    live?: (scope: string, name: string) => string[];
     columnOf?: (scope: string, cardId: string) => Promise<string | undefined>;
   } = {},
 ): {
   deps: DispatchDeps;
   launched: Launched[];
-  running: (string | undefined)[];
+  running: string[];
   endAll: () => Promise<void>;
 } {
   const launched: Launched[] = [];
-  const running: (string | undefined)[] = [];
+  const running: string[] = [];
   const ends: (() => void)[] = [];
   return {
     launched,
@@ -76,7 +76,9 @@ function deps(
       launch: (o) => {
         const { onEnd, ...rest } = o;
         launched.push(rest);
-        running.push(o.card);
+        // Mirrors run.ts's liveRunsOf, which reports CARD runs only: a run the Launch
+        // button or a cron started is not in the live list at all.
+        if (o.card !== undefined) running.push(o.card);
         if (onEnd) ends.push(onEnd);
         return Promise.resolve("run-id");
       },
@@ -149,7 +151,7 @@ Deno.test("without wip: an arrival launches however many are already running", a
   assertEquals(launched.length, 1);
 });
 
-// Every queueing test below uses a DISTINCT automaton name (`queued-1`…`queued-5`), and
+// Every queueing test below uses a DISTINCT automaton name (`queued-1`…`queued-9`), and
 // new ones must too. The queue is module state keyed by scope and name, and a test that
 // leaves a card behind — as this one deliberately does — would otherwise be read as
 // arrivals by the next test sharing its name.
@@ -272,4 +274,140 @@ Deno.test("a scope missing from the layout does not fire", async () => {
   );
   await dispatchArrival("root", arrival(), d);
   assertEquals(launched, []);
+});
+
+// The two guards are check-then-act across the whole of launch(), and the real
+// launchAutomaton does not register the run until the very end of a resolution that
+// takes hundreds of ms. `slowly` reproduces that window; arrivals are dispatched without
+// awaiting, which is how the board's handler calls them. Without the serialization in
+// kanban.ts both of these tests see two runs where there should be one.
+function slowly(d: DispatchDeps): DispatchDeps {
+  return {
+    ...d,
+    launch: async (o) => {
+      await new Promise((r) => setTimeout(r, 20));
+      return await d.launch(o);
+    },
+  };
+}
+
+Deno.test("two arrivals inside one launch window still respect wip:", async () => {
+  const { deps: d, launched } = deps(
+    [def("queued-6", { kanban: "In Progress", wip: 1 })],
+  );
+  const slow = slowly(d);
+  const first = dispatchArrival("root", arrival({ cardId: "card-9" }), slow);
+  const second = dispatchArrival("root", arrival(), slow);
+  await Promise.all([first, second]);
+  assertEquals(launched.map((l) => l.card), ["card-9"]);
+  assertEquals(pendingCards("root", "queued-6"), ["card-1"]);
+});
+
+Deno.test("the same card twice inside one launch window starts one run", async () => {
+  const { deps: d, launched } = deps(
+    [def("concurrent-1", { kanban: "In Progress" })],
+  );
+  const slow = slowly(d);
+  const first = dispatchArrival("root", arrival(), slow);
+  const second = dispatchArrival("root", arrival(), slow);
+  await Promise.all([first, second]);
+  assertEquals(launched.map((l) => l.card), ["card-1"]);
+});
+
+// The serialization is per automaton for this reason: a definition whose launch resolves
+// slowly — a big package set, a cold runtime — must not hold up an arrival for a
+// different one.
+Deno.test("different automatons still dispatch concurrently", async () => {
+  const { deps: d } = deps([]);
+  const entered: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const blocking = (a: Automaton): DispatchDeps => ({
+    ...d,
+    list: () => Promise.resolve([a]),
+    launch: async (o) => {
+      entered.push(o.name);
+      await gate;
+      return "run-id";
+    },
+  });
+  const first = dispatchArrival(
+    "root",
+    arrival(),
+    blocking(def("busy-1", { kanban: "In Progress" })),
+  );
+  const second = dispatchArrival(
+    "root",
+    arrival(),
+    blocking(def("busy-2", { kanban: "In Progress" })),
+  );
+  // A timer, so every microtask either dispatch could still be waiting on has run. Both
+  // are now parked inside launch() with nothing released; one chain for both automatons
+  // would leave the second still queued behind the first.
+  await new Promise((r) => setTimeout(r, 0));
+  assertEquals(entered, ["busy-1", "busy-2"]);
+  release();
+  await Promise.all([first, second]);
+});
+
+// `wip:` holds card fires only. A manual or cron run occupying a slot would also never
+// free it as far as the queue is concerned: only a card fire carries the onEnd that
+// drains, so its end would leave cards waiting on a limit nothing is reaching.
+Deno.test("a run no card started does not consume a wip: slot", async () => {
+  const { deps: d, launched } = deps(
+    [def("queued-7", { kanban: "In Progress", wip: 1 })],
+  );
+  // What the Launch button does: the same definition, in the same scope, with no card.
+  await d.launch({
+    scope: "root",
+    name: "queued-7",
+    cwd: "/proj/root",
+    trigger: "manual",
+  });
+  await dispatchArrival("root", arrival(), d);
+  assertEquals(launched.map((l) => l.card), [undefined, "card-1"]);
+  assertEquals(pendingCards("root", "queued-7"), []);
+});
+
+// A refused launch leaves no run behind, so no onEnd will ever come for it. Stopping the
+// drain there would leave everything behind it waiting on an end that cannot happen.
+Deno.test("a launch that fails while draining does not strand the queue", async () => {
+  const { deps: d, launched, endAll } = deps(
+    [def("queued-8", { kanban: "In Progress", wip: 1 })],
+  );
+  const failing: DispatchDeps = {
+    ...d,
+    launch: (o) =>
+      o.card === "card-1"
+        ? Promise.reject(new Error("model unavailable"))
+        : d.launch(o),
+  };
+  await dispatchArrival("root", arrival({ cardId: "card-9" }), failing);
+  await dispatchArrival("root", arrival(), failing);
+  await dispatchArrival("root", arrival({ cardId: "card-2" }), failing);
+  assertEquals(pendingCards("root", "queued-8"), ["card-1", "card-2"]);
+  launched.length = 0;
+  await endAll();
+  assertEquals(launched.map((l) => l.card), ["card-2"]);
+  assertEquals(pendingCards("root", "queued-8"), []);
+});
+
+// `wip:` can be added to a definition while a run that started without one is still
+// going. That run's end is then the only thing that can drain what queued behind it — so
+// its onEnd has to have been attached even though the file had no limit at the time.
+Deno.test("onEnd is attached to a run of a definition with no wip:", async () => {
+  const { deps: d, launched, endAll } = deps(
+    [def("queued-9", { kanban: "In Progress" })],
+  );
+  await dispatchArrival("root", arrival({ cardId: "card-9" }), d);
+  const limited: DispatchDeps = {
+    ...d,
+    list: () =>
+      Promise.resolve([def("queued-9", { kanban: "In Progress", wip: 1 })]),
+  };
+  await dispatchArrival("root", arrival(), limited);
+  assertEquals(pendingCards("root", "queued-9"), ["card-1"]);
+  launched.length = 0;
+  await endAll();
+  assertEquals(launched.map((l) => l.card), ["card-1"]);
 });

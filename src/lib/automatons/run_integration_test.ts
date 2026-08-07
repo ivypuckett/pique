@@ -20,6 +20,7 @@ import {
   activeToolNamesOfRun,
   launchAutomaton,
   listRuns,
+  liveRunsOf,
   readRun,
   runHistory,
   type RunRecord,
@@ -726,5 +727,66 @@ Deno.test("a card moved into the watched column fires the automaton", async () =
       setCardArrivedHandler(undefined);
       closeAllBoards();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 5 — the two things the kanban queue rests on, against real runs.
+//
+// Both are observable ONLY here. Every dispatcher test injects its own deps, so the
+// queue drains happily in kanban_test.ts with `notifyEnd` deleted from run.ts and with
+// `liveRunsOf` counting runs no card started — while in production every queue stops
+// draining and every manual run eats a `wip:` slot nothing gives back.
+// ---------------------------------------------------------------------------
+
+Deno.test("liveRunsOf reports a live run's card, and only card runs", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+
+    let ended = 0;
+    const carded = await launchAutomaton({
+      scope: SCOPE,
+      name: "triage",
+      cwd,
+      card: "card-7",
+      trigger: "kanban",
+      onEnd: () => ended++,
+    });
+    // The Launch button's shape — same definition, same scope, no card — live at the
+    // same moment, so the filter is doing work rather than reading an empty Map.
+    const manual = await launchAutomaton({ scope: SCOPE, name: "triage", cwd });
+    assertEquals(liveRunsOf(SCOPE, "triage"), ["card-7"]);
+
+    release();
+    await awaitFinished(carded);
+    await awaitFinished(manual);
+    // finish() patches the record, evicts, and only then notifies; the eviction awaited
+    // above is not proof the handler ran.
+    await until("the card run's end handler to be called", () => ended === 1);
+    assertEquals(liveRunsOf(SCOPE, "triage"), []);
+  });
+});
+
+// The other terminal path. A run the user stops frees its `wip:` slot exactly as a
+// finished one does, so it has to drain the queue exactly as a finished one does.
+Deno.test("a stopped run reaches its end handler too", async () => {
+  await withTempHome(async (cwd) => {
+    await setUpAutomaton();
+
+    let ended = 0;
+    const id = await launchAutomaton({
+      scope: SCOPE,
+      name: "triage",
+      cwd,
+      card: "card-8",
+      trigger: "kanban",
+      onEnd: () => ended++,
+    });
+    // Parked on the gate: provably mid-flight rather than merely young.
+    await received;
+    await stopRun(id);
+
+    assertEquals(ended, 1);
+    assertEquals(liveRunsOf(SCOPE, "triage"), []);
   });
 });
