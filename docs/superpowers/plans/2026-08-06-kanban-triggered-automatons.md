@@ -1218,7 +1218,7 @@ type Pending = { cardId: string; title: string };
 // without a cap of its own: entries dedupe by card, so it cannot exceed the board.
 const queues = new Map<string, Pending[]>();
 
-const key = (scope: ScopeId, name: string) => `${scope} ${name}`;
+const key = (scope: ScopeId, name: string) => `${scope}/${name}`;
 
 // The cards waiting on this automaton, in arrival order. Exported for the tests, and the
 // only way to observe the queue at all.
