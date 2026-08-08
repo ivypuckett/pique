@@ -13,7 +13,6 @@ import {
   resizeBoundary as resize,
   selectGroup as selectGroupFn,
   setActiveTab as setActiveTabFn,
-  setExplorerHidden as setExplorerHiddenFn,
   type SideId,
   toggleCollapse as collapseFn,
   type ViewState,
@@ -126,10 +125,6 @@ export function resizeBoundary(
 
 export function toggleCollapse(viewId: string, id: SideId): void {
   edit(viewId, (v) => collapseFn(v, id));
-}
-
-export function setExplorerHidden(viewId: string, hidden: boolean): void {
-  edit(viewId, (v) => setExplorerHiddenFn(v, hidden));
 }
 
 export function addTab(viewId: string, kind: string): void {

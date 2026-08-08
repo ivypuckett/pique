@@ -101,13 +101,14 @@ export interface ViewState {
   chatWidthCh: number;
   center: ColumnState;    // chat; unchanged
   right: RightState;
-  explorer: ExplorerState; // { widthCh, hidden } until task 5 drops `hidden`
+  explorerWidthCh: number; // an `explorer: { widthCh, hidden }` object until task 5
 }
 ```
 
-`ExplorerState` outlives task 3 as it is and becomes a bare `explorerWidthCh` in task 5,
-where `hidden` dies with the docked addon — splitting it earlier would leave a
-one-field interface standing for two tasks.
+`ExplorerState` outlived task 3 as it was and became a bare `explorerWidthCh` in task 5,
+where `hidden` died with the docked addon — splitting it earlier would have left a
+one-field interface standing for two tasks. Both older shapes are migrated; see
+Persistence below, which is where that decision came back to bite.
 
 Why per-group `activeTabs` rather than one `activeTabId`: switching to Terminal
 should land on the terminal you were last in, not reset to the first.
@@ -170,6 +171,18 @@ carries a view-level migration:
 - Extra tabs of a singleton kind are dropped, keeping the first.
 - `right.activeTabId` → `activeGroup` (that tab's kind) + `activeTabs`.
 - `explorer.widthCh` → `explorerWidthCh`; `explorer.hidden` is discarded.
+
+**There are two old shapes, not one.** Tasks 3 and 5 each changed the persisted
+view, so a layout written by a build in between carries a *grouped* pane
+(`tabs`/`activeGroup`/`activeTabs`) beside the *old* `explorer` object. A
+`migrateView` that insists on `right.rows` rejects it, and the app then boots on
+defaults and persists them over the user's workspaces on the next keystroke —
+this happened, and it is why `migrateView` reads `tabs` or `rows`, keeps a group
+a tab already names, and keeps a `activeGroup`/`activeTabs` pair it is given
+(dropping remembered ids whose tab is gone or has changed group).
+
+The lesson generalises: when a task changes the persisted shape, teach
+`migrateView` the shape the *previous* task wrote, not just the original.
 
 Boards, sessions and settings live elsewhere on disk and are untouched.
 

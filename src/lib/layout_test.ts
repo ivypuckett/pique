@@ -23,15 +23,14 @@ import {
   migrateView,
   selectGroup,
   setActiveTab,
-  setExplorerHidden,
   toggleCollapse,
   type ViewState,
 } from "./layout.ts";
 
-Deno.test("createInitialView starts at chat 57ch, explorer 30ch, none collapsed", () => {
+Deno.test("createInitialView starts at chat 57ch, tree 30ch, none collapsed", () => {
   const v = createInitialView();
   assertEquals(v.chatWidthCh, 57);
-  assertEquals(v.explorer, { widthCh: 30, hidden: false });
+  assertEquals(v.explorerWidthCh, 30);
   assertEquals([v.center.collapsed, v.right.collapsed], [false, false]);
 });
 
@@ -56,20 +55,14 @@ Deno.test("resizeBoundary clamps both panes to MIN_WIDTH_CH", () => {
   );
 });
 
-Deno.test("resizeBoundary explorer-tabs sets the explorer's character width", () => {
+Deno.test("resizeBoundary explorer-tabs sets the file tree's character width", () => {
   const v = resizeBoundary(createInitialView(), "explorer-tabs", 24, 100);
-  assertEquals(v.explorer.widthCh, 24);
+  assertEquals(v.explorerWidthCh, 24);
   // clamped to MIN_WIDTH_CH at the edges
   assertEquals(
-    resizeBoundary(v, "explorer-tabs", 2, 100).explorer.widthCh,
+    resizeBoundary(v, "explorer-tabs", 2, 100).explorerWidthCh,
     MIN_WIDTH_CH,
   );
-});
-
-Deno.test("setExplorerHidden toggles the explorer flag without touching widths", () => {
-  const hidden = setExplorerHidden(createInitialView(), true);
-  assertEquals(hidden.explorer, { widthCh: 30, hidden: true });
-  assertEquals(setExplorerHidden(hidden, false).explorer.hidden, false);
 });
 
 Deno.test("gridTemplateColumns lists chat, splitter and the pane when open", () => {
@@ -498,7 +491,7 @@ Deno.test("migrateView groups a pre-groups pane by kind and keeps the shown tab"
   // and the rest of the view survives
   assertEquals(v.id, "view-1");
   assertEquals(v.chatWidthCh, 80);
-  assertEquals(v.explorer, { widthCh: 24, hidden: true });
+  assertEquals(v.explorerWidthCh, 24); // carried out of the old explorer object
 });
 
 Deno.test("migrateView keeps the first of a singleton kind that was duplicated", () => {
@@ -543,6 +536,71 @@ Deno.test("migrateView selects a group for a pane migrated with no tabs at all",
   assertEquals(activeTabId(v), "");
 });
 
+// A view as persisted between grouping the pane and moving the tree into the explorer
+// row: `right` is already grouped, but the tree's width still sits in an `explorer`
+// object. Rejecting this shape cost the app every workspace it read.
+function groupedView(right: Record<string, unknown>): unknown {
+  return {
+    id: "view-1",
+    chatWidthCh: 57,
+    center: {
+      collapsed: false,
+      activeTabId: "center-1",
+      rows: [{ id: "center-1", title: "Chat", kind: "chat", group: "chat" }],
+    },
+    right,
+    explorer: { widthCh: 42, hidden: false },
+  };
+}
+
+Deno.test("migrateView adopts a grouped pane whose width is still in an explorer object", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "kanban",
+    tabs: [
+      { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
+      { id: "right-2", title: "Kanban", kind: "kanban", group: "kanban" },
+      { id: "right-3", title: "a.ts", kind: "terminal", group: EXPLORER, props: { path: "a" } },
+    ],
+    activeTabs: { terminal: "right-1", kanban: "right-2", explorer: "right-3" },
+  }))!;
+  assertEquals(v.right.tabs.map((t) => [t.id, t.group]), [
+    ["right-1", "terminal"],
+    ["right-2", "kanban"],
+    ["right-3", EXPLORER],
+  ]);
+  assertEquals(v.right.activeGroup, "kanban"); // the selected row is kept, not re-derived
+  assertEquals(v.right.activeTabs, {
+    terminal: "right-1",
+    kanban: "right-2",
+    explorer: "right-3",
+  });
+  assertEquals(v.explorerWidthCh, 42); // carried out of the old explorer object
+  assertEquals(isViewState(v), true);
+});
+
+Deno.test("migrateView drops a remembered tab that no longer exists or moved group", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "terminal",
+    tabs: [{ id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" }],
+    activeTabs: { terminal: "right-1", kanban: "right-9", library: "right-1" },
+  }))!;
+  assertEquals(v.right.activeTabs, { terminal: "right-1" });
+  assertEquals(isViewState(v), true);
+});
+
+Deno.test("migrateView keeps a grouped pane's selected row even with nothing open in it", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "library",
+    tabs: [],
+    activeTabs: {},
+  }))!;
+  assertEquals(v.right.activeGroup, "library");
+  assertEquals(activeTabId(v), "");
+});
+
 Deno.test("migrateView refuses a view with no recognisable pane", () => {
   assertEquals(migrateView(null), null);
   assertEquals(migrateView({}), null);
@@ -550,7 +608,7 @@ Deno.test("migrateView refuses a view with no recognisable pane", () => {
   assertEquals(migrateView({ right: { rows: [{ id: 1 }] } }), null);
 });
 
-Deno.test("migrateView fills in a width or an explorer it cannot read", () => {
+Deno.test("migrateView fills in a width it cannot read", () => {
   const base = createInitialView();
   const raw = oldView([{ id: "right-1", title: "Terminal", kind: "terminal" }], "right-1") as
     Record<string, unknown>;
@@ -558,7 +616,7 @@ Deno.test("migrateView fills in a width or an explorer it cannot read", () => {
   raw.explorer = { widthCh: "wide" };
   const v = migrateView(raw)!;
   assertEquals(v.chatWidthCh, base.chatWidthCh);
-  assertEquals(v.explorer, base.explorer);
+  assertEquals(v.explorerWidthCh, base.explorerWidthCh);
 });
 
 Deno.test("a migrated view passes the guard the store uses", () => {

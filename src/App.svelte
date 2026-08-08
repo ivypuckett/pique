@@ -10,7 +10,7 @@
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
   import { ROOT } from "./lib/scope/paths.ts";
-  import { activeTabId } from "./lib/layout.ts";
+  import { activeTabId, EXPLORER } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
     activeId,
@@ -26,7 +26,7 @@
     focusAdjacentTab,
     focusAdjacentWorkspace,
     focusTabAt,
-    setExplorerHidden,
+    selectGroup,
     toggleCollapse,
     workspaceRailHidden,
   } from "./lib/store.ts";
@@ -110,24 +110,15 @@
     focusActiveTab();
   }
 
-  // ctrl+e: cycle the explorer. Hidden (or the pane collapsed) → reveal and focus it;
-  // visible but unfocused → focus it; visible and focused → hide it and hand focus to the tab.
-  async function toggleFileTree() {
+  // ctrl+e: show the explorer row and put the caret in the tree. The tree is that row's
+  // content now, so there is nothing to toggle — a collapsed pane is opened first, since
+  // the row is inside it. (ctrl+t e replaces this binding in the next step.)
+  async function showFileTree() {
     const view = get(activeView);
-    const focused = visibleTree()?.contains(document.activeElement) ?? false;
-
-    if (view.right.collapsed || view.explorer.hidden) {
-      if (view.right.collapsed) toggleCollapse(view.id, "right");
-      if (view.explorer.hidden) setExplorerHidden(view.id, false);
-      await tick();
-      visibleTree()?.focus();
-    } else if (focused) {
-      setExplorerHidden(view.id, true);
-      await tick();
-      focusActiveTab();
-    } else {
-      visibleTree()?.focus();
-    }
+    if (view.right.collapsed) toggleCollapse(view.id, "right");
+    selectGroup(view.id, EXPLORER);
+    await tick();
+    visibleTree()?.focus();
   }
 
   // Every chord stroke changes what is on screen, so every one of them ends here: take
@@ -278,11 +269,11 @@
         settingsOpen.set(true);
       }
 
-      // ctrl+e: show/hide/focus the file explorer.
+      // ctrl+e: show the file explorer and focus the tree.
       if (e.code === "KeyE") {
         e.preventDefault();
         e.stopPropagation();
-        toggleFileTree();
+        showFileTree();
       }
 
       // ctrl+= / ctrl+- / ctrl+0: zoom the UI in, out, or back to 100%. The webview

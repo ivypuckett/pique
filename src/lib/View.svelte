@@ -39,7 +39,7 @@
       viewId={view.id}
       right={view.right}
       id="right"
-      explorer={view.explorer}
+      explorerWidthCh={view.explorerWidthCh}
       {cwd}
       {workspaceId}
     />

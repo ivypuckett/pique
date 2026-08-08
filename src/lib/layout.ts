@@ -38,14 +38,6 @@ export interface RightState {
 
 export const EXPLORER = "explorer";
 
-// The file explorer is a sticky addon docked at the left edge of the right pane, full
-// height, sharing the pane's width with the tabs. It isn't a tab (never in col.rows);
-// ctrl+e shows/hides/focuses it.
-export interface ExplorerState {
-  widthCh: number; // the explorer's fixed width; the tabs take the rest of the pane
-  hidden: boolean;
-}
-
 // Widths are measured in characters, not fractions of the window: the sized pane keeps
 // the same number of columns of text however the window is resized or the workspace
 // tiled, and its sibling absorbs the slack.
@@ -54,7 +46,9 @@ export interface ViewState {
   chatWidthCh: number; // chat's fixed width; the tabbed pane takes the rest of the row
   center: ColumnState; // chat
   right: RightState; // the tabbed pane
-  explorer: ExplorerState; // file-tree addon inside the right pane
+  // The file tree's width inside the explorer row, where it shares the pane with the
+  // editors opened from it. The tree is never hidden there — it is that row's content.
+  explorerWidthCh: number;
 }
 
 export const MIN_WIDTH_CH = 10;
@@ -79,7 +73,7 @@ export function createInitialView(id = "view-1"): ViewState {
       }],
       activeTabs: { terminal: "right-1" },
     },
-    explorer: { widthCh: 30, hidden: false },
+    explorerWidthCh: 30,
   };
 }
 
@@ -87,8 +81,9 @@ export function visibleIds(v: ViewState): ColumnId[] {
   return v.right.collapsed ? ["center"] : ["center", "right"];
 }
 
-// Visual order is chat | [explorer · tabs]. "center-right" is the outer splitter between
-// chat and the pane; "explorer-tabs" is the inner one between the explorer and the tabs.
+// Visual order is chat | [tree · tabs | rail]. "center-right" is the outer splitter
+// between chat and the pane; "explorer-tabs" is the inner one between the file tree and
+// the editors beside it, inside the explorer row.
 export type Boundary = "center-right" | "explorer-tabs";
 
 export const SPLITTER_PX = 6;
@@ -112,7 +107,7 @@ export function resizeBoundary(
     Math.max(MIN_WIDTH_CH, availableCh - MIN_WIDTH_CH),
   );
   if (b === "explorer-tabs") {
-    return { ...v, explorer: { ...v.explorer, widthCh: first } };
+    return { ...v, explorerWidthCh: first };
   }
   return { ...v, chatWidthCh: first };
 }
@@ -140,10 +135,6 @@ export function gridTemplateColumns(v: ViewState): string {
 
 export function toggleCollapse(v: ViewState, _id: SideId): ViewState {
   return { ...v, right: { ...v.right, collapsed: !v.right.collapsed } };
-}
-
-export function setExplorerHidden(v: ViewState, hidden: boolean): ViewState {
-  return { ...v, explorer: { ...v.explorer, hidden } };
 }
 
 // Display label for a module kind, used for new-tab titles and the picker menu. Kinds
@@ -338,12 +329,6 @@ function isRightState(r: unknown): boolean {
   );
 }
 
-function isExplorerState(e: unknown): boolean {
-  if (typeof e !== "object" || e === null) return false;
-  const ex = e as Record<string, unknown>;
-  return typeof ex.widthCh === "number" && typeof ex.hidden === "boolean";
-}
-
 // Structural guard for persisted state: rejects valid JSON of the wrong shape so a
 // stale or corrupt layout.json falls back to defaults instead of crashing render.
 export function isViewState(v: unknown): v is ViewState {
@@ -351,26 +336,36 @@ export function isViewState(v: unknown): v is ViewState {
   const obj = v as Record<string, unknown>;
   return typeof obj.id === "string" && typeof obj.chatWidthCh === "number" &&
     isColumnState(obj.center) && isRightState(obj.right) &&
-    isExplorerState(obj.explorer);
+    typeof obj.explorerWidthCh === "number";
 }
 
-// Adopt a view persisted before the right pane had groups: `right` was one flat list of
-// `rows` with a single `activeTabId`. Returning null (rather than letting isViewState
-// reject the tree three levels up) is what keeps a stale layout from resetting every
-// workspace and its working directory — see migrateSession.
+// Adopt a view persisted by an older build. Two shapes reach here: the pre-groups one,
+// whose `right` is a flat list of `rows` with a single `activeTabId`, and the one written
+// between grouping the pane and moving the tree into it, whose `right` is already grouped
+// but whose width still sits in an `explorer` object. Returning null (rather than letting
+// isViewState reject the tree three levels up) is what keeps a stale layout from resetting
+// every workspace and its working directory — see migrateSession.
 export function migrateView(raw: unknown): ViewState | null {
   if (isViewState(raw)) return raw;
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
   const old = obj.right as Record<string, unknown> | undefined;
-  if (!old || !Array.isArray(old.rows) || !old.rows.every(isModuleRefish)) {
-    return null;
-  }
+  const source = Array.isArray(old?.tabs)
+    ? old!.tabs
+    : Array.isArray(old?.rows)
+    ? old!.rows
+    : null;
+  if (!source || !source.every(isModuleRefish)) return null;
 
   const tabs: ModuleRef[] = [];
-  for (const row of old.rows as Omit<ModuleRef, "group">[]) {
-    // A tab with props is that file, so it joins the explorer group beside the tree.
-    const group = row.props ? EXPLORER : row.kind;
+  for (const row of source as (Omit<ModuleRef, "group"> & { group?: unknown })[]) {
+    // Keep a group the tab already names. Failing that, a tab with props is that file, so
+    // it joins the explorer group beside the tree.
+    const group = typeof row.group === "string" && row.group !== ""
+      ? row.group
+      : row.props
+      ? EXPLORER
+      : row.kind;
     // Singletons that were duplicated before the rule existed keep their first tab only.
     if (group !== EXPLORER && !isDuplicable(row.kind) &&
       tabs.some((t) => t.group === group)
@@ -378,8 +373,23 @@ export function migrateView(raw: unknown): ViewState | null {
     tabs.push({ ...row, group });
   }
 
-  const wasActive = tabs.find((t) => t.id === old.activeTabId);
+  // What was on screen: a pre-groups pane names one tab for the whole strip, a grouped one
+  // remembers a tab per group.
+  const remembered = (typeof old!.activeTabs === "object" && old!.activeTabs !== null
+    ? old!.activeTabs
+    : {}) as Record<string, unknown>;
+  const shownId = typeof old!.activeTabId === "string"
+    ? old!.activeTabId
+    : remembered[String(old!.activeGroup)];
+  const wasActive = tabs.find((t) => t.id === shownId);
+
   const activeTabs: Record<string, string> = {};
+  // Anything a grouped pane remembered, as long as that tab survived in that group.
+  for (const [group, id] of Object.entries(remembered)) {
+    if (tabs.some((t) => t.id === id && t.group === group)) {
+      activeTabs[group] = id as string;
+    }
+  }
   for (const tab of tabs) {
     // The tab that was on screen keeps its group; every other group opens on its first.
     if (!activeTabs[tab.group]) activeTabs[tab.group] = tab.id;
@@ -387,19 +397,27 @@ export function migrateView(raw: unknown): ViewState | null {
   if (wasActive) activeTabs[wasActive.group] = wasActive.id;
 
   const base = createInitialView(typeof obj.id === "string" ? obj.id : "view-1");
+  const explorerWidth = typeof obj.explorerWidthCh === "number"
+    ? obj.explorerWidthCh
+    : (obj.explorer as Record<string, unknown> | undefined)?.widthCh;
   const migrated: ViewState = {
     ...base,
     chatWidthCh: typeof obj.chatWidthCh === "number"
       ? obj.chatWidthCh
       : base.chatWidthCh,
-    explorer: isExplorerState(obj.explorer)
-      ? obj.explorer as ExplorerState
-      : base.explorer,
+    // Both older shapes kept the width inside an `explorer` object, beside a `hidden`
+    // flag the docked addon needed and the explorer row does not.
+    explorerWidthCh: typeof explorerWidth === "number"
+      ? explorerWidth
+      : base.explorerWidthCh,
     right: {
-      collapsed: old.collapsed === true,
-      // The group that was on screen; failing that the first tab's, failing that the
-      // default view's, so a pane migrated empty still has a group selected.
-      activeGroup: wasActive?.group ?? tabs[0]?.group ?? base.right.activeGroup,
+      collapsed: old!.collapsed === true,
+      // The group that was already selected, or the one that was on screen; failing both
+      // the first tab's, failing that the default view's, so a pane migrated empty still
+      // has a group selected.
+      activeGroup: typeof old!.activeGroup === "string" && old!.activeGroup !== ""
+        ? old!.activeGroup
+        : wasActive?.group ?? tabs[0]?.group ?? base.right.activeGroup,
       tabs,
       activeTabs,
     },
