@@ -259,10 +259,23 @@ Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
   assertEquals(v.right.activeGroup, "automatons"); // clamped at the bottom
 });
 
-Deno.test("focusAdjacentGroup opens nothing on the way past an empty row", () => {
+Deno.test("focusAdjacentGroup opens the module of the row it lands on", () => {
   const v = focusAdjacentGroup(createInitialView(), 1); // onto the empty gitdiff row
   assertEquals(v.right.activeGroup, "gitdiff");
-  assertEquals(v.right.tabs.length, 1);
+  assertEquals(groupTabs(v, "gitdiff").map((t) => t.title), ["Git Diff"]);
+});
+
+Deno.test("focusAdjacentGroup shows an already-open row without opening a second", () => {
+  let v = addTab(createInitialView(), "gitdiff"); // right-2, gitdiff selected
+  v = focusAdjacentGroup(v, -1); // back onto the terminal row
+  v = focusAdjacentGroup(v, 1); // and onto gitdiff again
+  assertEquals(groupTabs(v, "gitdiff").map((t) => t.id), ["right-2"]);
+});
+
+Deno.test("focusAdjacentGroup opens nothing on the explorer row", () => {
+  const v = focusAdjacentGroup(createInitialView(), -1); // onto the explorer row
+  assertEquals(v.right.activeGroup, EXPLORER);
+  assertEquals(v.right.tabs.length, 1); // just the terminal it started with
   assertEquals(activeTabId(v), "");
 });
 
@@ -293,7 +306,7 @@ Deno.test("focusTabAt shows the nth tab of the group and ignores a digit past th
 });
 
 Deno.test("focusAdjacentTab is a no-op on an empty group", () => {
-  const empty = closeTab(createInitialView(), "right-1");
+  const empty = selectGroup(createInitialView(), EXPLORER); // no files open beside the tree
   assertEquals(activeTabId(focusAdjacentTab(empty, 1)), "");
 });
 
@@ -320,12 +333,13 @@ Deno.test("closeTab removes a tab", () => {
   assertEquals(v.right.tabs.map((t) => t.id), ["right-1"]);
 });
 
-Deno.test("closeTab empties the group but leaves it selected", () => {
+Deno.test("closeTab replaces a module row's last tab with a fresh one", () => {
   const closed = closeTab(createInitialView(), "right-1");
-  assertEquals(closed.right.tabs.length, 0);
   assertEquals(closed.right.activeGroup, "terminal");
-  assertEquals(closed.right.activeTabs, {}); // an empty group remembers nothing
-  assertEquals(activeTabId(closed), "");
+  // A new tab, not the one that was closed: the old shell is gone and a clean one is
+  // shown, so the row never falls back to an empty pane.
+  assertEquals(groupTabs(closed, "terminal").map((t) => t.title), ["Terminal"]);
+  assertEquals(activeTabId(closed), groupTabs(closed, "terminal")[0].id);
 });
 
 Deno.test("closeTab shows the previous tab of the group when the shown one is closed", () => {
@@ -356,10 +370,12 @@ Deno.test("closeTab leaves the shown tab unchanged when closing a different one"
   assertEquals(activeTabId(v), "right-2");
 });
 
-Deno.test("closeTab leaves another group's memory alone", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2
-  v = closeTab(v, "right-1"); // empties the terminal group
-  assertEquals(v.right.activeTabs, { kanban: "right-2" });
+Deno.test("closeTab leaves another group's memory and the selection alone", () => {
+  let v = addTab(createInitialView(), "kanban"); // right-2, kanban selected
+  v = closeTab(v, "right-1"); // the terminal row's last tab, refilled with a fresh one
+  assertEquals(v.right.activeGroup, "kanban"); // refilling a row you aren't on can't pull you to it
+  assertEquals(v.right.activeTabs.kanban, "right-2");
+  assertEquals(v.right.activeTabs.terminal, groupTabs(v, "terminal")[0].id);
 });
 
 Deno.test("isViewState accepts a real view and rejects malformed shapes", () => {

@@ -150,13 +150,15 @@ export function selectGroup(v: ViewState, group: string): ViewState {
 }
 
 // Move up or down the rail by `dir` (ctrl+t j/k). Clamped at the ends, like every other
-// navigation. Selection only — walking past an empty row must not spawn a module in it.
+// navigation. Select-or-create, same as clicking the row: landing on a row shows its
+// module, so moving along the rail is moving between modules rather than between a
+// module and an empty pane telling you which chord opens it.
 export function focusAdjacentGroup(v: ViewState, dir: -1 | 1): ViewState {
   const groups = railGroups();
   const idx = groups.indexOf(v.right.activeGroup);
   if (idx === -1) return v;
   const next = Math.min(groups.length - 1, Math.max(0, idx + dir));
-  return { ...v, right: { ...v.right, activeGroup: groups[next] } };
+  return selectGroup(v, groups[next]);
 }
 
 // Append a tab, select its group and make it that group's visible one.
@@ -265,21 +267,29 @@ export function closeTab(v: ViewState, tabId: string): ViewState {
   const activeTabs = { ...v.right.activeTabs };
   if (activeTabs[tab.group] === tabId) {
     // Prefer the previous tab of the same group; fall back to the next. A group whose
-    // last tab is closed carries no entry at all — it stays selected and shows nothing.
+    // last tab is closed carries no entry at all — the explorer row is the only one that
+    // can end up that way, and the tree is its content.
     const siblings = groupTabs(v, tab.group);
     const idx = siblings.findIndex((t) => t.id === tabId);
     const next = siblings[idx - 1] ?? siblings[idx + 1];
     if (next) activeTabs[tab.group] = next.id;
     else delete activeTabs[tab.group];
   }
-  return {
-    ...v,
-    right: {
-      ...v.right,
-      tabs: v.right.tabs.filter((t) => t.id !== tabId),
-      activeTabs,
-    },
-  };
+  const tabs = v.right.tabs.filter((t) => t.id !== tabId);
+  // A module row always holds its module: closing the last terminal kills that shell and
+  // leaves a clean one in its place rather than an empty pane. Selection stays where it
+  // is — emptying a row you are not looking at must not pull you into it.
+  if (moduleDef(tab.group) && !tabs.some((t) => t.group === tab.group)) {
+    const fresh = nextRightId(tabs);
+    tabs.push({
+      id: fresh,
+      title: moduleLabel(tab.group),
+      kind: tab.group,
+      group: tab.group,
+    });
+    activeTabs[tab.group] = fresh;
+  }
+  return { ...v, right: { ...v.right, tabs, activeTabs } };
 }
 
 function isModuleRef(r: unknown): boolean {

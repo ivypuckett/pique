@@ -3,7 +3,6 @@
   import {
     type ColumnId,
     EXPLORER,
-    moduleLabel,
     type RightState,
     SPLITTER_PX,
     trackPair,
@@ -13,7 +12,6 @@
   import ModuleRail from "./ModuleRail.svelte";
   import Splitter from "./Splitter.svelte";
   import TabStrip from "./TabStrip.svelte";
-  import { moduleDef } from "./modules/manifest.ts";
   import { registry } from "./modules/registry.ts";
 
   // `id` picks the branch: "center" is the chat column, which is one fixed module and so
@@ -31,17 +29,6 @@
 
   const FileTree = registry["filetree"];
   let bodyEl: HTMLElement | undefined = $state();
-
-  // What an empty rail row says. A module row names the chord that opens one; the
-  // explorer's tabs only ever come from the tree, so it points there instead.
-  const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
-
-  function emptyHint(group: string): string {
-    const def = moduleDef(group);
-    return def
-      ? `No ${def.label} open — press ${mod}T ${def.key.toUpperCase()}.`
-      : "Nothing open.";
-  }
 
   // Inner splitter between the file tree and the files open beside it; the tree is its
   // left column, sized in ch, so the pointer's px are converted through one character's width.
@@ -112,14 +99,6 @@
               </ModuleFrame>
             </div>
           {/each}
-          <!-- A row whose last tab was closed keeps the selection rather than jumping
-               somewhere else, so it needs something to show. The explorer row never does:
-               the tree is its content. -->
-          {#if shown === "" && !onExplorer}
-            <div class="absolute inset-0 grid place-items-center p-4 text-center text-sm opacity-60">
-              {emptyHint(pane.activeGroup)}
-            </div>
-          {/if}
         </div>
       </div>
     </div>
