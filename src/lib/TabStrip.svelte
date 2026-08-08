@@ -1,7 +1,7 @@
 <script lang="ts">
   import { addTab, closeTab, setActiveTab } from "./store.ts";
-  import type { RightState } from "./layout.ts";
-  import { MODULES } from "./modules/manifest.ts";
+  import { moduleLabel, type RightState } from "./layout.ts";
+  import { isDuplicable } from "./modules/manifest.ts";
 
   let { viewId, right, explorerHidden, onToggleExplorer, onCollapse }: {
     viewId: string;
@@ -43,14 +43,15 @@
       >×</button>
     </div>
   {/each}
-  <div class="dropdown dropdown-end">
-    <button tabindex="0" class="btn btn-ghost btn-xs" aria-label="Add tab">+</button>
-    <ul class="dropdown-content menu z-10 mt-1 w-40 rounded-box bg-base-200 p-1 shadow">
-      {#each MODULES as m (m.kind)}
-        <li><button onclick={() => addTab(viewId, m.kind)}>{m.label}</button></li>
-      {/each}
-    </ul>
-  </div>
+  <!-- Which module to open is the rail's job now, so + means one more of this one. Only a
+       duplicable row can have a second, so it is the only row that shows the button. -->
+  {#if isDuplicable(right.activeGroup)}
+    <button
+      class="btn btn-ghost btn-xs"
+      aria-label="New {moduleLabel(right.activeGroup)} tab"
+      onclick={() => addTab(viewId, right.activeGroup)}
+    >+</button>
+  {/if}
   {#if onCollapse}
     <button
       class="btn btn-ghost btn-xs ml-auto"

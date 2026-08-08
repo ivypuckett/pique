@@ -29,6 +29,12 @@ export function moduleDef(kind: string): ModuleDef | undefined {
   return MODULES.find((m) => m.kind === kind);
 }
 
+// The rail's rows, top to bottom — the order ctrl+t j/k walks. The explorer heads the
+// list: it is a row without a module, holding the tree and the files opened from it.
+export function railGroups(): string[] {
+  return ["explorer", ...MODULES.map((m) => m.kind)];
+}
+
 // Whether a view may hold a second tab of this kind. An unknown kind — one read back
 // from a layout written by another build — counts as a singleton: the conservative
 // answer, since it renders as "Unknown module" either way.

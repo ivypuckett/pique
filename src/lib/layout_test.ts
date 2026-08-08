@@ -15,11 +15,13 @@ import {
   addTab,
   closeTab,
   EXPLORER,
+  focusAdjacentGroup,
   focusAdjacentTab,
   focusTabAt,
   groupTabs,
   isViewState,
   migrateView,
+  selectGroup,
   setActiveTab,
   setExplorerHidden,
   toggleCollapse,
@@ -235,6 +237,61 @@ Deno.test("a group remembers its tab across a switch away and back", () => {
   assertEquals(activeTabId(v), "right-3");
   v = addTab(v, "terminal"); // a third terminal, so the group is selected again
   assertEquals(v.right.activeGroup, "terminal");
+});
+
+Deno.test("selectGroup shows an open group without opening anything", () => {
+  let v = addTab(createInitialView(), "kanban"); // kanban selected, right-2
+  v = addTab(v, "terminal"); // right-3, terminals selected
+  const back = selectGroup(v, "kanban");
+  assertEquals(back.right.activeGroup, "kanban");
+  assertEquals(back.right.tabs.length, v.right.tabs.length); // nothing opened
+  assertEquals(activeTabId(back), "right-2");
+});
+
+Deno.test("selectGroup opens the module when its row is empty", () => {
+  const v = selectGroup(createInitialView(), "library");
+  assertEquals(v.right.activeGroup, "library");
+  assertEquals(groupTabs(v, "library").map((t) => t.title), ["Library"]);
+});
+
+Deno.test("selectGroup selects the empty explorer row rather than opening a module", () => {
+  const v = selectGroup(createInitialView(), EXPLORER);
+  assertEquals(v.right.activeGroup, EXPLORER);
+  assertEquals(v.right.tabs.length, 1); // just the terminal it started with
+  assertEquals(activeTabId(v), "");
+});
+
+Deno.test("selectGroup ignores a row that is not a module", () => {
+  const v = createInitialView();
+  assertEquals(selectGroup(v, "nonsense"), v);
+});
+
+Deno.test("selectGroup reopens a module whose last tab was closed", () => {
+  let v = addTab(createInitialView(), "kanban");
+  v = closeTab(v, activeTabId(v));
+  v = selectGroup(v, "kanban");
+  assertEquals(groupTabs(v, "kanban").length, 1);
+});
+
+Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
+  // rail order: explorer, terminal, gitdiff, kanban, library, automatons
+  let v = createInitialView(); // terminal selected
+  v = focusAdjacentGroup(v, -1);
+  assertEquals(v.right.activeGroup, EXPLORER);
+  assertEquals(focusAdjacentGroup(v, -1).right.activeGroup, EXPLORER); // clamped at the top
+  v = focusAdjacentGroup(v, 1);
+  assertEquals(v.right.activeGroup, "terminal");
+  v = focusAdjacentGroup(v, 1);
+  assertEquals(v.right.activeGroup, "gitdiff");
+  for (let i = 0; i < 9; i++) v = focusAdjacentGroup(v, 1);
+  assertEquals(v.right.activeGroup, "automatons"); // clamped at the bottom
+});
+
+Deno.test("focusAdjacentGroup opens nothing on the way past an empty row", () => {
+  const v = focusAdjacentGroup(createInitialView(), 1); // onto the empty gitdiff row
+  assertEquals(v.right.activeGroup, "gitdiff");
+  assertEquals(v.right.tabs.length, 1);
+  assertEquals(activeTabId(v), "");
 });
 
 Deno.test("focusAdjacentTab moves along the group's strip and clamps at the ends", () => {

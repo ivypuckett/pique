@@ -7,9 +7,11 @@ import {
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
+  focusAdjacentGroup as focusAdjacentGroupFn,
   focusAdjacentTab as focusAdjacentTabFn,
   focusTabAt as focusTabAtFn,
   resizeBoundary as resize,
+  selectGroup as selectGroupFn,
   setActiveTab as setActiveTabFn,
   setExplorerHidden as setExplorerHiddenFn,
   type SideId,
@@ -154,6 +156,17 @@ export function focusAdjacentTab(viewId: string, dir: -1 | 1): void {
 
 export function focusTabAt(viewId: string, n: number): void {
   edit(viewId, (v) => focusTabAtFn(v, n));
+}
+
+// Show a rail row (clicking the rail, ctrl+t's module letters). Opens the module if that
+// row has nothing in it yet.
+export function selectGroup(viewId: string, group: string): void {
+  edit(viewId, (v) => selectGroupFn(v, group));
+}
+
+// Move up or down the rail (ctrl+t j/k), without opening anything on the way.
+export function focusAdjacentGroup(viewId: string, dir: -1 | 1): void {
+  edit(viewId, (v) => focusAdjacentGroupFn(v, dir));
 }
 
 export function closeTab(viewId: string, tabId: string): void {

@@ -1,4 +1,4 @@
-import { isDuplicable, moduleDef } from "./modules/manifest.ts";
+import { isDuplicable, moduleDef, railGroups } from "./modules/manifest.ts";
 
 export type ColumnId = "center" | "right";
 export type SideId = "right";
@@ -168,6 +168,26 @@ export function groupTabs(v: ViewState, group = v.right.activeGroup): ModuleRef[
 // The tab on screen: the selected group's remembered one. "" when that group is empty.
 export function activeTabId(v: ViewState): string {
   return v.right.activeTabs[v.right.activeGroup] ?? "";
+}
+
+// Show a rail row. Select-or-create: a module group with nothing open gets a tab, which
+// is how ctrl+t k has always behaved. The explorer has no module of its own, so it is
+// only ever selected — its tabs come from the tree.
+export function selectGroup(v: ViewState, group: string): ViewState {
+  if (groupTabs(v, group).length > 0 || group === EXPLORER) {
+    return { ...v, right: { ...v.right, activeGroup: group } };
+  }
+  return moduleDef(group) ? addTab(v, group) : v;
+}
+
+// Move up or down the rail by `dir` (ctrl+t j/k). Clamped at the ends, like every other
+// navigation. Selection only — walking past an empty row must not spawn a module in it.
+export function focusAdjacentGroup(v: ViewState, dir: -1 | 1): ViewState {
+  const groups = railGroups();
+  const idx = groups.indexOf(v.right.activeGroup);
+  if (idx === -1) return v;
+  const next = Math.min(groups.length - 1, Math.max(0, idx + dir));
+  return { ...v, right: { ...v.right, activeGroup: groups[next] } };
 }
 
 // Append a tab, select its group and make it that group's visible one.
