@@ -13,6 +13,8 @@ import {
   addEditorTab,
   addTab,
   closeTab,
+  focusAdjacentTab,
+  focusTabAt,
   isViewState,
   setActiveTab,
   setExplorerHidden,
@@ -144,6 +146,30 @@ Deno.test("setActiveTab switches the active right tab", () => {
 Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
   const v = createInitialView();
   assertEquals(setActiveTab(v, "right-999").right.activeTabId, "right-1");
+});
+
+Deno.test("focusAdjacentTab moves the active tab and clamps at the ends", () => {
+  let v = addTab(createInitialView(), "kanban"); // right-1, right-2 (active)
+  v = addTab(v, "library"); // right-3, active
+  assertEquals(focusAdjacentTab(v, 1).right.activeTabId, "right-3"); // clamped at the end
+  v = focusAdjacentTab(v, -1);
+  assertEquals(v.right.activeTabId, "right-2");
+  v = focusAdjacentTab(v, -1);
+  assertEquals(v.right.activeTabId, "right-1");
+  assertEquals(focusAdjacentTab(v, -1).right.activeTabId, "right-1"); // clamped at the start
+});
+
+Deno.test("focusTabAt shows the nth tab and ignores a digit past the end", () => {
+  let v = addTab(createInitialView(), "kanban"); // right-1, right-2
+  v = addTab(v, "library"); // right-3, active
+  assertEquals(focusTabAt(v, 1).right.activeTabId, "right-1");
+  assertEquals(focusTabAt(v, 2).right.activeTabId, "right-2");
+  assertEquals(focusTabAt(v, 9).right.activeTabId, "right-3"); // unchanged
+});
+
+Deno.test("focusAdjacentTab is a no-op on an empty column", () => {
+  const empty = closeTab(createInitialView(), "right-1");
+  assertEquals(focusAdjacentTab(empty, 1).right.activeTabId, "");
 });
 
 Deno.test("closeTab removes a tab", () => {

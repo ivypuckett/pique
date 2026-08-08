@@ -1,5 +1,5 @@
 <script lang="ts">
-  type ChordMode = "view" | "workspace";
+  type ChordMode = "view" | "workspace" | "tab";
   let { chordMode = null }: { chordMode?: ChordMode | null } = $props();
 
   const isMac = navigator.userAgent.includes("Mac");
@@ -12,6 +12,7 @@
       { key: "w", label: "close" },
       { key: "h", label: "◄" },
       { key: "l", label: "►" },
+      { key: "⏎", label: "focus" },
       { key: "esc", label: "exit" },
     ],
     workspace: [
@@ -20,6 +21,20 @@
       { key: "w", label: "close" },
       { key: "k", label: "▲" },
       { key: "j", label: "▼" },
+      { key: "⏎", label: "focus" },
+      { key: "esc", label: "exit" },
+    ],
+    tab: [
+      { key: "t", label: "terminal" },
+      { key: "g", label: "git diff" },
+      { key: "k", label: "kanban" },
+      { key: "b", label: "library" },
+      { key: "a", label: "automatons" },
+      { key: "w", label: "close" },
+      { key: "h", label: "◄" },
+      { key: "l", label: "►" },
+      { key: "1-9", label: "jump" },
+      { key: "⏎", label: "focus" },
       { key: "esc", label: "exit" },
     ],
   };
@@ -45,16 +60,20 @@
       <kbd class="kbd kbd-xs">{mod}J</kbd>
       <span class="opacity-70">workspace</span>
     </span>
-    <span class="hidden h-4 w-px bg-base-content/20 @[300px]:block"></span>
-    <span class="hidden items-center gap-1 @[300px]:flex">
+    <span class="flex items-center gap-1">
+      <kbd class="kbd kbd-xs">{mod}T</kbd>
+      <span class="opacity-70">tab</span>
+    </span>
+    <span class="hidden h-4 w-px bg-base-content/20 @[370px]:block"></span>
+    <span class="hidden items-center gap-1 @[370px]:flex">
       <kbd class="kbd kbd-xs">{mod}B</kbd>
       <span class="opacity-70">left col</span>
     </span>
-    <span class="hidden items-center gap-1 @[400px]:flex">
+    <span class="hidden items-center gap-1 @[470px]:flex">
       <kbd class="kbd kbd-xs">{mod}⇧B</kbd>
       <span class="opacity-70">right col</span>
     </span>
-    <span class="hidden items-center gap-1 @[490px]:flex">
+    <span class="hidden items-center gap-1 @[560px]:flex">
       <kbd class="kbd kbd-xs">{mod},</kbd>
       <span class="opacity-70">settings</span>
     </span>

@@ -183,6 +183,23 @@ export function setActiveTab(v: ViewState, tabId: string): ViewState {
   return { ...v, right: { ...v.right, activeTabId: tabId } };
 }
 
+// Show the nth right tab, 1-based (ctrl+t 1-9). A no-op past the end of the strip.
+export function focusTabAt(v: ViewState, n: number): ViewState {
+  const tab = v.right.rows[n - 1];
+  if (!tab) return v;
+  return { ...v, right: { ...v.right, activeTabId: tab.id } };
+}
+
+// Move the shown right tab by `dir` (ctrl+t h/l). Clamped at the ends, like view and
+// workspace navigation.
+export function focusAdjacentTab(v: ViewState, dir: -1 | 1): ViewState {
+  const rows = v.right.rows;
+  const idx = rows.findIndex((r) => r.id === v.right.activeTabId);
+  if (idx === -1) return v;
+  const next = Math.min(rows.length - 1, Math.max(0, idx + dir));
+  return { ...v, right: { ...v.right, activeTabId: rows[next].id } };
+}
+
 export function closeTab(v: ViewState, tabId: string): ViewState {
   const rows = v.right.rows;
   const idx = rows.findIndex((r) => r.id === tabId);

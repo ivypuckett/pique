@@ -15,12 +15,16 @@
     activeId,
     activeView,
     activeWorkspace,
+    addTab,
     addView,
     addWorkspace,
+    closeActiveTab,
     closeView,
     closeWorkspace,
     focusAdjacent,
+    focusAdjacentTab,
     focusAdjacentWorkspace,
+    focusTabAt,
     setExplorerHidden,
     toggleCollapse,
     workspaceRailHidden,
@@ -37,10 +41,12 @@
 
   const isMac = navigator.userAgent.includes("Mac");
 
-  // ctrl+h / ctrl+j are tmux-style prefixes: press one to enter a mode, then its keys act
-  // on views (h/l) or workspaces (j/k). A mode is sticky — it stays armed so you can
-  // navigate repeatedly — and exits on esc, any unrecognized key, or 2s idle.
-  type ChordMode = "view" | "workspace";
+  // ctrl+h / ctrl+j / ctrl+t are tmux-style prefixes: press one to enter a mode, then its
+  // keys act on views (h/l), workspaces (j/k) or right-pane tabs (h/l or 1-9 to navigate,
+  // w to close, a letter to open a module). Navigation is sticky — the mode stays armed so
+  // you can move repeatedly — and exits on esc, any unrecognized key, or 2s idle. Opening
+  // a tab exits immediately instead, so the first key you type into it isn't eaten.
+  type ChordMode = "view" | "workspace" | "tab";
   let chordMode = $state<ChordMode | null>(null);
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -122,6 +128,37 @@
     }
   }
 
+  // Every chord stroke changes what is on screen, so every one of them ends here: take
+  // the caret out of a pane that is no longer shown, and hand it to a terminal that now
+  // is. Without the first half, switching view, workspace or tab leaves you typing into
+  // a shell you can't see; without the second, a terminal you just opened needs a click
+  // before it will take a keystroke.
+  //
+  // Terminals only. focusActiveTab picks a pane's first focusable element, which for a
+  // terminal is xterm's textarea but for kanban is the first column's rename field — so
+  // focusing every module would turn a stray keystroke after ctrl+t k into a renamed
+  // column. The rest keep focus wherever it already was.
+  async function settleFocus() {
+    await tick();
+    if (pendingClose) return; // the dialog owns focus while it is up
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && el.closest("[data-tab-content]") && el.offsetParent === null) {
+      el.blur();
+    }
+    const { rows, activeTabId } = get(activeView).right;
+    if (rows.find((r) => r.id === activeTabId)?.kind === "terminal") focusActiveTab();
+  }
+
+  // ctrl+t's strokes all act on the tab pane, and a collapsed pane shows no tabs at all,
+  // so reveal it first — otherwise the tab lands somewhere you can't see.
+  function onTabs(act: (viewId: string) => void) {
+    const view = get(activeView);
+    if (view.right.collapsed) toggleCollapse(view.id, "right");
+    act(view.id);
+  }
+
+  const openTab = (kind: string) => onTabs((id) => addTab(id, kind));
+
   onMount(() => {
     // Modifier-only keydowns shouldn't cancel a pending chord.
     const MODS = new Set(["Control", "Meta", "Shift", "Alt"]);
@@ -135,10 +172,15 @@
 
       // A prefix pressed while a mode is armed switches modes rather than counting as an
       // unrecognized key, so ctrl+j then ctrl+h lands in view mode.
-      if (mod && (e.code === "KeyH" || e.code === "KeyJ")) {
+      const PREFIXES: Record<string, ChordMode> = {
+        KeyH: "view",
+        KeyJ: "workspace",
+        KeyT: "tab",
+      };
+      if (mod && PREFIXES[e.code]) {
         e.preventDefault();
         e.stopPropagation();
-        armChord(e.code === "KeyH" ? "view" : "workspace");
+        armChord(PREFIXES[e.code]);
         return;
       }
 
@@ -146,7 +188,21 @@
       if (chordMode) {
         if (MODS.has(e.key)) return;
         const mode = chordMode;
+
+        // Enter means "take me to what is on screen now" in every mode: settle focus and
+        // leave. It has to be a key the modes recognise — an unrecognised one exits
+        // without swallowing the stroke, and the stroke then lands wherever focus is,
+        // which after a chord is often a terminal that would run its command line.
+        if (e.code === "Enter" || e.code === "NumpadEnter") {
+          e.preventDefault();
+          e.stopPropagation();
+          settleFocus();
+          clearChord();
+          return;
+        }
+
         let handled = true;
+        let sticky = true; // cleared by the strokes that open a tab
         if (mode === "view") {
           switch (e.code) {
             case "KeyN": addView(); break;
@@ -155,7 +211,7 @@
             case "KeyL": focusAdjacent(1); break;
             default: handled = false;
           }
-        } else {
+        } else if (mode === "workspace") {
           switch (e.code) {
             case "KeyN": addWorkspace(); break;
             case "KeyO": openWorkspaceFromPicker(); break;
@@ -164,11 +220,35 @@
             case "KeyJ": focusAdjacentWorkspace(1); break;
             default: handled = false;
           }
+        } else {
+          const digit = /^Digit([1-9])$/.exec(e.code);
+          if (digit) {
+            // 1-9 shows that tab, counting from the left. Navigation like h/l below, so
+            // it keeps the mode armed; a digit past the end of the strip does nothing.
+            onTabs((id) => focusTabAt(id, Number(digit[1])));
+          } else {
+            sticky = false;
+            switch (e.code) {
+              case "KeyT": openTab("terminal"); break;
+              case "KeyG": openTab("gitdiff"); break;
+              case "KeyK": openTab("kanban"); break;
+              case "KeyB": openTab("library"); break;
+              case "KeyA": openTab("automatons"); break;
+              // w closes and h/l move between the open tabs instead of opening one, so
+              // they keep the mode armed the way view and workspace navigation does.
+              case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
+              case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
+              case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
+              default: handled = false;
+            }
+          }
         }
         if (handled) {
           e.preventDefault();
           e.stopPropagation();
-          armChord(mode); // stay in the mode and restart the idle timer
+          settleFocus();
+          if (sticky) armChord(mode); // stay in the mode and restart the idle timer
+          else clearChord();
         } else {
           clearChord(); // esc or any other key exits the mode
         }

@@ -6,6 +6,8 @@ import {
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
+  focusAdjacentTab as focusAdjacentTabFn,
+  focusTabAt as focusTabAtFn,
   resizeBoundary as resize,
   setActiveTab as setActiveTabFn,
   setExplorerHidden as setExplorerHiddenFn,
@@ -145,8 +147,23 @@ export function setActiveTab(viewId: string, tabId: string): void {
   edit(viewId, (v) => setActiveTabFn(v, tabId));
 }
 
+export function focusAdjacentTab(viewId: string, dir: -1 | 1): void {
+  edit(viewId, (v) => focusAdjacentTabFn(v, dir));
+}
+
+export function focusTabAt(viewId: string, n: number): void {
+  edit(viewId, (v) => focusTabAtFn(v, n));
+}
+
 export function closeTab(viewId: string, tabId: string): void {
   edit(viewId, (v) => closeTabFn(v, tabId));
+}
+
+// Close the shown right tab (ctrl+t w). Takes no id, the way closeView and
+// closeWorkspace don't: the chord acts on whatever is active.
+export function closeActiveTab(): void {
+  const { id } = get(activeView);
+  edit(id, (v) => closeTabFn(v, v.right.activeTabId));
 }
 
 export function resetView(viewId: string): void {
