@@ -10,6 +10,7 @@ import {
   focusAdjacentGroup as focusAdjacentGroupFn,
   focusAdjacentTab as focusAdjacentTabFn,
   focusTabAt as focusTabAtFn,
+  newTab as newTabFn,
   resizeBoundary as resize,
   selectGroup as selectGroupFn,
   setActiveTab as setActiveTabFn,
@@ -151,6 +152,12 @@ export function focusAdjacentTab(viewId: string, dir: -1 | 1): void {
 
 export function focusTabAt(viewId: string, n: number): void {
   edit(viewId, (v) => focusTabAtFn(v, n));
+}
+
+// One more tab in the selected row (ctrl+t n, the strip's +). A no-op on a row that may
+// only hold one.
+export function newTab(viewId: string): void {
+  edit(viewId, newTabFn);
 }
 
 // Show a rail row (clicking the rail, ctrl+t's module letters). Opens the module if that

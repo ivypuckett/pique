@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { addTab, closeTab, setActiveTab } from "./store.ts";
+  import { closeTab, newTab, setActiveTab } from "./store.ts";
   import { moduleLabel, type RightState } from "./layout.ts";
   import { isDuplicable } from "./modules/manifest.ts";
 
@@ -38,7 +38,7 @@
     <button
       class="btn btn-ghost btn-xs"
       aria-label="New {moduleLabel(right.activeGroup)} tab"
-      onclick={() => addTab(viewId, right.activeGroup)}
+      onclick={() => newTab(viewId)}
     >+</button>
   {/if}
   {#if onCollapse}

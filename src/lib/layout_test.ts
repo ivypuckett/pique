@@ -21,6 +21,7 @@ import {
   groupTabs,
   isViewState,
   migrateView,
+  newTab,
   selectGroup,
   setActiveTab,
   toggleCollapse,
@@ -230,6 +231,22 @@ Deno.test("a group remembers its tab across a switch away and back", () => {
   assertEquals(activeTabId(v), "right-3");
   v = addTab(v, "terminal"); // a third terminal, so the group is selected again
   assertEquals(v.right.activeGroup, "terminal");
+});
+
+Deno.test("newTab adds one more of the selected row's module", () => {
+  const v = newTab(createInitialView()); // the terminal row
+  assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1", "right-2"]);
+  assertEquals(activeTabId(v), "right-2");
+});
+
+Deno.test("newTab does nothing on a row that may only hold one", () => {
+  const v = addTab(createInitialView(), "kanban"); // kanban selected
+  assertEquals(newTab(v), v);
+});
+
+Deno.test("newTab does nothing on the explorer row — its tabs come from the tree", () => {
+  const v = selectGroup(createInitialView(), EXPLORER);
+  assertEquals(newTab(v), v);
 });
 
 Deno.test("selectGroup shows an open group without opening anything", () => {

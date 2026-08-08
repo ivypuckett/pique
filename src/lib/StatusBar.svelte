@@ -1,7 +1,7 @@
 <script lang="ts">
   import { MODULES } from "./modules/manifest.ts";
 
-  type ChordMode = "view" | "workspace" | "tab";
+  type ChordMode = "view" | "workspace" | "pane";
   let { chordMode = null }: { chordMode?: ChordMode | null } = $props();
 
   const isMac = navigator.userAgent.includes("Mac");
@@ -26,10 +26,13 @@
       { key: "⏎", label: "focus" },
       { key: "esc", label: "exit" },
     ],
-    tab: [
+    pane: [
+      { key: "e", label: "explorer" },
       // The modules come from the manifest, so a new one shows up here without an edit.
       ...MODULES.map((m) => ({ key: m.key, label: m.label.toLowerCase() })),
+      { key: "n", label: "new" },
       { key: "w", label: "close" },
+      { key: "↑↓", label: "row" },
       { key: "h", label: "◄" },
       { key: "l", label: "►" },
       { key: "1-9", label: "jump" },
@@ -61,7 +64,7 @@
     </span>
     <span class="flex items-center gap-1">
       <kbd class="kbd kbd-xs">{mod}T</kbd>
-      <span class="opacity-70">tab</span>
+      <span class="opacity-70">pane</span>
     </span>
     <span class="hidden h-4 w-px bg-base-content/20 @[370px]:block"></span>
     <span class="hidden items-center gap-1 @[370px]:flex">

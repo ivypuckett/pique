@@ -28,11 +28,14 @@ instead of breaking:
 What _does_ work in web mode, and is worth testing here:
 
 - Layout shell: workspaces, views, tabs, split columns, collapse/expand, reset.
-- Keyboard chords and shortcuts (`ctrl+h`/`ctrl+j` prefixes, `ctrl+b`, `ctrl+,`,
-  `ctrl+e`).
+- Keyboard chords and shortcuts (`ctrl+h`/`ctrl+j`/`ctrl+t` prefixes, `ctrl+b`,
+  `ctrl+,`). `ctrl+t e` selects the explorer row, but the tree itself needs the
+  desktop app.
 - Settings modal UI and the theme switcher (applies live to
   `<html data-theme>`).
-- The Library module's chrome — the `+` menu entry, the Extensions/Prompts
+- The module rail: every row, the tab strip filtering to the selected one, `+`
+  on the terminal row, and the empty-row hint.
+- The Library module's chrome — its rail row, the Extensions/Prompts
   sub-tabs, and the scope toggle (which is hidden in the Root workspace, so
   create a second workspace to see it). The lists themselves need the desktop
   app.

@@ -130,15 +130,21 @@ Invariants worth asserting in tests:
 | `e` | select Explorer (replaces `ctrl+e`) | no |
 | `t` `g` `k` `b` `a` | select Terminal / Git Diff / Kanban / Library / Automatons — reveal, never duplicate | no |
 | `n` | new tab in the selected group (Terminal only; no-op for singletons) | no |
-| `j` / `k` | previous / next **rail row** | yes |
+| `↑` / `↓` | previous / next **rail row** | yes |
 | `h` / `l` | previous / next **tab** in the selected group | yes |
 | `1`-`9` | nth tab of the selected group | yes |
 | `w` | close the selected tab | yes |
 | `⏎` | settle focus, exit the mode | — |
 
-`j`/`k` for the vertical rail and `h`/`l` for the horizontal strip mirrors
-`ctrl+j`'s `k`/`j` (vertical workspaces) and `ctrl+h`'s `h`/`l` (horizontal
-views). `n` for "new" matches `ctrl+h n` and `ctrl+j n`.
+`n` for "new" matches `ctrl+h n` and `ctrl+j n`, and `h`/`l` for the horizontal
+strip matches `ctrl+h`'s `h`/`l` for horizontal views.
+
+The rail was going to move on `j`/`k`, mirroring `ctrl+j`'s vertical workspaces —
+**it cannot**: `k` is Kanban's letter in the same mode. It moves on `↑`/`↓`
+instead, which costs little, since every row has a letter of its own and the
+arrows are a convenience rather than the way in. Renaming Kanban's letter was the
+alternative and a worse one: `k` is the mnemonic, and it was already muscle
+memory before this work started.
 
 `ctrl+e` is **deleted** — no deprecation period. The three-state cycle it drove
 (reveal → focus → hide) goes with it: the tree is always present in the
@@ -357,11 +363,12 @@ still removes an editor tab when `$EDITOR` exits.
 **Files:** `src/App.svelte`, `src/lib/StatusBar.svelte`, `docs/keybindings.md`,
 `docs/agent-verification.md`.
 
-Implement the target key map above: add `e` and `n`, move `j`/`k` to the rail,
-keep `h`/`l`/`1`-`9` on the strip, delete the `ctrl+e` branch and
-`toggleFileTree`. Keep `visibleTree` — `ctrl+t e` focuses the tree with it.
-Fix `settleFocus` to read the selected group's active tab. `StatusBar`'s `tab`
-key list comes from the manifest plus the fixed navigation keys.
+Implement the target key map above: add `e`, `n` and the rail arrows, turn the
+module letters from "open" into "show", keep `h`/`l`/`1`-`9` on the strip, and
+delete the `ctrl+e` branch. Keep `visibleTree` — `ctrl+t e` focuses the tree with
+it. `StatusBar`'s key list comes from the manifest plus the fixed navigation keys.
+The mode is called `pane` rather than `tab` now that it drives rows as well as
+tabs, in the type, the status bar badge and the docs.
 
 **Verify:** `deno task test`; in web mode walk the whole tab mode — `e`, `t`,
 `n`, `j`/`k`, `h`/`l`, `1`-`9`, `w`, `⏎`, and `esc` — reading the status bar

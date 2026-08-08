@@ -209,6 +209,14 @@ export function addTab(v: ViewState, kind: string): ViewState {
   return withTab(v, { id, title: moduleLabel(kind), kind, group: kind });
 }
 
+// One more of what the selected row already holds (ctrl+t n, and the strip's +). A
+// singleton row can't have a second, so there it does nothing — and the explorer's tabs
+// come from the tree, not from here.
+export function newTab(v: ViewState): ViewState {
+  const group = v.right.activeGroup;
+  return isDuplicable(group) ? addTab(v, group) : v;
+}
+
 function basename(path: string): string {
   const parts = path.split("/").filter((p) => p.length > 0);
   return parts.length ? parts[parts.length - 1] : path;
