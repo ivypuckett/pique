@@ -1,7 +1,7 @@
 <script lang="ts">
   import { addTab, closeTab, setActiveTab } from "./store.ts";
-  import { type ColumnState, moduleLabel } from "./layout.ts";
-  import { registry } from "./modules/registry.ts";
+  import type { ColumnState } from "./layout.ts";
+  import { MODULES } from "./modules/manifest.ts";
 
   let { viewId, col, explorerHidden, onToggleExplorer, onCollapse }: {
     viewId: string;
@@ -10,9 +10,6 @@
     onToggleExplorer?: () => void;
     onCollapse?: () => void;
   } = $props();
-  // Chat lives in the center column, the file tree is the docked explorer addon (ctrl+e);
-  // neither is offered as a right-pane tab.
-  const kinds = Object.keys(registry).filter((k) => k !== "chat" && k !== "filetree");
 </script>
 
 <div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">
@@ -45,8 +42,8 @@
   <div class="dropdown dropdown-end">
     <button tabindex="0" class="btn btn-ghost btn-xs" aria-label="Add tab">+</button>
     <ul class="dropdown-content menu z-10 mt-1 w-40 rounded-box bg-base-200 p-1 shadow">
-      {#each kinds as kind (kind)}
-        <li><button onclick={() => addTab(viewId, kind)}>{moduleLabel(kind)}</button></li>
+      {#each MODULES as m (m.kind)}
+        <li><button onclick={() => addTab(viewId, m.kind)}>{m.label}</button></li>
       {/each}
     </ul>
   </div>

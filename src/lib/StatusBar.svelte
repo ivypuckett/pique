@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { MODULES } from "./modules/manifest.ts";
+
   type ChordMode = "view" | "workspace" | "tab";
   let { chordMode = null }: { chordMode?: ChordMode | null } = $props();
 
@@ -25,11 +27,8 @@
       { key: "esc", label: "exit" },
     ],
     tab: [
-      { key: "t", label: "terminal" },
-      { key: "g", label: "git diff" },
-      { key: "k", label: "kanban" },
-      { key: "b", label: "library" },
-      { key: "a", label: "automatons" },
+      // The modules come from the manifest, so a new one shows up here without an edit.
+      ...MODULES.map((m) => ({ key: m.key, label: m.label.toLowerCase() })),
       { key: "w", label: "close" },
       { key: "h", label: "◄" },
       { key: "l", label: "►" },

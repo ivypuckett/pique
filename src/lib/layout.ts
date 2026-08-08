@@ -1,3 +1,5 @@
+import { moduleDef } from "./modules/manifest.ts";
+
 export type ColumnId = "center" | "right";
 export type SideId = "right";
 
@@ -121,10 +123,11 @@ export function setExplorerHidden(v: ViewState, hidden: boolean): ViewState {
   return { ...v, explorer: { ...v.explorer, hidden } };
 }
 
-// Display label for a module kind, used for new-tab titles and the picker menu.
-const LABELS: Record<string, string> = { gitdiff: "Git Diff" };
+// Display label for a module kind, used for new-tab titles and the picker menu. Kinds
+// with no manifest row (chat, the file tree, anything read back from another build) fall
+// back to their capitalized kind.
 export function moduleLabel(kind: string): string {
-  return LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+  return moduleDef(kind)?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function nextRightId(rows: ModuleRef[]): string {

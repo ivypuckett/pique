@@ -30,6 +30,7 @@
     workspaceRailHidden,
   } from "./lib/store.ts";
   import { pickDirectory } from "./lib/settings/bindings.ts";
+  import { MODULES } from "./lib/modules/manifest.ts";
 
   // ctrl+j o: pick a folder, then open a new workspace seeded with it. Picking is
   // async (native dialog); on cancel — or in a browser tab, where there's no picker —
@@ -227,19 +228,21 @@
             // it keeps the mode armed; a digit past the end of the strip does nothing.
             onTabs((id) => focusTabAt(id, Number(digit[1])));
           } else {
+            // A module's own letter opens it; the manifest is the only place those
+            // letters are written down. None of them collides with w/h/l below.
+            const def = MODULES.find((m) => e.code === `Key${m.key.toUpperCase()}`);
             sticky = false;
-            switch (e.code) {
-              case "KeyT": openTab("terminal"); break;
-              case "KeyG": openTab("gitdiff"); break;
-              case "KeyK": openTab("kanban"); break;
-              case "KeyB": openTab("library"); break;
-              case "KeyA": openTab("automatons"); break;
-              // w closes and h/l move between the open tabs instead of opening one, so
-              // they keep the mode armed the way view and workspace navigation does.
-              case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
-              case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
-              case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
-              default: handled = false;
+            if (def) {
+              openTab(def.kind);
+            } else {
+              switch (e.code) {
+                // w closes and h/l move between the open tabs instead of opening one, so
+                // they keep the mode armed the way view and workspace navigation does.
+                case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
+                case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
+                case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
+                default: handled = false;
+              }
             }
           }
         }
