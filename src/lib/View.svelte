@@ -37,9 +37,9 @@
     <Splitter onDrag={onDrag} />
     <Column
       viewId={view.id}
-      col={view.right}
+      right={view.right}
       id="right"
-      explorer={view.explorer}
+      explorerWidthCh={view.explorerWidthCh}
       {cwd}
       {workspaceId}
     />

@@ -1,6 +1,7 @@
 import {
   createInitialWorkspace,
   isWorkspaceState,
+  migrateWorkspace,
   type WorkspaceState,
 } from "./workspace.ts";
 import { ROOT } from "./scope/paths.ts";
@@ -118,10 +119,14 @@ export function isSessionState(s: unknown): s is SessionState {
   return ids.includes(obj.activeId);
 }
 
-// Persisted layouts written before root existed are `{ workspaces, activeId }`. Adopt
-// them by adding a fresh root above the workspaces they already have, rather than
-// discarding the tree. `defaultDir` is the old global setting, which root's cwd now
-// supersedes (see settings/file.ts resolveModuleDir).
+// Adopt a persisted layout of any older shape rather than discarding it — a rejected
+// tree costs the user every workspace, its working directory and its views.
+//
+// Two generations are handled, and they compose: layouts written before root existed are
+// `{ workspaces, activeId }` and gain a fresh root above the workspaces they already
+// have (`defaultDir` is the old global setting root's cwd now supersedes — see
+// settings/file.ts resolveModuleDir), and views written before the right pane had groups
+// are converted one level down, in migrateWorkspace.
 export function migrateSession(
   raw: unknown,
   defaultDir?: string,
@@ -129,17 +134,25 @@ export function migrateSession(
   if (isSessionState(raw)) return raw;
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
-  if (
-    !Array.isArray(obj.workspaces) || !obj.workspaces.every(isWorkspaceState)
-  ) return null;
-  const workspaces = obj.workspaces as WorkspaceState[];
-  const root = createInitialWorkspace(ROOT, "Root");
-  const seeded = defaultDir && defaultDir.trim() !== ""
-    ? { ...root, cwd: defaultDir }
-    : root;
-  const activeId = typeof obj.activeId === "string" &&
-      workspaces.some((w) => w.id === obj.activeId)
+  if (!Array.isArray(obj.workspaces)) return null;
+  const migrated = obj.workspaces.map(migrateWorkspace);
+  if (migrated.some((w) => w === null)) return null;
+  const workspaces = migrated as WorkspaceState[];
+
+  let root: WorkspaceState | null;
+  if (obj.root === undefined) {
+    const fresh = createInitialWorkspace(ROOT, "Root");
+    root = defaultDir && defaultDir.trim() !== ""
+      ? { ...fresh, cwd: defaultDir }
+      : fresh;
+  } else {
+    root = migrateWorkspace(obj.root);
+    if (!root) return null;
+  }
+
+  const ids = [root.id, ...workspaces.map((w) => w.id)];
+  const activeId = typeof obj.activeId === "string" && ids.includes(obj.activeId)
     ? obj.activeId
     : (workspaces[0]?.id ?? ROOT);
-  return { root: seeded, workspaces, activeId };
+  return { root, workspaces, activeId };
 }

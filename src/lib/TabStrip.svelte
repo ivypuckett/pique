@@ -1,35 +1,34 @@
 <script lang="ts">
-  import { addTab, closeTab, setActiveTab } from "./store.ts";
-  import { type ColumnState, moduleLabel } from "./layout.ts";
-  import { registry } from "./modules/registry.ts";
+  import { closeTab, newTab, setActiveTab } from "./store.ts";
+  import { moduleLabel, type RightState } from "./layout.ts";
+  import { hasTabs, isDuplicable } from "./modules/manifest.ts";
 
-  let { viewId, col, explorerHidden, onToggleExplorer, onCollapse }: {
+  let { viewId, right, onCollapse }: {
     viewId: string;
-    col: ColumnState;
-    explorerHidden?: boolean;
-    onToggleExplorer?: () => void;
+    right: RightState;
     onCollapse?: () => void;
   } = $props();
-  // Chat lives in the center column, the file tree is the docked explorer addon (ctrl+e);
-  // neither is offered as a right-pane tab.
-  const kinds = Object.keys(registry).filter((k) => k !== "chat" && k !== "filetree");
+
+  // The strip is the selected group's tabs only — the other groups stay open behind it. A
+  // singleton row has none: it is its module, and the rail already names it. The bar itself
+  // stays either way, so the content below it doesn't shift as you move between rows.
+  const tabs = $derived(
+    hasTabs(right.activeGroup)
+      ? right.tabs.filter((t) => t.group === right.activeGroup)
+      : [],
+  );
+  const shown = $derived(right.activeTabs[right.activeGroup] ?? "");
 </script>
 
-<div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">
-  {#if onToggleExplorer}
-    <button
-      class="btn btn-ghost btn-xs"
-      class:btn-active={!explorerHidden}
-      aria-label="Toggle file explorer"
-      aria-pressed={!explorerHidden}
-      onclick={onToggleExplorer}
-    >◧</button>
-  {/if}
-  {#each col.rows as tab (tab.id)}
+<!-- Fixed height, not padding around whatever is inside: a singleton row has no chips, and
+     a bar that shrank to fit its collapse button would shift the content below it by a few
+     pixels every time you moved between rows. -->
+<div class="flex h-9 shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1">
+  {#each tabs as tab (tab.id)}
     <div
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"
-      class:bg-base-100={tab.id === col.activeTabId}
-      class:font-medium={tab.id === col.activeTabId}
+      class:bg-base-100={tab.id === shown}
+      class:font-medium={tab.id === shown}
       onauxclick={(e) => {
         if (e.button === 1) closeTab(viewId, tab.id);
       }}
@@ -42,14 +41,15 @@
       >×</button>
     </div>
   {/each}
-  <div class="dropdown dropdown-end">
-    <button tabindex="0" class="btn btn-ghost btn-xs" aria-label="Add tab">+</button>
-    <ul class="dropdown-content menu z-10 mt-1 w-40 rounded-box bg-base-200 p-1 shadow">
-      {#each kinds as kind (kind)}
-        <li><button onclick={() => addTab(viewId, kind)}>{moduleLabel(kind)}</button></li>
-      {/each}
-    </ul>
-  </div>
+  <!-- Which module to open is the rail's job now, so + means one more of this one. Only a
+       duplicable row can have a second, so it is the only row that shows the button. -->
+  {#if isDuplicable(right.activeGroup)}
+    <button
+      class="btn btn-ghost btn-xs"
+      aria-label="New {moduleLabel(right.activeGroup)} tab"
+      onclick={() => newTab(viewId)}
+    >+</button>
+  {/if}
   {#if onCollapse}
     <button
       class="btn btn-ghost btn-xs ml-auto"

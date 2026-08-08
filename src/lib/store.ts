@@ -1,16 +1,19 @@
 import { derived, get, writable } from "svelte/store";
 import {
+  activeTabId,
   addDiffTab as addDiffTabFn,
   addEditorTab as addEditorTabFn,
   addTab as addTabFn,
   type Boundary,
   closeTab as closeTabFn,
   createInitialView,
+  focusAdjacentGroup as focusAdjacentGroupFn,
   focusAdjacentTab as focusAdjacentTabFn,
   focusTabAt as focusTabAtFn,
+  newTab as newTabFn,
   resizeBoundary as resize,
+  selectGroup as selectGroupFn,
   setActiveTab as setActiveTabFn,
-  setExplorerHidden as setExplorerHiddenFn,
   type SideId,
   toggleCollapse as collapseFn,
   type ViewState,
@@ -125,10 +128,6 @@ export function toggleCollapse(viewId: string, id: SideId): void {
   edit(viewId, (v) => collapseFn(v, id));
 }
 
-export function setExplorerHidden(viewId: string, hidden: boolean): void {
-  edit(viewId, (v) => setExplorerHiddenFn(v, hidden));
-}
-
 export function addTab(viewId: string, kind: string): void {
   edit(viewId, (v) => addTabFn(v, kind));
 }
@@ -155,6 +154,23 @@ export function focusTabAt(viewId: string, n: number): void {
   edit(viewId, (v) => focusTabAtFn(v, n));
 }
 
+// One more tab in the selected row (ctrl+t n, the strip's +). A no-op on a row that may
+// only hold one.
+export function newTab(viewId: string): void {
+  edit(viewId, newTabFn);
+}
+
+// Show a rail row (clicking the rail, ctrl+t's module letters). Opens the module if that
+// row has nothing in it yet.
+export function selectGroup(viewId: string, group: string): void {
+  edit(viewId, (v) => selectGroupFn(v, group));
+}
+
+// Move up or down the rail (ctrl+t j/k), without opening anything on the way.
+export function focusAdjacentGroup(viewId: string, dir: -1 | 1): void {
+  edit(viewId, (v) => focusAdjacentGroupFn(v, dir));
+}
+
 export function closeTab(viewId: string, tabId: string): void {
   edit(viewId, (v) => closeTabFn(v, tabId));
 }
@@ -163,7 +179,7 @@ export function closeTab(viewId: string, tabId: string): void {
 // closeWorkspace don't: the chord acts on whatever is active.
 export function closeActiveTab(): void {
   const { id } = get(activeView);
-  edit(id, (v) => closeTabFn(v, v.right.activeTabId));
+  edit(id, (v) => closeTabFn(v, activeTabId(v)));
 }
 
 export function resetView(viewId: string): void {

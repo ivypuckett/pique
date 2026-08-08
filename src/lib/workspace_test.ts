@@ -6,6 +6,7 @@ import {
   focusAdjacent,
   focusView,
   isWorkspaceState,
+  migrateWorkspace,
   setWorkspaceDir,
   updateView,
 } from "./workspace.ts";
@@ -135,4 +136,42 @@ Deno.test("isWorkspaceState accepts a real workspace and rejects malformed shape
   // activeId names no view
   const w = createInitialWorkspace();
   assertEquals(isWorkspaceState({ ...w, activeId: "view-999" }), false);
+});
+
+Deno.test("migrateWorkspace passes a current workspace through and rejects junk", () => {
+  const w = createInitialWorkspace();
+  assertEquals(migrateWorkspace(w), w);
+  assertEquals(migrateWorkspace(null), null);
+  assertEquals(migrateWorkspace({}), null);
+  assertEquals(migrateWorkspace({ ...w, views: [] }), null);
+});
+
+Deno.test("migrateWorkspace groups the panes of every view it holds", () => {
+  const oldView = (id: string) => ({
+    id,
+    chatWidthCh: 57,
+    center: {
+      collapsed: false,
+      activeTabId: "center-1",
+      rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
+    },
+    right: {
+      collapsed: false,
+      activeTabId: "right-1",
+      rows: [{ id: "right-1", title: "Terminal", kind: "terminal" }],
+    },
+    explorer: { widthCh: 30, hidden: false },
+  });
+  const w = migrateWorkspace({
+    id: "ws-1",
+    title: "Workspace 1",
+    views: [oldView("view-1"), oldView("view-2")],
+    activeId: "view-2",
+    cwd: "~/workspace/pique",
+  })!;
+  assertEquals(w.views.map((v) => v.right.activeGroup), ["terminal", "terminal"]);
+  assertEquals(w.views.map((v) => v.right.tabs[0].group), ["terminal", "terminal"]);
+  assertEquals(w.activeId, "view-2");
+  assertEquals(w.cwd, "~/workspace/pique");
+  assertEquals(isWorkspaceState(w), true);
 });

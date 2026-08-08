@@ -10,26 +10,29 @@
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
   import { ROOT } from "./lib/scope/paths.ts";
+  import { activeTabId, EXPLORER } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
     activeId,
     activeView,
     activeWorkspace,
-    addTab,
     addView,
     addWorkspace,
     closeActiveTab,
     closeView,
     closeWorkspace,
     focusAdjacent,
+    focusAdjacentGroup,
     focusAdjacentTab,
     focusAdjacentWorkspace,
     focusTabAt,
-    setExplorerHidden,
+    newTab,
+    selectGroup,
     toggleCollapse,
     workspaceRailHidden,
   } from "./lib/store.ts";
   import { pickDirectory } from "./lib/settings/bindings.ts";
+  import { MODULES } from "./lib/modules/manifest.ts";
 
   // ctrl+j o: pick a folder, then open a new workspace seeded with it. Picking is
   // async (native dialog); on cancel — or in a browser tab, where there's no picker —
@@ -42,11 +45,12 @@
   const isMac = navigator.userAgent.includes("Mac");
 
   // ctrl+h / ctrl+j / ctrl+t are tmux-style prefixes: press one to enter a mode, then its
-  // keys act on views (h/l), workspaces (j/k) or right-pane tabs (h/l or 1-9 to navigate,
-  // w to close, a letter to open a module). Navigation is sticky — the mode stays armed so
-  // you can move repeatedly — and exits on esc, any unrecognized key, or 2s idle. Opening
-  // a tab exits immediately instead, so the first key you type into it isn't eaten.
-  type ChordMode = "view" | "workspace" | "tab";
+  // keys act on views (h/l), workspaces (j/k) or the right pane (a letter picks a rail row,
+  // n opens one more of it, h/l and 1-9 move along its tab strip, the arrows move up and
+  // down the rail, w closes). Navigation is sticky — the mode stays armed so you can move
+  // repeatedly — and exits on esc, any unrecognized key, or 2s idle. Opening or showing
+  // something exits immediately instead, so the first key you type into it isn't eaten.
+  type ChordMode = "view" | "workspace" | "pane";
   let chordMode = $state<ChordMode | null>(null);
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -108,24 +112,13 @@
     focusActiveTab();
   }
 
-  // ctrl+e: cycle the explorer. Hidden (or the pane collapsed) → reveal and focus it;
-  // visible but unfocused → focus it; visible and focused → hide it and hand focus to the tab.
-  async function toggleFileTree() {
-    const view = get(activeView);
-    const focused = visibleTree()?.contains(document.activeElement) ?? false;
-
-    if (view.right.collapsed || view.explorer.hidden) {
-      if (view.right.collapsed) toggleCollapse(view.id, "right");
-      if (view.explorer.hidden) setExplorerHidden(view.id, false);
-      await tick();
-      visibleTree()?.focus();
-    } else if (focused) {
-      setExplorerHidden(view.id, true);
-      await tick();
-      focusActiveTab();
-    } else {
-      visibleTree()?.focus();
-    }
+  // ctrl+t e: show the explorer row and put the caret in the tree. The tree is that row's
+  // content, so there is nothing to toggle. Focusing it is an explicit step — settleFocus
+  // only ever hands focus to a terminal.
+  async function showExplorer() {
+    onTabs((id) => selectGroup(id, EXPLORER));
+    await tick();
+    visibleTree()?.focus();
   }
 
   // Every chord stroke changes what is on screen, so every one of them ends here: take
@@ -145,8 +138,9 @@
     if (el instanceof HTMLElement && el.closest("[data-tab-content]") && el.offsetParent === null) {
       el.blur();
     }
-    const { rows, activeTabId } = get(activeView).right;
-    if (rows.find((r) => r.id === activeTabId)?.kind === "terminal") focusActiveTab();
+    const view = get(activeView);
+    const shown = view.right.tabs.find((t) => t.id === activeTabId(view));
+    if (shown?.kind === "terminal") focusActiveTab();
   }
 
   // ctrl+t's strokes all act on the tab pane, and a collapsed pane shows no tabs at all,
@@ -156,8 +150,6 @@
     if (view.right.collapsed) toggleCollapse(view.id, "right");
     act(view.id);
   }
-
-  const openTab = (kind: string) => onTabs((id) => addTab(id, kind));
 
   onMount(() => {
     // Modifier-only keydowns shouldn't cancel a pending chord.
@@ -175,7 +167,7 @@
       const PREFIXES: Record<string, ChordMode> = {
         KeyH: "view",
         KeyJ: "workspace",
-        KeyT: "tab",
+        KeyT: "pane",
       };
       if (mod && PREFIXES[e.code]) {
         e.preventDefault();
@@ -223,23 +215,36 @@
         } else {
           const digit = /^Digit([1-9])$/.exec(e.code);
           if (digit) {
-            // 1-9 shows that tab, counting from the left. Navigation like h/l below, so
-            // it keeps the mode armed; a digit past the end of the strip does nothing.
+            // 1-9 shows that tab of the selected row, counting from the left. Navigation
+            // like h/l below, so it keeps the mode armed; a digit past the end of the
+            // strip does nothing.
             onTabs((id) => focusTabAt(id, Number(digit[1])));
           } else {
+            // A module's own letter shows its row, opening the module if that row is
+            // empty; the manifest is the only place those letters are written down. None
+            // of them collides with the navigation keys below.
+            const def = MODULES.find((m) => e.code === `Key${m.key.toUpperCase()}`);
             sticky = false;
-            switch (e.code) {
-              case "KeyT": openTab("terminal"); break;
-              case "KeyG": openTab("gitdiff"); break;
-              case "KeyK": openTab("kanban"); break;
-              case "KeyB": openTab("library"); break;
-              case "KeyA": openTab("automatons"); break;
-              // w closes and h/l move between the open tabs instead of opening one, so
-              // they keep the mode armed the way view and workspace navigation does.
-              case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
-              case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
-              case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
-              default: handled = false;
+            if (def) {
+              onTabs((id) => selectGroup(id, def.kind));
+            } else {
+              switch (e.code) {
+                // e is the explorer's letter — it has no module, so it is not in the
+                // manifest — and n is one more of whatever row you are on.
+                case "KeyE": showExplorer(); break;
+                case "KeyN": onTabs((id) => newTab(id)); break;
+                // w closes, h/l move along the strip and the arrows move up and down the
+                // rail, rather than opening anything — so all of them keep the mode armed,
+                // the way view and workspace navigation does.
+                case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
+                case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
+                case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
+                // Arrows, not j/k: every rail row has a letter of its own, and k is
+                // already Kanban's.
+                case "ArrowUp": onTabs((id) => focusAdjacentGroup(id, -1)); sticky = true; break;
+                case "ArrowDown": onTabs((id) => focusAdjacentGroup(id, 1)); sticky = true; break;
+                default: handled = false;
+              }
             }
           }
         }
@@ -271,13 +276,6 @@
         e.preventDefault();
         e.stopPropagation();
         settingsOpen.set(true);
-      }
-
-      // ctrl+e: show/hide/focus the file explorer.
-      if (e.code === "KeyE") {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleFileTree();
       }
 
       // ctrl+= / ctrl+- / ctrl+0: zoom the UI in, out, or back to 100%. The webview
