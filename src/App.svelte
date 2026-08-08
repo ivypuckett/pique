@@ -7,7 +7,8 @@
   import StatusBar from "./lib/StatusBar.svelte";
   import SettingsModal from "./lib/settings/SettingsModal.svelte";
   import ConfirmDialog from "./lib/ConfirmDialog.svelte";
-  import { settingsOpen } from "./lib/settings/store.ts";
+  import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
+  import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
   import { ROOT } from "./lib/scope/paths.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
@@ -197,6 +198,23 @@
         e.preventDefault();
         e.stopPropagation();
         toggleFileTree();
+      }
+
+      // ctrl+= / ctrl+- / ctrl+0: zoom the UI in, out, or back to 100%. The webview
+      // brings no zoom of its own, so this is the only way to scale the app. Codes,
+      // not keys: ctrl+shift+= is how "+" is typed on most layouts, and reading the
+      // key there would see "+" on one keyboard and "=" on another.
+      if (e.code === "Equal" || e.code === "Minus" || e.code === "Digit0") {
+        e.preventDefault();
+        e.stopPropagation();
+        const zoom = (current: number) =>
+          e.code === "Digit0"
+            ? DEFAULT_SETTINGS.appearance.zoom
+            : stepZoom(current, e.code === "Equal" ? 1 : -1);
+        settings.update((s) => ({
+          ...s,
+          appearance: { ...s.appearance, zoom: zoom(s.appearance.zoom) },
+        }));
       }
     }
     globalThis.addEventListener("keydown", onKeydown, true);

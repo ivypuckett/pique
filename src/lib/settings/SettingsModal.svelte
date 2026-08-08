@@ -1,6 +1,9 @@
 <script lang="ts">
-  import { settings, settingsOpen, THEMES } from "./store.ts";
+  import { settings, settingsOpen, THEMES, ZOOM_LEVELS } from "./store.ts";
   import { providerBindings, type ProviderInfo } from "../chat/bindings.ts";
+
+  // Same modifier glyph the status bar shows for the shortcuts it lists.
+  const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
 
   // Model providers. Null in web-dev (no bindings) → the section shows a
   // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
@@ -162,6 +165,26 @@
         >
           {#each THEMES as t (t)}
             <option value={t}>{t}</option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between gap-4">
+        <div>
+          <div class="text-sm">Zoom</div>
+          <div class="mt-0.5 text-xs opacity-70">
+            Scales the whole interface. <kbd class="kbd kbd-xs">{mod}=</kbd>
+            and <kbd class="kbd kbd-xs">{mod}-</kbd> step it,
+            <kbd class="kbd kbd-xs">{mod}0</kbd> returns to 100%.
+          </div>
+        </div>
+        <select
+          class="select select-bordered select-sm min-w-44"
+          aria-label="Zoom"
+          bind:value={$settings.appearance.zoom}
+        >
+          {#each ZOOM_LEVELS as z (z)}
+            <option value={z}>{Math.round(z * 100)}%</option>
           {/each}
         </select>
       </div>

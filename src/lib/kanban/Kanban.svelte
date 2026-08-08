@@ -39,8 +39,10 @@
   // Card ids are per-board, so a selection can't survive a switch — clear it before
   // reloading, or the drawer would show a card that isn't on the board any more.
   async function switchBoard(root: boolean): Promise<void> {
+    // Let go of the card first, while `scope` still names the board it is on: a blank
+    // one is deleted there, not on the board being switched to.
+    await select(null);
     showRoot = root;
-    selectedId = null;
     await refresh();
   }
 
@@ -124,7 +126,7 @@
       return;
     }
     // A press that never became a drag is a plain click → select the card.
-    if (clickedCard) selectedId = clickedCard;
+    if (clickedCard) select(clickedCard);
   }
 
   // `index` is an insertion point in the list as rendered; once the card is lifted out,
@@ -154,6 +156,20 @@
 
   async function addCard(statusId: string): Promise<void> {
     if (!b || !scope) return;
+    // Adding a card is also letting go of the one in the drawer, blank ones included.
+    await select(null);
+    // At most one untitled card on the board: a column of "Untitled" says nothing about
+    // what is on it. Anything untitled still here survived the release above, so it has
+    // content worth keeping — the add turns into a nudge to name that one rather than
+    // stacking another beside it. Naming it refreshes the board, which clears the notice.
+    const untitled = board.cards.find((c) => c.title.trim() === "");
+    if (untitled) {
+      selectedId = untitled.id;
+      error = "Name this card before adding another.";
+      await tick();
+      titleInput?.focus();
+      return;
+    }
     try {
       // No default title. A real one ("New card 3") is text the user has to clear
       // before typing their own; an untitled card shows a hint instead, which the
@@ -225,7 +241,7 @@
     const { statusId } = pendingDelete;
     pendingDelete = null;
     // The drawer may be showing one of the cards about to go with the column.
-    selectedId = null;
+    await select(null);
     await column((b, scope) => b.kanbanDeleteStatus({ scope, statusId, withCards: true }));
   }
 
@@ -319,6 +335,32 @@
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
   let titleInput = $state<HTMLInputElement | null>(null);
 
+  // "+ Add card" puts a card on the board before there is anything to say about it, so
+  // letting go of one that stayed empty takes it back off again — an abandoned add
+  // leaves nothing behind. Emptiness is the test, not just the missing title: an
+  // untitled card that carries a description or subtasks is unnamed, not blank, and
+  // dropping it would throw that away.
+  function isBlank(c: CardRow): boolean {
+    return c.title.trim() === "" && c.description.trim() === "" &&
+      c.subtasks.length === 0 && c.artifacts.length === 0 &&
+      Object.keys(c.tags).length === 0 &&
+      c.predecessors.length === 0 && c.successors.length === 0;
+  }
+
+  // The one way the selection changes, so every way of leaving a card — escape, the
+  // drawer's ✕, picking another one, switching boards — gets the blank check.
+  async function select(id: string | null): Promise<void> {
+    const leaving = selected;
+    selectedId = id;
+    if (!b || !scope || !leaving || leaving.id === id || !isBlank(leaving)) return;
+    try {
+      await b.kanbanDeleteCard({ scope, cardId: leaving.id });
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   // Escape gives the selected card up. A field keeps the first Escape for itself — the
   // ones that revert already handle it, and leaving the field is what the key means
   // there — so from inside the drawer it takes two presses: out of the field, then off
@@ -334,7 +376,7 @@
       el.blur();
       return;
     }
-    selectedId = null;
+    select(null);
     // Cards are buttons, so clicking one also left it focused — closing the drawer but
     // leaving the ring behind would only half let go of it.
     if (el?.closest("[data-card-id]")) el.blur();
@@ -631,7 +673,7 @@
       <div class="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-base-300 bg-base-100 p-3">
         <div class="flex items-center justify-between">
           <span class="text-xs uppercase tracking-wide text-primary">Card</span>
-          <button type="button" class="btn btn-square btn-ghost btn-xs" aria-label="Close card" onclick={() => (selectedId = null)}>✕</button>
+          <button type="button" class="btn btn-square btn-ghost btn-xs" aria-label="Close card" onclick={() => select(null)}>✕</button>
         </div>
 
         <!-- Each label sits in a group with the control it names, so the 4px inside a

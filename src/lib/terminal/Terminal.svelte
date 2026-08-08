@@ -6,6 +6,10 @@
   import { terminalBindings } from "./bindings.ts";
   import { xtermThemeFromDaisyui } from "./theme.ts";
   import { closeTab } from "../store.ts";
+  import { settings } from "../settings/store.ts";
+
+  // Font size at 100%; the UI zoom scales it (see the subscription in onMount).
+  const BASE_FONT_SIZE = 13;
 
   let { title, cwd, argv, autoCloseOnExit, autoFocus, viewId, tabId }: {
     title: string;
@@ -21,7 +25,7 @@
   onMount(() => {
     const term = new Terminal({
       fontFamily: "monospace",
-      fontSize: 13,
+      fontSize: BASE_FONT_SIZE,
       cursorBlink: true,
       theme: xtermThemeFromDaisyui(host),
     });
@@ -45,13 +49,30 @@
     });
 
     const b = terminalBindings();
-    if (!b) {
-      term.write("Terminal unavailable — run the desktop app (bindings are not present in a browser tab).\r\n");
-      return () => term.dispose();
-    }
 
     let alive = true;
     let id: string | undefined;
+
+    // The terminal paints its own text, so the rem-based UI zoom doesn't reach it —
+    // scale the xterm font by the same factor instead. Refit afterwards: a different
+    // cell size means a different number of rows and columns, which the pty has to be
+    // told about, and once a session is running only this can tell it (the pane's own
+    // size hasn't changed, so the ResizeObserver never fires).
+    const unzoom = settings.subscribe((s) => {
+      const size = BASE_FONT_SIZE * s.appearance.zoom;
+      if (term.options.fontSize === size) return;
+      term.options.fontSize = size;
+      fit.fit();
+      if (id) b?.termResize({ id, cols: term.cols, rows: term.rows }).catch(() => {});
+    });
+
+    if (!b) {
+      term.write("Terminal unavailable — run the desktop app (bindings are not present in a browser tab).\r\n");
+      return () => {
+        unzoom();
+        term.dispose();
+      };
+    }
 
     const ro = new ResizeObserver(() => {
       if (!alive || !id) return;
@@ -94,6 +115,7 @@
 
     return () => {
       alive = false;
+      unzoom();
       themeObserver.disconnect();
       ro.disconnect();
       if (id) b.termKill({ id }).catch(() => {});

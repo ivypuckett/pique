@@ -8,7 +8,9 @@
 // The layout tree persists separately under the "layout" config (see ../store.ts).
 export interface Settings {
   version: number;
-  appearance: { theme: string };
+  // zoom: the UI scale factor, applied as the root font size (main.ts) — every
+  // rem-sized thing in the app follows it. One of ZOOM_LEVELS (settings/store.ts).
+  appearance: { theme: string; zoom: number };
   // gitScanDepth: how many directory levels to descend looking for git repos when the
   // workspace root is not itself a repo, to highlight changed folders. Absent → the
   // resolveGitScanDepth default (see settings/file.ts).
@@ -19,7 +21,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
-  appearance: { theme: "catppuccin-frappe" },
+  appearance: { theme: "catppuccin-frappe", zoom: 1 },
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3, confirmDelete: true },

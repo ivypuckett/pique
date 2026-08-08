@@ -6,8 +6,14 @@ import { hydrateSettings, settings } from "./lib/settings/store.ts";
 
 // Reflect the chosen daisyui theme onto <html data-theme>. The compiled theme set
 // lives in app.css (kept in lockstep with THEMES in settings/store.ts).
+//
+// Zoom rides on the root font size rather than the CSS `zoom` property: tailwind sizes
+// everything in rem, so one number scales the whole UI, and the viewport units the
+// shell is built on (h-screen/w-screen) keep meaning the window — which `zoom` would
+// scale too, pushing the app off its own edges.
 settings.subscribe((s) => {
   document.documentElement.dataset.theme = s.appearance.theme;
+  document.documentElement.style.fontSize = `${16 * s.appearance.zoom}px`;
 });
 
 // Load persisted config from ~/.pique before first render so the app doesn't flash
