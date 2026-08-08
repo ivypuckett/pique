@@ -46,6 +46,12 @@ so on the card):
 - **An empty group stays selected.** Closing a group's last tab does not jump
   elsewhere; the content area shows a short empty state. Falling back to
   another group would resurrect terminals nobody asked for.
+- **A singleton row has no tabs and cannot be closed** (added after task 6, on
+  the first look at the finished thing: a lone chip with an × beside a rail row
+  that already names the module reads as clutter). Only the terminal row and the
+  explorer row show a strip; a singleton mounts on first visit and stays for the
+  life of the view, as the file tree does. `hasTabs` in the manifest is the one
+  place that rule is written; `closeTab` enforces the other half.
 - **The rail lives inside the right pane**, to the right of the content, so
   `ctrl+shift+b` (collapse) still hides selection and content together, and the
   chat/pane splitter is untouched.

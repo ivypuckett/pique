@@ -335,6 +335,23 @@ Deno.test("focusAdjacentTab is a no-op on an empty group", () => {
   assertEquals(activeTabId(focusAdjacentTab(empty, 1)), "");
 });
 
+Deno.test("closeTab refuses to close a singleton row's module", () => {
+  const v = addTab(createInitialView(), "kanban"); // kanban selected, right-2
+  assertEquals(closeTab(v, "right-2"), v); // the row IS the module; nothing to close
+});
+
+Deno.test("closeTab still closes a file open in the explorer row", () => {
+  const v = addEditorTab(createInitialView(), "src/a.ts"); // a terminal, group explorer
+  const closed = closeTab(v, activeTabId(v));
+  assertEquals(groupTabs(closed, EXPLORER), []);
+  assertEquals(closed.right.activeGroup, EXPLORER); // the row stays selected, tree and all
+});
+
+Deno.test("closeTab still closes a path-scoped diff in the explorer row", () => {
+  const v = addDiffTab(createInitialView(), "src/a.ts"); // a gitdiff, group explorer
+  assertEquals(groupTabs(closeTab(v, activeTabId(v)), EXPLORER), []);
+});
+
 Deno.test("closeTab removes a tab", () => {
   const two = addTab(createInitialView(), "terminal"); // right-1, right-2
   const v = closeTab(two, "right-2");

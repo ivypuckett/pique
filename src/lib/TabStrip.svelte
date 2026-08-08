@@ -1,7 +1,7 @@
 <script lang="ts">
   import { closeTab, newTab, setActiveTab } from "./store.ts";
   import { moduleLabel, type RightState } from "./layout.ts";
-  import { isDuplicable } from "./modules/manifest.ts";
+  import { hasTabs, isDuplicable } from "./modules/manifest.ts";
 
   let { viewId, right, onCollapse }: {
     viewId: string;
@@ -9,12 +9,21 @@
     onCollapse?: () => void;
   } = $props();
 
-  // The strip is the selected group's tabs only — the other groups stay open behind it.
-  const tabs = $derived(right.tabs.filter((t) => t.group === right.activeGroup));
+  // The strip is the selected group's tabs only — the other groups stay open behind it. A
+  // singleton row has none: it is its module, and the rail already names it. The bar itself
+  // stays either way, so the content below it doesn't shift as you move between rows.
+  const tabs = $derived(
+    hasTabs(right.activeGroup)
+      ? right.tabs.filter((t) => t.group === right.activeGroup)
+      : [],
+  );
   const shown = $derived(right.activeTabs[right.activeGroup] ?? "");
 </script>
 
-<div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">
+<!-- Fixed height, not padding around whatever is inside: a singleton row has no chips, and
+     a bar that shrank to fit its collapse button would shift the content below it by a few
+     pixels every time you moved between rows. -->
+<div class="flex h-9 shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1">
   {#each tabs as tab (tab.id)}
     <div
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"

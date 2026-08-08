@@ -40,6 +40,12 @@ a workspace takes every view and tab in it. Closing a row's last tab leaves that
 row selected, showing the key that would open another — it does not move you
 somewhere else.
 
+Only two rows have tabs to close: **terminal**, which can hold several, and
+**explorer**, whose tabs are the files you opened from the tree. A singleton row
+— Git Diff, Kanban, Library, Automatons — *is* its module: it has no tab strip,
+no close button, and `ctrl+t w` does nothing there. It mounts the first time you
+visit it and stays for the life of the view, the way the file tree does.
+
 ### Focus
 
 Every chord stroke changes what is on screen, so every one of them ends in

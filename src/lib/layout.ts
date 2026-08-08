@@ -1,4 +1,11 @@
-import { isDuplicable, moduleDef, railGroups } from "./modules/manifest.ts";
+import {
+  EXPLORER,
+  isDuplicable,
+  moduleDef,
+  railGroups,
+} from "./modules/manifest.ts";
+
+export { EXPLORER };
 
 export type ColumnId = "center" | "right";
 export type SideId = "right";
@@ -35,8 +42,6 @@ export interface RightState {
   tabs: ModuleRef[];
   activeTabs: Record<string, string>;
 }
-
-export const EXPLORER = "explorer";
 
 // Widths are measured in characters, not fractions of the window: the sized pane keeps
 // the same number of columns of text however the window is resized or the workspace
@@ -280,6 +285,10 @@ export function focusAdjacentTab(v: ViewState, dir: -1 | 1): ViewState {
 export function closeTab(v: ViewState, tabId: string): ViewState {
   const tab = v.right.tabs.find((t) => t.id === tabId);
   if (!tab) return v;
+  // A singleton row is its module, so there is nothing to close: it mounts on first visit
+  // and stays for the life of the view. Editors in the explorer row are closable — they
+  // are files, not the module.
+  if (moduleDef(tab.group) && !isDuplicable(tab.group)) return v;
   const activeTabs = { ...v.right.activeTabs };
   if (activeTabs[tab.group] === tabId) {
     // Prefer the previous tab of the same group; fall back to the next. A group whose
