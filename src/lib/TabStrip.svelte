@@ -3,15 +3,11 @@
   import { moduleLabel, type RightState } from "./layout.ts";
   import { hasTabs, isDuplicable } from "./modules/manifest.ts";
 
-  let { viewId, right, onCollapse }: {
-    viewId: string;
-    right: RightState;
-    onCollapse?: () => void;
-  } = $props();
+  let { viewId, right }: { viewId: string; right: RightState } = $props();
 
   // The strip is the selected group's tabs only — the other groups stay open behind it. A
-  // singleton row has none: it is its module, and the rail already names it. The bar itself
-  // stays either way, so the content below it doesn't shift as you move between rows.
+  // singleton row has none: it is its module, which the bar's label already names. The bar
+  // itself stays either way, so the content below it doesn't shift as you move between rows.
   const tabs = $derived(
     hasTabs(right.activeGroup)
       ? right.tabs.filter((t) => t.group === right.activeGroup)
@@ -21,9 +17,14 @@
 </script>
 
 <!-- Fixed height, not padding around whatever is inside: a singleton row has no chips, and
-     a bar that shrank to fit its collapse button would shift the content below it by a few
-     pixels every time you moved between rows. -->
+     a bar that shrank to fit its contents would shift the module below it by a few pixels
+     every time you moved between rows. -->
 <div class="flex h-9 shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1">
+  <!-- The selected row, named. The rail says the same thing, but it is hideable (ctrl+shift+b)
+       and this bar is not, so with the rail away this is what tells you where you are. -->
+  <span class="px-2 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">
+    {moduleLabel(right.activeGroup)}
+  </span>
   {#each tabs as tab (tab.id)}
     <div
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"
@@ -49,12 +50,5 @@
       aria-label="New {moduleLabel(right.activeGroup)} tab"
       onclick={() => newTab(viewId)}
     >+</button>
-  {/if}
-  {#if onCollapse}
-    <button
-      class="btn btn-ghost btn-xs ml-auto"
-      aria-label="Collapse right column"
-      onclick={onCollapse}
-    >«</button>
   {/if}
 </div>

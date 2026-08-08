@@ -69,11 +69,11 @@
     <span class="hidden h-4 w-px bg-base-content/20 @[370px]:block"></span>
     <span class="hidden items-center gap-1 @[370px]:flex">
       <kbd class="kbd kbd-xs">{mod}B</kbd>
-      <span class="opacity-70">left col</span>
+      <span class="opacity-70">workspaces</span>
     </span>
     <span class="hidden items-center gap-1 @[470px]:flex">
       <kbd class="kbd kbd-xs">{mod}⇧B</kbd>
-      <span class="opacity-70">right col</span>
+      <span class="opacity-70">modules</span>
     </span>
     <span class="hidden items-center gap-1 @[560px]:flex">
       <kbd class="kbd kbd-xs">{mod},</kbd>

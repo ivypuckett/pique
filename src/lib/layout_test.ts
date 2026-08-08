@@ -1,12 +1,10 @@
 import { assertEquals } from "@std/assert";
 import {
   createInitialView,
-  fixedPx,
   gridTemplateColumns,
   MIN_WIDTH_CH,
   moduleLabel,
   resizeBoundary,
-  visibleIds,
 } from "./layout.ts";
 import {
   activeTabId,
@@ -24,21 +22,17 @@ import {
   newTab,
   selectGroup,
   setActiveTab,
-  toggleCollapse,
   type ViewState,
 } from "./layout.ts";
 
-Deno.test("createInitialView starts at chat 57ch, tree 30ch, none collapsed", () => {
+Deno.test("createInitialView starts at chat 57ch, tree 30ch", () => {
   const v = createInitialView();
   assertEquals(v.chatWidthCh, 57);
   assertEquals(v.explorerWidthCh, 30);
-  assertEquals([v.center.collapsed, v.right.collapsed], [false, false]);
 });
 
-Deno.test("center has one row and the right pane one tab", () => {
-  const v = createInitialView();
-  assertEquals(v.center.rows.length, 1);
-  assertEquals(v.right.tabs.length, 1);
+Deno.test("the right pane starts on one tab", () => {
+  assertEquals(createInitialView().right.tabs.length, 1);
 });
 
 Deno.test("resizeBoundary sets chat's character width, leaving the pane to flex", () => {
@@ -66,56 +60,24 @@ Deno.test("resizeBoundary explorer-tabs sets the file tree's character width", (
   );
 });
 
-Deno.test("gridTemplateColumns lists chat, splitter and the pane when open", () => {
+Deno.test("gridTemplateColumns lists chat, splitter and the pane", () => {
   assertEquals(
     gridTemplateColumns(createInitialView()),
     "minmax(0, 57ch) 6px minmax(10ch, 1fr)",
   );
-});
-
-Deno.test("gridTemplateColumns gives the collapsed pane no space", () => {
-  const v = toggleCollapse(createInitialView(), "right");
-  assertEquals(gridTemplateColumns(v), "1fr");
-});
-
-Deno.test("fixedPx counts the pane splitter when open, nothing when collapsed", () => {
-  assertEquals(fixedPx(createInitialView()), 6);
-  assertEquals(fixedPx(toggleCollapse(createInitialView(), "right")), 0);
-});
-
-Deno.test("collapsing the pane leaves chat the only visible column", () => {
-  const v = toggleCollapse(createInitialView(), "right");
-  assertEquals(v.right.collapsed, true);
-  assertEquals(visibleIds(v), ["center"]);
-});
-
-Deno.test("expanding restores the original layout", () => {
+  // Hiding the module rail is a component-level concern (moduleRailHidden), so the row
+  // keeps both columns whatever is on screen inside the pane.
   const resized = resizeBoundary(createInitialView(), "center-right", 80, 200);
-  const v = toggleCollapse(toggleCollapse(resized, "right"), "right");
-  assertEquals(v.right.collapsed, false);
-  assertEquals(v.chatWidthCh, 80); // the round trip keeps the width it was dragged to
+  assertEquals(
+    gridTemplateColumns(resized),
+    "minmax(0, 80ch) 6px minmax(10ch, 1fr)",
+  );
 });
 
 Deno.test("createInitialView opens on its terminal tab", () => {
   const v = createInitialView();
-  assertEquals(v.center.activeTabId, "center-1");
   assertEquals(v.right.activeGroup, "terminal");
   assertEquals(activeTabId(v), "right-1");
-});
-
-Deno.test("isViewState rejects a column whose activeTabId names no row", () => {
-  const bad = createInitialView();
-  bad.center.activeTabId = "center-999";
-  assertEquals(isViewState(bad), false);
-});
-
-Deno.test("isViewState rejects a column missing activeTabId", () => {
-  const bad = createInitialView() as unknown as Record<
-    string,
-    Record<string, unknown>
-  >;
-  delete bad.center.activeTabId;
-  assertEquals(isViewState(bad), false);
 });
 
 Deno.test("isViewState rejects a remembered tab that is in another group", () => {
@@ -555,12 +517,6 @@ Deno.test("migrateView moves editors and path-scoped diffs into the explorer gro
   assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1"]);
   assertEquals(v.right.activeGroup, EXPLORER);
   assertEquals(activeTabId(v), "right-2");
-});
-
-Deno.test("migrateView keeps a pane that was collapsed collapsed", () => {
-  const raw = oldView([{ id: "right-1", title: "Terminal", kind: "terminal" }], "right-1");
-  (raw as { right: { collapsed: boolean } }).right.collapsed = true;
-  assertEquals(migrateView(raw)!.right.collapsed, true);
 });
 
 Deno.test("migrateView selects a group for a pane migrated with no tabs at all", () => {

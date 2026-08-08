@@ -1,12 +1,11 @@
 <script lang="ts">
   import {
-    activeView,
     activeWorkspace,
     focusView,
+    moduleRailHidden,
     resetView,
     session,
     setWorkspaceDir,
-    toggleCollapse,
     workspaceRailHidden,
   } from "./store.ts";
   import { settingsOpen } from "./settings/store.ts";
@@ -73,16 +72,18 @@
     >◧</button>
     <button
       class="btn btn-ghost btn-sm"
-      class:btn-active={!$activeView.right.collapsed}
-      aria-label="Toggle right pane"
-      aria-pressed={!$activeView.right.collapsed}
-      onclick={() => toggleCollapse($activeWorkspace.activeId, "right")}
+      class:btn-active={!$moduleRailHidden}
+      aria-label="Toggle modules"
+      aria-pressed={!$moduleRailHidden}
+      onclick={() => moduleRailHidden.update((h) => !h)}
     >◨</button>
     <button
       class="btn btn-ghost btn-sm"
       onclick={() => {
         resetView($activeWorkspace.activeId);
-        workspaceRailHidden.set(false); // reset restores every panel, including the rail
+        // Reset restores every panel, including the two rails
+        workspaceRailHidden.set(false);
+        moduleRailHidden.set(false);
       }}
     >Reset</button>
     <button

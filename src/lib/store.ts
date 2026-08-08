@@ -14,8 +14,6 @@ import {
   resizeBoundary as resize,
   selectGroup as selectGroupFn,
   setActiveTab as setActiveTabFn,
-  type SideId,
-  toggleCollapse as collapseFn,
   type ViewState,
 } from "./layout.ts";
 import {
@@ -49,6 +47,11 @@ export const session = writable<SessionState>(createInitialSession());
 // Whether the workspace rail is hidden (ctrl+b). A transient UI preference, not part of
 // the persisted session — it resets to visible on reload.
 export const workspaceRailHidden = writable(false);
+
+// The same for the module rail (ctrl+shift+b): one flag for the app rather than one per
+// view, and hiding it leaves the selected module on screen, exactly as hiding the
+// workspace rail leaves the shown workspace open.
+export const moduleRailHidden = writable(false);
 
 // Async hydrate from disk: the store renders defaults first, then this swaps in the
 // persisted tree once the config read resolves. Call once at startup (main.ts).
@@ -122,10 +125,6 @@ export function resizeBoundary(
   availableCh: number,
 ): void {
   edit(viewId, (v) => resize(v, b, newFirstCh, availableCh));
-}
-
-export function toggleCollapse(viewId: string, id: SideId): void {
-  edit(viewId, (v) => collapseFn(v, id));
 }
 
 export function addTab(viewId: string, kind: string): void {

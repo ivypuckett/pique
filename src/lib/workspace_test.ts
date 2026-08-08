@@ -10,7 +10,7 @@ import {
   setWorkspaceDir,
   updateView,
 } from "./workspace.ts";
-import { toggleCollapse } from "./layout.ts";
+import { selectGroup } from "./layout.ts";
 
 Deno.test("createInitialWorkspace has one view, active", () => {
   const w = createInitialWorkspace();
@@ -74,9 +74,9 @@ Deno.test("focusView is a no-op for an unknown view id", () => {
 
 Deno.test("updateView edits one view by id, leaving others untouched", () => {
   const w = addView(createInitialWorkspace()); // view-1, view-2
-  const next = updateView(w, "view-2", (v) => toggleCollapse(v, "right"));
-  assertEquals(next.views[0].right.collapsed, false);
-  assertEquals(next.views[1].right.collapsed, true);
+  const next = updateView(w, "view-2", (v) => selectGroup(v, "kanban"));
+  assertEquals(next.views[0].right.activeGroup, "terminal");
+  assertEquals(next.views[1].right.activeGroup, "kanban");
 });
 
 Deno.test("createInitialWorkspace defaults to ws-1 / Workspace 1", () => {

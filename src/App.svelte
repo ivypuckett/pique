@@ -13,7 +13,6 @@
   import { activeTabId, EXPLORER } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
-    activeId,
     activeView,
     activeWorkspace,
     addView,
@@ -26,9 +25,9 @@
     focusAdjacentTab,
     focusAdjacentWorkspace,
     focusTabAt,
+    moduleRailHidden,
     newTab,
     selectGroup,
-    toggleCollapse,
     workspaceRailHidden,
   } from "./lib/store.ts";
   import { pickDirectory } from "./lib/settings/bindings.ts";
@@ -143,12 +142,11 @@
     if (shown?.kind === "terminal") focusActiveTab();
   }
 
-  // ctrl+t's strokes all act on the tab pane, and a collapsed pane shows no tabs at all,
-  // so reveal it first — otherwise the tab lands somewhere you can't see.
+  // ctrl+t's strokes all act on the pane of whichever view is on screen. Hiding the module
+  // rail hides the list, not the pane, so there is never anything to reveal first: the row
+  // a stroke selects is on screen either way.
   function onTabs(act: (viewId: string) => void) {
-    const view = get(activeView);
-    if (view.right.collapsed) toggleCollapse(view.id, "right");
-    act(view.id);
+    act(get(activeView).id);
   }
 
   onMount(() => {
@@ -262,12 +260,12 @@
 
       if (!mod) return;
 
-      // ctrl+b: hide/show the workspace rail. ctrl+shift+b: collapse/expand the right pane.
+      // ctrl+b: hide/show the workspace rail. ctrl+shift+b: the same for the module rail.
       if (e.code === "KeyB") {
         e.preventDefault();
         e.stopPropagation();
-        if (e.shiftKey) toggleCollapse(activeId(), "right");
-        else workspaceRailHidden.update((h) => !h);
+        const rail = e.shiftKey ? moduleRailHidden : workspaceRailHidden;
+        rail.update((h) => !h);
       }
 
       // ctrl+,: open the settings modal. A plain shortcut, not a chord — it

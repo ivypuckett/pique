@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { resizeBoundary, toggleCollapse } from "./store.ts";
+  import { moduleRailHidden, resizeBoundary } from "./store.ts";
   import {
     type ColumnId,
-    type ColumnState,
     EXPLORER,
     moduleLabel,
     type RightState,
@@ -17,12 +16,11 @@
   import { moduleDef } from "./modules/manifest.ts";
   import { registry } from "./modules/registry.ts";
 
-  // `id` says which of the two shapes is passed: "center" carries the chat column, "right"
-  // the tabbed pane. The two branches share nothing but the module frame, so they take
-  // their own state rather than a common one.
-  let { viewId, col, right, id, explorerWidthCh, cwd, workspaceId, el = $bindable() }: {
+  // `id` picks the branch: "center" is the chat column, which is one fixed module and so
+  // carries no state of its own, and "right" the tabbed pane. The two share nothing but
+  // the module frame.
+  let { viewId, right, id, explorerWidthCh, cwd, workspaceId, el = $bindable() }: {
     viewId: string;
-    col?: ColumnState;
     right?: RightState;
     id: ColumnId;
     explorerWidthCh?: number;
@@ -58,8 +56,8 @@
 </script>
 
 {#if id === "center"}
-  <!-- Center is always the chat pane: a single fixed module, no tab strip. Rendered
-       independently of col.rows so a stale/empty persisted center can't blank it out. -->
+  <!-- Center is always the chat pane: a single fixed module, no tab strip. There is no
+       persisted state behind it, so a stale layout.json can't blank it out. -->
   {@const Chat = registry["chat"]}
   <div class="flex h-full min-w-0 flex-col" bind:this={el}>
     <div class="relative min-h-0 flex-1">
@@ -83,7 +81,7 @@
   {@const withFiles = onExplorer && pane.tabs.some((t) => t.group === EXPLORER)}
   <div class="flex h-full min-w-0">
     <div class="flex min-w-0 flex-1 flex-col">
-      <TabStrip {viewId} right={pane} onCollapse={() => toggleCollapse(viewId, "right")} />
+      <TabStrip {viewId} right={pane} />
       <div
         class="grid min-h-0 min-w-0 flex-1 grid-rows-1"
         style:grid-template-columns={withFiles ? trackPair(explorerWidthCh ?? 30) : "1fr"}
@@ -125,6 +123,8 @@
         </div>
       </div>
     </div>
-    <ModuleRail {viewId} right={pane} />
+    {#if !$moduleRailHidden}
+      <ModuleRail {viewId} right={pane} />
+    {/if}
   </div>
 {/if}

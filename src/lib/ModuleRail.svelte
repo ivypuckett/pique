@@ -16,8 +16,9 @@
 
 <!-- The workspace rail mirrored: fixed width, full height of the pane, bordered on the
      side it docks to. This one lists the view's modules instead of the session's
-     workspaces, and one row is selected the way one workspace is. It has no hide toggle
-     of its own — ctrl+shift+b collapses the pane, rail and content together. -->
+     workspaces, and one row is selected the way one workspace is. ctrl+shift+b hides it
+     the way ctrl+b hides that one — the list goes, the selected module stays on screen,
+     named by the tab bar above it. -->
 <aside class="flex w-32 shrink-0 flex-col gap-1 border-l border-base-300 bg-base-200 p-2">
   <span class="px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">
     Modules

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resizeBoundary } from "./store.ts";
-  import { fixedPx, gridTemplateColumns, type ViewState } from "./layout.ts";
+  import { gridTemplateColumns, SPLITTER_PX, type ViewState } from "./layout.ts";
   import { chPx } from "./ch.ts";
   import Column from "./Column.svelte";
   import Splitter from "./Splitter.svelte";
@@ -19,7 +19,7 @@
   // Chat is sized in ch, so the pointer's px are converted through one character's width.
   function onDrag(clientX: number) {
     if (!centerEl || !gridEl) return;
-    const flexPx = gridEl.clientWidth - fixedPx(view);
+    const flexPx = gridEl.clientWidth - SPLITTER_PX;
     const ch = chPx(gridEl);
     if (flexPx <= 0 || ch <= 0) return;
     const left = centerEl.getBoundingClientRect().left;
@@ -32,16 +32,14 @@
   style:grid-template-columns={gridTemplateColumns(view)}
   bind:this={gridEl}
 >
-  <Column viewId={view.id} col={view.center} id="center" {cwd} {workspaceId} bind:el={centerEl} />
-  {#if !view.right.collapsed}
-    <Splitter onDrag={onDrag} />
-    <Column
-      viewId={view.id}
-      right={view.right}
-      id="right"
-      explorerWidthCh={view.explorerWidthCh}
-      {cwd}
-      {workspaceId}
-    />
-  {/if}
+  <Column viewId={view.id} id="center" {cwd} {workspaceId} bind:el={centerEl} />
+  <Splitter onDrag={onDrag} />
+  <Column
+    viewId={view.id}
+    right={view.right}
+    id="right"
+    explorerWidthCh={view.explorerWidthCh}
+    {cwd}
+    {workspaceId}
+  />
 </div>

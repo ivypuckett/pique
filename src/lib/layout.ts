@@ -8,7 +8,6 @@ import {
 export { EXPLORER };
 
 export type ColumnId = "center" | "right";
-export type SideId = "right";
 
 export interface ModuleRef {
   id: string;
@@ -26,18 +25,11 @@ export interface ModuleRef {
   }; // per-tab payload, spread into the module
 }
 
-export interface ColumnState {
-  collapsed: boolean; // center is never collapsed
-  rows: ModuleRef[]; // center: the tab list (N); sides: a single row
-  activeTabId: string; // visible right tab; center/left carry it for shape uniformity
-}
-
 // The tabbed pane. One group is selected (the rail's row); the strip above the content
 // shows that group's tabs and nothing else, so `tabs` is every open tab of every group
 // in open order. `activeTabs` remembers a group's visible tab across a switch away and
 // back, and carries no entry for a group with nothing open.
 export interface RightState {
-  collapsed: boolean;
   activeGroup: string;
   tabs: ModuleRef[];
   activeTabs: Record<string, string>;
@@ -49,7 +41,8 @@ export interface RightState {
 export interface ViewState {
   id: string; // stable across the view's lifetime; keys the tiled workspace
   chatWidthCh: number; // chat's fixed width; the tabbed pane takes the rest of the row
-  center: ColumnState; // chat
+  // Chat itself carries no state here: it is one fixed module filling the center column,
+  // mounted by Column.svelte rather than driven by a tab list.
   right: RightState; // the tabbed pane
   // The file tree's width inside the explorer row, where it shares the pane with the
   // editors opened from it. The tree is never hidden there — it is that row's content.
@@ -62,13 +55,7 @@ export function createInitialView(id = "view-1"): ViewState {
   return {
     id,
     chatWidthCh: 57,
-    center: {
-      collapsed: false,
-      activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Chat", kind: "chat", group: "chat" }],
-    },
     right: {
-      collapsed: false,
       activeGroup: "terminal",
       tabs: [{
         id: "right-1",
@@ -80,10 +67,6 @@ export function createInitialView(id = "view-1"): ViewState {
     },
     explorerWidthCh: 30,
   };
-}
-
-export function visibleIds(v: ViewState): ColumnId[] {
-  return v.right.collapsed ? ["center"] : ["center", "right"];
 }
 
 // Visual order is chat | [tree · tabs | rail]. "center-right" is the outer splitter
@@ -117,11 +100,6 @@ export function resizeBoundary(
   return { ...v, chatWidthCh: first };
 }
 
-export function fixedPx(v: ViewState): number {
-  // Outer row: the pane contributes one splitter when open, nothing when collapsed.
-  return v.right.collapsed ? 0 : SPLITTER_PX;
-}
-
 // The sized pane holds its character width and its sibling takes the rest — until the
 // row is too narrow for both, where the sibling keeps MIN_WIDTH_CH (the floor the
 // splitter enforces too) and the sized one gives up characters instead of vanishing.
@@ -131,15 +109,10 @@ export function trackPair(firstCh: number): string {
 }
 
 export function gridTemplateColumns(v: ViewState): string {
-  // Visual order: chat (center, never collapses) | the pane (right). A collapsed pane
-  // takes no space at all, so chat stretches over the whole row and shrinks back on
-  // expand.
-  if (v.right.collapsed) return "1fr";
+  // Visual order: chat (center) | the pane (right). Both are always on screen — hiding
+  // the module rail (ctrl+shift+b) takes the list out of the pane, not the pane out of
+  // the row, the way hiding the workspace rail leaves the workspace open.
   return trackPair(v.chatWidthCh);
-}
-
-export function toggleCollapse(v: ViewState, _id: SideId): ViewState {
-  return { ...v, right: { ...v.right, collapsed: !v.right.collapsed } };
 }
 
 // Display label for a module kind, used for new-tab titles and the picker menu. Kinds
@@ -317,22 +290,9 @@ function isModuleRef(r: unknown): boolean {
     row.group !== "";
 }
 
-function isColumnState(c: unknown): boolean {
-  if (typeof c !== "object" || c === null) return false;
-  const col = c as Record<string, unknown>;
-  return typeof col.collapsed === "boolean" &&
-    typeof col.activeTabId === "string" &&
-    Array.isArray(col.rows) && col.rows.every(isModuleRef) &&
-    // The center may hold zero tabs (all closed); sides always have rows. When the
-    // column is non-empty the active id must point at one of them.
-    (col.rows.length === 0 ||
-      (col.rows as ModuleRef[]).some((r) => r.id === col.activeTabId));
-}
-
 function isRightState(r: unknown): boolean {
   if (typeof r !== "object" || r === null) return false;
   const right = r as Record<string, unknown>;
-  if (typeof right.collapsed !== "boolean") return false;
   if (typeof right.activeGroup !== "string" || right.activeGroup === "") {
     return false;
   }
@@ -352,8 +312,7 @@ export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
   return typeof obj.id === "string" && typeof obj.chatWidthCh === "number" &&
-    isColumnState(obj.center) && isRightState(obj.right) &&
-    typeof obj.explorerWidthCh === "number";
+    isRightState(obj.right) && typeof obj.explorerWidthCh === "number";
 }
 
 // Adopt a view persisted by an older build. Two shapes reach here: the pre-groups one,
@@ -428,7 +387,6 @@ export function migrateView(raw: unknown): ViewState | null {
       ? explorerWidth
       : base.explorerWidthCh,
     right: {
-      collapsed: old!.collapsed === true,
       // The group that was already selected, or the one that was on screen; failing both
       // the first tab's, failing that the default view's, so a pane migrated empty still
       // has a group selected.
