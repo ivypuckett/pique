@@ -101,9 +101,13 @@ export interface ViewState {
   chatWidthCh: number;
   center: ColumnState;    // chat; unchanged
   right: RightState;
-  explorerWidthCh: number; // tree width inside the Explorer group
+  explorer: ExplorerState; // { widthCh, hidden } until task 5 drops `hidden`
 }
 ```
+
+`ExplorerState` outlives task 3 as it is and becomes a bare `explorerWidthCh` in task 5,
+where `hidden` dies with the docked addon — splitting it earlier would leave a
+one-field interface standing for two tasks.
 
 Why per-group `activeTabs` rather than one `activeTabId`: switching to Terminal
 should land on the terminal you were last in, not reset to the first.
@@ -255,26 +259,41 @@ listing only the selected group's tabs.
 `src/lib/TabStrip.svelte`, `src/lib/View.svelte`, `src/App.svelte`,
 `src/lib/layout_test.ts`.
 
-Reducers to land (all pure, all in `layout.ts`):
-`selectGroup`, `focusAdjacentGroup`, `addTab` (select-or-create + singleton
-rule from task 2), `closeTab` (maintains `activeTabs`, leaves an empty group
-selected), `focusAdjacentTab` / `focusTabAt` (over the filtered list),
-`setActiveTab`, `addEditorTab` / `addDiffTab` (both `group: "explorer"`),
-`isViewState` for the new shape, and `migrateView` for the old one.
+Reducers to land (all pure, all in `layout.ts`): `groupTabs` and `activeTabId`
+(the two accessors everything else reads), `addTab` (singleton rule from task 2,
+now expressed over groups), `closeTab` (maintains `activeTabs`, leaves an empty
+group selected), `focusAdjacentTab` / `focusTabAt` (over the filtered list),
+`setActiveTab` (crosses groups, since revealing a singleton does),
+`addEditorTab` / `addDiffTab` (both `group: "explorer"`), `isViewState` for the
+new shape, and `migrateView` for the old one.
+
+`selectGroup` and `focusAdjacentGroup` belong to task 4, not here: nothing calls
+them until the rail exists, and the rail is what defines row order.
 
 The docked explorer and `explorer.hidden` survive this task untouched — moving
-the tree is task 5. `explorer.widthCh` becomes `explorerWidthCh` here because
-`isViewState` changes anyway; the `"explorer-tabs"` boundary keeps its name.
+the tree is task 5, and the `"explorer-tabs"` boundary keeps its name.
 
-**Verify:** `deno task test` (the migration deserves its own test: an old
-`ViewState` JSON in, a valid new one out, with a duplicate Kanban dropped).
-Then in web mode with a *real* `~/.pique/layout.json` from before the change —
-back it up first — confirm workspaces and cwd overrides survive a reload.
+Migration is a chain, one function per level, each mirroring that level's guard:
+`migrateView` (layout.ts) → `migrateWorkspace` (workspace.ts) → `migrateSession`
+(session.ts), which now also composes with the older pre-root adoption it
+already did. Migrating has to happen *before* the guards run, since
+`isWorkspaceState` calls `isViewState`.
+
+**Verify:** `deno task test` (the migration deserves its own tests: an old
+`ViewState` JSON in, a valid new one out, with a duplicate Kanban dropped, and a
+session keeping its workspaces and cwd overrides). Web mode has no config
+persistence, so prove the real file separately: back up
+`~/.pique/layout.json`, then run it through `migrateSession` in a scratch script
+and check the workspaces, cwds and shown tab all survive.
 
 ## Task 4 — The rail
 
 **Files:** new `src/lib/ModuleRail.svelte`, `src/lib/Column.svelte`,
-`src/lib/TabStrip.svelte`.
+`src/lib/TabStrip.svelte`, plus `selectGroup` and `focusAdjacentGroup` in
+`layout.ts` (deferred from task 3, which had no caller for them) and their
+wrappers in `store.ts`. `selectGroup` is select-or-create: choosing a row whose
+group has no tabs opens one, which is how `ctrl+t k` already behaves. Rail order
+is `MODULES` order, and task 5 puts Explorer at its head.
 
 The rail is `WorkspacePane.svelte` mirrored: fixed width, full height of the
 right pane, `border-l` instead of `border-r`, one `menu` row per `MODULES`
@@ -296,8 +315,9 @@ and confirm the strip and content follow, the selection survives a reload, and
 
 ## Task 5 — Explorer group
 
-**Files:** `src/lib/layout.ts` (drop `ExplorerState.hidden` and
-`setExplorerHidden`), `src/lib/store.ts`, `src/lib/Column.svelte`,
+**Files:** `src/lib/layout.ts` (replace `ExplorerState` with a bare
+`explorerWidthCh`, dropping `hidden` and `setExplorerHidden` — `migrateView`
+carries the old width across), `src/lib/store.ts`, `src/lib/Column.svelte`,
 `src/lib/ModuleRail.svelte`, `src/App.svelte` (`toggleFileTree`, `visibleTree`),
 `src/lib/modules/registry.ts`.
 

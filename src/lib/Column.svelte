@@ -4,6 +4,7 @@
     type ColumnId,
     type ColumnState,
     type ExplorerState,
+    type RightState,
     SPLITTER_PX,
     trackPair,
   } from "./layout.ts";
@@ -13,9 +14,13 @@
   import TabStrip from "./TabStrip.svelte";
   import { registry } from "./modules/registry.ts";
 
-  let { viewId, col, id, explorer, cwd, workspaceId, el = $bindable() }: {
+  // `id` says which of the two shapes is passed: "center" carries the chat column, "right"
+  // the tabbed pane. The two branches share nothing but the module frame, so they take
+  // their own state rather than a common one.
+  let { viewId, col, right, id, explorer, cwd, workspaceId, el = $bindable() }: {
     viewId: string;
-    col: ColumnState;
+    col?: ColumnState;
+    right?: RightState;
     id: ColumnId;
     explorer?: ExplorerState;
     cwd?: string;
@@ -56,10 +61,12 @@
        (full height, no frame) docked at the left edge beside the active tab. The tab bar's
        far-left button and ctrl+e both show/hide the explorer. -->
   {@const hidden = explorer?.hidden ?? true}
+  {@const pane = right!}
+  {@const shown = pane.activeTabs[pane.activeGroup] ?? ""}
   <div class="flex h-full min-w-0 flex-col">
     <TabStrip
       {viewId}
-      {col}
+      right={pane}
       explorerHidden={hidden}
       onToggleExplorer={() => setExplorerHidden(viewId, !hidden)}
       onCollapse={() => toggleCollapse(viewId, "right")}
@@ -76,9 +83,11 @@
         <Splitter onDrag={onExplorerDrag} />
       {/if}
       <div class="relative min-w-0">
-        {#each col.rows as tab (tab.id)}
+        <!-- Every open tab of every group stays mounted, so a terminal keeps running while
+             you work in another module; only the selected group's shown one is visible. -->
+        {#each pane.tabs as tab (tab.id)}
           {@const Module = registry[tab.kind]}
-          <div class="absolute inset-0" class:hidden={tab.id !== col.activeTabId} data-tab-content>
+          <div class="absolute inset-0" class:hidden={tab.id !== shown} data-tab-content>
             <ModuleFrame title={tab.title} header={false}>
               {#if Module}
                 <Module title={tab.title} {cwd} {workspaceId} {viewId} tabId={tab.id} {...tab.props} />

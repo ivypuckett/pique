@@ -1,5 +1,6 @@
 import { derived, get, writable } from "svelte/store";
 import {
+  activeTabId,
   addDiffTab as addDiffTabFn,
   addEditorTab as addEditorTabFn,
   addTab as addTabFn,
@@ -163,7 +164,7 @@ export function closeTab(viewId: string, tabId: string): void {
 // closeWorkspace don't: the chord acts on whatever is active.
 export function closeActiveTab(): void {
   const { id } = get(activeView);
-  edit(id, (v) => closeTabFn(v, v.right.activeTabId));
+  edit(id, (v) => closeTabFn(v, activeTabId(v)));
 }
 
 export function resetView(viewId: string): void {

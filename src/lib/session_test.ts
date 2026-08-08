@@ -162,3 +162,65 @@ Deno.test("migrateSession passes a current session through and rejects junk", ()
   assertEquals(migrateSession(null), null);
   assertEquals(migrateSession({ nope: 1 }), null);
 });
+
+// A session whose views predate the right pane's groups. Rejecting one costs the user
+// every workspace and its working directory, so it is migrated view by view instead.
+function oldSession(): unknown {
+  const view = {
+    id: "view-1",
+    chatWidthCh: 57,
+    center: {
+      collapsed: false,
+      activeTabId: "center-1",
+      rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
+    },
+    right: {
+      collapsed: false,
+      activeTabId: "right-2",
+      rows: [
+        { id: "right-1", title: "Terminal", kind: "terminal" },
+        { id: "right-2", title: "Kanban", kind: "kanban" },
+      ],
+    },
+    explorer: { widthCh: 30, hidden: false },
+  };
+  return {
+    root: { id: "root", title: "Root", views: [view], activeId: "view-1", cwd: "~/src" },
+    workspaces: [
+      {
+        id: "ws-1",
+        title: "Workspace 1",
+        views: [view],
+        activeId: "view-1",
+        cwd: "~/workspace/pique",
+      },
+    ],
+    activeId: "ws-1",
+  };
+}
+
+Deno.test("migrateSession groups the panes of every workspace, root included", () => {
+  const s = migrateSession(oldSession())!;
+  assertEquals(isSessionState(s), true);
+  for (const w of [s.root, ...s.workspaces]) {
+    const { right } = w.views[0];
+    assertEquals(right.tabs.map((t) => t.group), ["terminal", "kanban"]);
+    assertEquals(right.activeGroup, "kanban");
+  }
+});
+
+Deno.test("migrateSession keeps every workspace and its working directory", () => {
+  const s = migrateSession(oldSession())!;
+  assertEquals(s.root.cwd, "~/src");
+  assertEquals(s.workspaces.map((w) => [w.id, w.cwd]), [[
+    "ws-1",
+    "~/workspace/pique",
+  ]]);
+  assertEquals(s.activeId, "ws-1");
+});
+
+Deno.test("migrateSession refuses a session holding a view it cannot migrate", () => {
+  const broken = oldSession() as { workspaces: { views: unknown[] }[] };
+  broken.workspaces[0].views = [{ id: "view-1", right: { rows: "nope" } }];
+  assertEquals(migrateSession(broken), null);
+});

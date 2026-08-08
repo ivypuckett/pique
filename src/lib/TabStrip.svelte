@@ -1,15 +1,19 @@
 <script lang="ts">
   import { addTab, closeTab, setActiveTab } from "./store.ts";
-  import type { ColumnState } from "./layout.ts";
+  import type { RightState } from "./layout.ts";
   import { MODULES } from "./modules/manifest.ts";
 
-  let { viewId, col, explorerHidden, onToggleExplorer, onCollapse }: {
+  let { viewId, right, explorerHidden, onToggleExplorer, onCollapse }: {
     viewId: string;
-    col: ColumnState;
+    right: RightState;
     explorerHidden?: boolean;
     onToggleExplorer?: () => void;
     onCollapse?: () => void;
   } = $props();
+
+  // The strip is the selected group's tabs only — the other groups stay open behind it.
+  const tabs = $derived(right.tabs.filter((t) => t.group === right.activeGroup));
+  const shown = $derived(right.activeTabs[right.activeGroup] ?? "");
 </script>
 
 <div class="flex shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-1 py-1">
@@ -22,11 +26,11 @@
       onclick={onToggleExplorer}
     >◧</button>
   {/if}
-  {#each col.rows as tab (tab.id)}
+  {#each tabs as tab (tab.id)}
     <div
       class="flex items-center gap-1 rounded-field px-2 py-0.5 text-sm"
-      class:bg-base-100={tab.id === col.activeTabId}
-      class:font-medium={tab.id === col.activeTabId}
+      class:bg-base-100={tab.id === shown}
+      class:font-medium={tab.id === shown}
       onauxclick={(e) => {
         if (e.button === 1) closeTab(viewId, tab.id);
       }}

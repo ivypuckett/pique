@@ -10,6 +10,7 @@
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
   import { ROOT } from "./lib/scope/paths.ts";
+  import { activeTabId } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
     activeId,
@@ -146,8 +147,9 @@
     if (el instanceof HTMLElement && el.closest("[data-tab-content]") && el.offsetParent === null) {
       el.blur();
     }
-    const { rows, activeTabId } = get(activeView).right;
-    if (rows.find((r) => r.id === activeTabId)?.kind === "terminal") focusActiveTab();
+    const view = get(activeView);
+    const shown = view.right.tabs.find((t) => t.id === activeTabId(view));
+    if (shown?.kind === "terminal") focusActiveTab();
   }
 
   // ctrl+t's strokes all act on the tab pane, and a collapsed pane shows no tabs at all,
