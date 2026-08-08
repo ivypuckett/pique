@@ -137,6 +137,26 @@ Deno.test("addTab picks the smallest free right-N id", () => {
   ]);
 });
 
+Deno.test("addTab reveals the open kanban tab instead of adding a second", () => {
+  let v = addTab(createInitialView(), "kanban"); // right-2
+  v = addTab(v, "terminal"); // right-3, active — so the reveal has to move the active id
+  v = addTab(v, "kanban");
+  assertEquals(v.right.rows.map((r) => r.kind), ["terminal", "kanban", "terminal"]);
+  assertEquals(v.right.activeTabId, "right-2");
+});
+
+Deno.test("addTab appends a second terminal", () => {
+  const v = addTab(createInitialView(), "terminal"); // right-1 is already a terminal
+  assertEquals(v.right.rows.map((r) => r.kind), ["terminal", "terminal"]);
+  assertEquals(v.right.activeTabId, "right-2");
+});
+
+Deno.test("addTab ignores a path-scoped diff when revealing the git diff module", () => {
+  const v = addTab(addDiffTab(createInitialView(), "src/a.ts"), "gitdiff");
+  assertEquals(v.right.rows.map((r) => r.title), ["Terminal", "a.ts", "Git Diff"]);
+  assertEquals(v.right.activeTabId, "right-3");
+});
+
 Deno.test("setActiveTab switches the active right tab", () => {
   const two = addTab(createInitialView(), "terminal"); // right-2 active
   const v = setActiveTab(two, "right-1");

@@ -1,4 +1,4 @@
-import { moduleDef } from "./modules/manifest.ts";
+import { isDuplicable, moduleDef } from "./modules/manifest.ts";
 
 export type ColumnId = "center" | "right";
 export type SideId = "right";
@@ -137,7 +137,17 @@ function nextRightId(rows: ModuleRef[]): string {
   return `right-${n}`;
 }
 
+// Open a module in the right pane. A singleton kind (everything but the terminal — see
+// the manifest) is *revealed* rather than duplicated: a second Kanban tab is two views
+// of the one board, and pressing ctrl+t k twice used to make one.
+//
+// Tabs carrying props are exempt: an editor and a path-scoped diff are that file, not
+// the module, so one open beside the tree never stands in for Git Diff itself.
 export function addTab(v: ViewState, kind: string): ViewState {
+  if (!isDuplicable(kind)) {
+    const open = v.right.rows.find((r) => r.kind === kind && !r.props);
+    if (open) return setActiveTab(v, open.id);
+  }
   const id = nextRightId(v.right.rows);
   const tab: ModuleRef = { id, title: moduleLabel(kind), kind };
   return {
