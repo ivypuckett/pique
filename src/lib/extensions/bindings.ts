@@ -3,7 +3,17 @@
 // arg/return shapes in sync by hand (separate module graphs).
 import type { Extension, ExtensionSource, ExtState } from "./service.ts";
 import type { ExtSearchResult } from "./packages.ts";
-export type { Extension, ExtensionSource, ExtSearchResult, ExtState };
+import type { PackageType } from "./catalog.ts";
+export type {
+  Extension,
+  ExtensionSource,
+  ExtSearchResult,
+  ExtState,
+  PackageType,
+};
+// A VALUE, so it must not come from packages.ts: that module imports pi's
+// DefaultPackageManager, which does not survive being bundled for the browser.
+export { PACKAGE_TYPES } from "./catalog.ts";
 
 // Every call names the scope it acts on: an extension belongs to one scope, and
 // enabling in root is what makes a local one visible to every workspace.
@@ -32,7 +42,11 @@ export interface ExtensionBindings {
   ): Promise<unknown>;
   // Fetches the bytes and quarantines them; it does NOT enable the package.
   extensionsFetch(arg: { scope: string; source: string }): Promise<unknown>;
-  extensionsSearch(arg: { query: string }): Promise<ExtSearchResult[]>;
+  // `type` narrows the catalog to packages carrying that kind, the way
+  // pi.dev/packages?type=skill does. Omitted means every kind.
+  extensionsSearch(
+    arg: { query: string; type?: PackageType },
+  ): Promise<ExtSearchResult[]>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — the Extensions

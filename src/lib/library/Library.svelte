@@ -4,6 +4,8 @@
     extensionBindings,
     type ExtensionSource,
     type ExtSearchResult,
+    PACKAGE_TYPES,
+    type PackageType,
   } from "../extensions/bindings.ts";
   import { promptBindings } from "../prompts/bindings.ts";
   import { skillBindings } from "../skills/bindings.ts";
@@ -61,7 +63,11 @@
   // downloading an npm package runs its install scripts, which happens before any review
   // is possible (docs/extensions.md).
   let query = $state("");
+  // Which kind of package to browse for, or null for all — the catalog's own facet
+  // (pi.dev/packages?type=skill), not a filter over what is already installed.
+  let type = $state<PackageType | null>(null);
   let results = $state<ExtSearchResult[]>([]);
+  let searched = $state(false);
   let searching = $state(false);
   let source = $state("");
   let sourceOpen = $state(false);
@@ -258,11 +264,23 @@
     searching = true;
     error = "";
     try {
-      results = await ext.extensionsSearch({ query: query.trim() });
+      results = await ext.extensionsSearch({
+        query: query.trim(),
+        type: type ?? undefined,
+      });
+      searched = true;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
     searching = false;
+  }
+
+  // Picking a facet re-runs the search rather than filtering what is on screen: a type
+  // is part of the query the registry answers, and only ~2% of pi packages are themes,
+  // so narrowing 25 fetched hits would usually leave none.
+  function pickType(t: PackageType | null): void {
+    type = t;
+    if (searched || query.trim() !== "") search();
   }
 
   // Fetch the bytes into quarantine. This does NOT enable anything — it lands in
@@ -458,6 +476,30 @@
         >Add source…</button>
       </div>
 
+      <!-- The catalog's kinds, not this list's. A pi package can carry extensions,
+           skills, templates or a theme — searching without a facet returns all of them,
+           which is what the unfiltered chip means. -->
+      <div class="mt-2 flex items-center gap-1" role="group" aria-label="Package type">
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          class:btn-active={type === null}
+          aria-pressed={type === null}
+          disabled={busy || searching}
+          onclick={() => pickType(null)}
+        >All</button>
+        {#each PACKAGE_TYPES as t (t)}
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            class:btn-active={type === t}
+            aria-pressed={type === t}
+            disabled={busy || searching}
+            onclick={() => pickType(t)}
+          >{t}s</button>
+        {/each}
+      </div>
+
       {#if draft}
         <div class="mt-3">
           <PromptEditor
@@ -513,6 +555,14 @@
                 {#if r.description}
                   <div class="mt-0.5 line-clamp-2 text-xs opacity-70">{r.description}</div>
                 {/if}
+                <!-- What the package declares it carries, read from its npm keywords.
+                     A package declaring nothing still installs, so it gets a generic
+                     badge rather than none — an unbadged row would read as a bug. -->
+                <div class="mt-1 flex flex-wrap gap-1">
+                  {#each r.types.length > 0 ? r.types : ["package"] as t (t)}
+                    <span class="badge badge-ghost badge-xs">{t}</span>
+                  {/each}
+                </div>
                 <div class="mt-0.5 text-[0.65rem] opacity-50">
                   {#if r.author}{r.author} · {/if}{r.downloads.toLocaleString()}/mo
                 </div>
@@ -529,6 +579,10 @@
             </li>
           {/each}
         </ul>
+      {:else if searched && !searching}
+        <div class="mt-3 text-xs opacity-60">
+          No {type ? `${type} packages` : "packages"} match that search.
+        </div>
       {/if}
 
       <!-- Enabled but unloadable. Kept out of the rows on purpose: a failure names a

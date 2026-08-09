@@ -518,8 +518,11 @@ win.bind("extensionsFetch", async (arg) => {
 });
 
 win.bind("extensionsSearch", async (arg) => {
-  const { query } = arg as { query: string };
-  return await extensions.searchExtensions(query);
+  const { query, type } = arg as {
+    query: string;
+    type?: "extension" | "skill" | "prompt" | "theme";
+  };
+  return await extensions.searchExtensions(query, type);
 });
 
 // Prompt templates — reusable messages invoked as `/name` in a Chat module, per scope.

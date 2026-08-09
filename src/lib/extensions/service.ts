@@ -22,6 +22,7 @@ import {
   fetchPackage,
   listEnabledPackages,
   listPendingPackages,
+  type PackageType,
   removePackage,
   resolvePackageFiles,
   revokePackage,
@@ -39,6 +40,7 @@ export {
   type ExtSearchResult,
   fetchPackage,
   inheritedExtensionFiles,
+  type PackageType,
   searchExtensions,
 };
 
