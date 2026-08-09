@@ -3,7 +3,7 @@
 //
 // The format is pi's, not pique's: `description` and `argument-hint` frontmatter over a
 // markdown body, with the description falling back to the body's first line. This module
-// exists to show a template in Library → Prompts the way pi will read it, so the two
+// exists to show a template in the Library module the way pi will read it, so the two
 // must agree — see prompts_pi_test.ts, which asserts that against the SDK's own loader.
 import { extract } from "@std/front-matter/yaml";
 
@@ -31,7 +31,7 @@ const str = (
 ): string | undefined => (typeof v === "string" ? v : undefined);
 
 // pi's fallback, reproduced exactly: the first non-empty line, truncated at 60 with an
-// ellipsis. Diverging here would make Library → Prompts disagree with the `/` menu.
+// ellipsis. Diverging here would make the Library module disagree with the `/` menu.
 function firstLine(body: string): string {
   const line = body.split("\n").find((l) => l.trim());
   if (!line) return "";

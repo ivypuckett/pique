@@ -140,7 +140,7 @@ Deno.test("an unresolvable name raises rather than being skipped", async () => {
 });
 
 // Without this an automaton file naming npm:anything would make pi fetch and load
-// unreviewed code, bypassing Library → Extensions entirely.
+// unreviewed code, bypassing the Library module entirely.
 Deno.test("a package source that is not enabled in the scope raises", async () => {
   await withTempHome(async () => {
     await assertRejects(
@@ -207,7 +207,7 @@ Deno.test("a path-shaped ref is treated as a package source and rejected unenabl
 
 // A name that is neither a legal local extension name (no hyphens) nor a plausible
 // package source shape gets its own error, rather than being told to enable it in
-// Library → Extensions — a tab where a bare hyphenated name could never appear.
+// the Library module — a list where a bare hyphenated name could never appear.
 Deno.test("a hyphenated name is neither a legal local name nor a package source shape", async () => {
   await withTempHome(async () => {
     await assertRejects(
