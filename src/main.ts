@@ -3,6 +3,13 @@ import App from "./App.svelte";
 import "./app.css";
 import { hydrateSession } from "./lib/store.ts";
 import { hydrateSettings, settings } from "./lib/settings/store.ts";
+import { fillDisplay } from "./lib/settings/bindings.ts";
+
+// Fill the display immediately, before anything is awaited: the window is created at
+// 1200x800 (desktop.ts, which cannot measure the screen) and this is what grows it, so
+// every tick of delay is a tick of the small window being visible. Deliberately not
+// sequenced with the hydration below — it reads no config and nothing waits on it.
+void fillDisplay();
 
 // Reflect the chosen daisyui theme onto <html data-theme>. The compiled theme set
 // lives in app.css (kept in lockstep with THEMES in settings/store.ts).

@@ -40,6 +40,17 @@ async function moduleDir(override?: string): Promise<string> {
   return settings.resolveModuleDir(override, await settings.readJson("layout"));
 }
 
+// deno desktop has no maximize API — the window options and BrowserWindow expose only
+// explicit sizing — so "start maximized" is the frontend measuring its own display and
+// calling this once at boot (settings/bindings.ts). Done from there rather than here
+// because screen.availWidth/availHeight is the work area, already minus the menu bar,
+// dock, and panels, and nothing on this side knows those.
+win.bind("windowSetSize", async (arg) => {
+  const { width, height } = arg as { width: number; height: number };
+  win.setSize(width, height);
+  return true;
+});
+
 win.bind("termStart", async (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
     cols: number;

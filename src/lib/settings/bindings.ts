@@ -47,6 +47,23 @@ export async function writeConfig(name: string, data: unknown): Promise<void> {
   await config()?.configWrite({ name, data });
 }
 
+interface WindowBindings {
+  windowSetSize(arg: { width: number; height: number }): Promise<unknown>;
+}
+
+// Grows the window to fill the display, which is how the app "starts maximized":
+// deno desktop has no maximize API, so the size has to come from here, where
+// screen.availWidth/availHeight gives the work area with the menu bar, dock, and
+// panels already subtracted. No-op in web-dev (no bindings), where the browser owns
+// the window anyway.
+export async function fillDisplay(): Promise<void> {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  await (b as WindowBindings | undefined)?.windowSetSize({
+    width: screen.availWidth,
+    height: screen.availHeight,
+  });
+}
+
 interface DialogBindings {
   pickDirectory(arg: { startDir?: string }): Promise<{ path: string } | null>;
 }
