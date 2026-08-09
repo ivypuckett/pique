@@ -120,6 +120,11 @@ type Common = {
   title: string;
   subtitle?: string;
   badge?: string;
+  // Two severities, because the existing UI has two: `problem` is red (a template or a
+  // skill whose frontmatter would not parse), `note` is dim (a skill whose frontmatter
+  // `name:` disagrees with the basename an automaton must use). Collapsing them would
+  // either shout about a naming quirk or whisper about a broken file.
+  problem?: string;
   note?: string;
 };
 
@@ -133,9 +138,9 @@ A discriminated union rather than a common record with a `source: A | B | C`
 field: the shell's branches narrow to the right payload, so `item.ext.origin` is
 a type error inside the prompt branch.
 
-`badge` carries an extension's `origin` and a prompt's `shadowed` marker. `note`
-carries a skill's frontmatter divergence and a parse error. Neither is a kind —
-a row already shows its kind as its badge — so neither needs a field of its own.
+`badge` carries an extension's `origin` and a prompt's `shadowed` marker. None
+of these is a kind — a row already shows its kind as its own badge — so none
+needs a field of its own.
 
 ### Mapping, per kind, in that kind's directory
 
@@ -237,7 +242,7 @@ a row shows, so attributing one to a row would silently miss — the reasoning i
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ [Search the pi catalog…        ] [Search]      [New ▾]   │
+│ [Search the pi catalog…  ] [Search]  [New prompt] [Add…] │
 ├──────────────────────────────────────────────────────────┤
 │ (catalog results, when any)                              │
 │ (prompt editor or source input, when opened by New)      │
@@ -253,11 +258,13 @@ a row shows, so attributing one to a row would silently miss — the reasoning i
 └──────────────────────────────────────────────────────────┘
 ```
 
-`New` offers **Prompt**, which opens the editor inline beneath the bar, and
-**From source…**, which reveals the `npm:` / `git:` input. Adding from either
-the catalog or the source input routes through the existing `confirming` gate
-and its warning: fetching an npm package runs its install scripts, which happens
-before any review is possible.
+**New prompt** opens the editor beneath the bar; **Add source…** reveals the
+`npm:` / `git:` input. Two plain buttons rather than one `New ▾` menu: this
+codebase has no dropdown anywhere — every menu is a flat button row or a `menu`
+list — and a two-item dropdown would be a new interaction idiom bought for
+nothing. Adding from either the catalog or the source input routes through the
+existing `confirming` gate and its warning: fetching an npm package runs its
+install scripts, which happens before any review is possible.
 
 Skills have no `New` entry because there is nothing for the app to write — a
 skill is a file you put in `agent/skills/`. That instruction becomes a one-line
