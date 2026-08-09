@@ -32,7 +32,7 @@ install path for all three kinds is filed under one of them.
   from Root, with the kind as a per-row badge.
 - A `LibraryItem` model and four pure mapping modules that produce it.
 - Per-kind detail views, extracted from the sections they live in today.
-- One Add bar: catalog search, plus a `New` menu for a prompt or a manual
+- One Add bar: catalog search, plus buttons for a new prompt and a manual
   source.
 - Unified action verbs across kinds.
 - Retargeting the ~25 sites that name a sub-tab by address.
