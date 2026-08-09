@@ -397,10 +397,8 @@
 
 <div class="flex h-full min-h-0 flex-col">
   <div class="flex shrink-0 items-center gap-1 border-b border-base-300 px-3 py-1.5">
-    <span class="text-xs font-semibold">Library</span>
-
     {#if !isRootWorkspace}
-      <div class="ml-3 flex items-center gap-1" role="group" aria-label="Scope">
+      <div class="flex items-center gap-1" role="group" aria-label="Scope">
         <span class="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">Scope</span>
         <button
           class="btn btn-ghost btn-xs"
