@@ -11,10 +11,10 @@ the agent-facing tool is `define_extension` and not `define_tool`.
 
 Extensions come from two origins, which differ only in how the bytes arrive:
 
-| Origin      | What it is                             | Acquired by                                                  |
-| ----------- | -------------------------------------- | ------------------------------------------------------------ |
-| **local**   | a loose `.ts` module                   | `define_extension`, or dropping a file in by hand            |
-| **package** | a pi package from npm/git/a local path | Library → Extensions, backed by pi's `DefaultPackageManager` |
+| Origin      | What it is                             | Acquired by                                                |
+| ----------- | -------------------------------------- | ---------------------------------------------------------- |
+| **local**   | a loose `.ts` module                   | `define_extension`, or dropping a file in by hand          |
+| **package** | a pi package from npm/git/a local path | the Library module, backed by pi's `DefaultPackageManager` |
 
 A third source is not an extension at all: tools **compiled into pique**
 (`kanbanTools`, `promptAuthoringTools`, `define_extension` itself) are passed to
@@ -302,8 +302,8 @@ the revoke rule above, an update arguably belongs back in review.
 
 ### 5. Editing extensions in the UI
 
-Library → Extensions reviews, enables, revokes and deletes. It does not let a
-user _write_ one — authoring by hand means dropping a `.ts` file into a scope's
+The Library module reviews, enables, revokes and deletes. It does not let a user
+_write_ one — authoring by hand means dropping a `.ts` file into a scope's
 `pending/` (or straight into `extensions/`, which is self-approval and fine for
 a human).
 

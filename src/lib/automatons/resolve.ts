@@ -144,7 +144,7 @@ export async function resolveExtensionRefs(
         throw new Error(
           `extension not found or not enabled: ${
             JSON.stringify(ref)
-          } (enable it in Library → Extensions)`,
+          } (enable it in the Library module)`,
         );
       }
       extensionPaths.push(path);
@@ -156,7 +156,7 @@ export async function resolveExtensionRefs(
     // isValidSource's shape first so a plain typo — a hyphenated name is the natural
     // one, since hyphens are legal in skill and scope names but not extension names —
     // reports the right problem instead of "package not enabled", which points the
-    // user at Library → Extensions for something that could never appear there.
+    // user at the Library module for something that could never appear there.
     if (!isValidSource(ref)) {
       throw new Error(
         `not a valid extension name or package source: ${JSON.stringify(ref)}`,
@@ -181,7 +181,7 @@ export async function resolveExtensionRefs(
       throw new Error(
         `package not enabled in this scope or any it inherits: ${
           JSON.stringify(ref)
-        } (enable it in Library → Extensions)`,
+        } (enable it in the Library module)`,
       );
     }
     extensionPaths.push(ref);

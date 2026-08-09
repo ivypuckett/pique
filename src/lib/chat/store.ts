@@ -244,7 +244,7 @@ function createSession(
       if (id) b?.chatAbort({ id }).catch(() => {});
     },
     // Re-read prompt templates into the running agent and re-list the `/` menu. Called
-    // after Library → Prompts edits one, so a template becomes invocable without
+    // after the Library module edits one, so a template becomes invocable without
     // restarting the conversation (chat/agent.ts's reloadPrompts).
     async refreshCommands() {
       if (!b || !id) return;
@@ -294,7 +294,7 @@ function createSession(
 
 const sessions = new Map<string, ChatSession>();
 
-// Re-list the `/` menu of every live conversation. Library → Prompts edits prompt
+// Re-list the `/` menu of every live conversation. the Library module edits prompt
 // templates for a scope, not for one pane, and it holds no chat session of its own —
 // so it calls this rather than reaching for a session and accidentally creating one.
 export function refreshChatCommands(): void {

@@ -1,10 +1,12 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   isValidSource,
+  mergeSearchResults,
   npmSearchUrl,
   toExtInfo,
   toSearchResult,
 } from "./packages.ts";
+import { packageTypes } from "./catalog.ts";
 
 Deno.test("isValidSource accepts pi source forms", () => {
   for (
@@ -66,6 +68,53 @@ Deno.test("npmSearchUrl handles a blank query (keyword only)", () => {
   );
 });
 
+Deno.test("npmSearchUrl ANDs a type keyword onto the pi-package constraint", () => {
+  assertStringIncludes(
+    npmSearchUrl("memory", "pi-skill"),
+    encodeURIComponent("keywords:pi-package,pi-skill memory"),
+  );
+});
+
+Deno.test("packageTypes reads the kinds a package declares in its npm keywords", () => {
+  // The real keyword sets of @dietrichgebert/ponytail and pi-hermes-memory, which
+  // pi.dev types "skill" and "extension skill" respectively.
+  assertEquals(packageTypes(["ponytail", "pi-package", "pi", "skills"]), [
+    "skill",
+  ]);
+  assertEquals(
+    packageTypes(["pi-package", "pi-extension", "memory", "skills"]),
+    [
+      "extension",
+      "skill",
+    ],
+  );
+  assertEquals(packageTypes(["pi-package", "prompt-template", "extension"]), [
+    "extension",
+    "prompt",
+  ]);
+  assertEquals(packageTypes(["pi-theme", "dark-theme"]), ["theme"]);
+});
+
+Deno.test("packageTypes matches whole keywords, not substrings", () => {
+  // Both are real keywords on packages pi.dev leaves untyped.
+  assertEquals(packageTypes(["agent-extensions"]), []);
+  assertEquals(packageTypes(["red-skills"]), []);
+  assertEquals(packageTypes([]), []);
+  assertEquals(packageTypes(undefined), []);
+});
+
+Deno.test("mergeSearchResults dedupes by source and orders by downloads", () => {
+  const hit = (name: string, downloads: number) =>
+    toSearchResult({ package: { name }, downloads: { monthly: downloads } });
+  assertEquals(
+    mergeSearchResults([
+      [hit("a", 10), hit("b", 300)],
+      [hit("b", 300), hit("c", 200)],
+    ]).map((r) => r.name),
+    ["b", "c", "a"],
+  );
+});
+
 Deno.test("toSearchResult projects an npm search object to an install-ready hit", () => {
   assertEquals(
     toSearchResult({
@@ -73,6 +122,7 @@ Deno.test("toSearchResult projects an npm search object to an install-ready hit"
         name: "@vigolium/piolium",
         description: "Security audits",
         publisher: { username: "j3ssie" },
+        keywords: ["pi-package", "pi-extension"],
         links: { npm: "https://www.npmjs.com/package/@vigolium/piolium" },
       },
       downloads: { monthly: 281697 },
@@ -84,6 +134,7 @@ Deno.test("toSearchResult projects an npm search object to an install-ready hit"
       author: "j3ssie",
       downloads: 281697,
       npm: "https://www.npmjs.com/package/@vigolium/piolium",
+      types: ["extension"],
     },
   );
 });
@@ -98,6 +149,7 @@ Deno.test("toSearchResult defaults missing fields", () => {
       author: "",
       downloads: 0,
       npm: undefined,
+      types: [],
     },
   );
 });

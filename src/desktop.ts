@@ -145,7 +145,7 @@ win.bind("chatListCommands", async (arg) => {
 });
 
 // Re-read prompt templates from disk into a running agent, so a template saved or
-// approved in Library → Prompts can be invoked without restarting the conversation.
+// approved in the Library module can be invoked without restarting the conversation.
 win.bind("chatReloadPrompts", async (arg) => {
   const { id } = arg as { id: string };
   await chat.reloadPrompts(id);
@@ -518,8 +518,11 @@ win.bind("extensionsFetch", async (arg) => {
 });
 
 win.bind("extensionsSearch", async (arg) => {
-  const { query } = arg as { query: string };
-  return await extensions.searchExtensions(query);
+  const { query, type } = arg as {
+    query: string;
+    type?: "extension" | "skill" | "prompt" | "theme";
+  };
+  return await extensions.searchExtensions(query, type);
 });
 
 // Prompt templates — reusable messages invoked as `/name` in a Chat module, per scope.
