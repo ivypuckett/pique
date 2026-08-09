@@ -205,7 +205,7 @@ until it is in pi's own loading set for the scope, and an agent's
   **every** workspace. `define_extension`'s description says so explicitly, so
   the agent knows how far its code will reach.
 
-Library → Extensions shows a scope's own extensions (enablable, revocable)
+The Library module shows a scope's own extensions (enablable, revocable)
 separately from the ones it inherits (read-only — they are managed where they
 live).
 

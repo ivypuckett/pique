@@ -313,7 +313,7 @@ template is refused the same way.
 
 Only **enabled** extensions are nameable. A module awaiting review in
 `pending/`, or a package that has been fetched but not enabled, is rejected — so
-an automaton cannot be a way around the review gate in Library → Extensions.
+an automaton cannot be a way around the review gate in the Library module.
 
 ## Skills
 
@@ -323,11 +323,11 @@ gate that exists for extensions does not apply.
 
 A scope's skills live in `~/.pique/scopes/<id>/agent/skills/`, either as
 `<name>/SKILL.md` or as a loose `<name>.md`, and they inherit from root the way
-everything else does. Library → Skills shows what is nameable.
+everything else does. The Library module shows what is nameable.
 
 **A skill is named by its path basename**, not by the `name:` in its
 frontmatter. Resolving by frontmatter would mean parsing every skill on every
-launch. When the two disagree, Library → Skills says so, because otherwise the
+launch. When the two disagree, the Library module says so, because otherwise the
 mismatch surfaces as a puzzling "skill not found" at launch time.
 
 ## Runs
