@@ -11,6 +11,7 @@ import {
 // other is what's actually compiled.
 export const THEMES: readonly string[] = [
   "catppuccin-frappe",
+  "amoled",
   "dark",
   "light",
   "dracula",

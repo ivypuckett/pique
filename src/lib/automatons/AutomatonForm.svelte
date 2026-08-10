@@ -9,6 +9,8 @@
   import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
   import { type ModelOption, providerBindings } from "../chat/bindings.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
+  import PromptEditor from "../prompts/PromptEditor.svelte";
+  import type { Draft } from "../prompts/items.ts";
   import { skillBindings } from "../skills/bindings.ts";
   import { scopeBindings } from "../scope/bindings.ts";
   import { ROOT } from "../scope/paths.ts";
@@ -70,6 +72,18 @@
   let wip = $state(initial?.wip === undefined ? "" : String(initial.wip));
 
   let templates = $state<PromptInfo[]>([]);
+  // The inline template editor, or null when the picker alone is showing. A template is a
+  // separate file with its own name rules, so it is saved on its own button rather than
+  // riding on the automaton's Save — two writes that can each fail need two reports.
+  let draft = $state<Draft | null>(null);
+  // Where `draft` will be written. NOT always this form's scope: editing a template the
+  // scope inherits writes back to the scope that OWNS it, because saving root's template
+  // into a workspace would silently fork it into a local copy that shadows the original.
+  // Set by whichever of the two openers below made the draft, so it is never read before
+  // one of them has run.
+  let draftScope = $state("");
+  let templateBusy = $state(false);
+  let templateError = $state("");
   let models = $state<ModelOption[]>([]);
   type Option = { value: string; hint: string };
   let extensionOptions = $state<Option[]>([]);
@@ -92,15 +106,21 @@
   // for this scope only — so the picker offers precisely what can resolve. Only `enabled`
   // entries are offered: the resolver refuses a pending one, so naming it would build a
   // definition that cannot launch.
+  // Its own function rather than a step of loadOptions, because saving a template inline
+  // has to re-read the list to pick the new one up without re-fetching models, extensions
+  // and the board along with it.
+  async function loadTemplates(): Promise<void> {
+    if (!prompts) return;
+    const own = await prompts.promptsList({ scope });
+    const root = scope === ROOT ? [] : await prompts.promptsList({ scope: ROOT });
+    const byName = new Map<string, PromptInfo>();
+    for (const p of [...root, ...own]) if (p.state === "live") byName.set(p.name, p);
+    templates = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async function loadOptions(): Promise<void> {
     try {
-      if (prompts) {
-        const own = await prompts.promptsList({ scope });
-        const root = scope === ROOT ? [] : await prompts.promptsList({ scope: ROOT });
-        const byName = new Map<string, PromptInfo>();
-        for (const p of [...root, ...own]) if (p.state === "live") byName.set(p.name, p);
-        templates = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-      }
+      await loadTemplates();
       if (exts) {
         // Keyed by the ref string rather than collected into a list, because a local
         // extension of the same name can be enabled in root AND in this scope, and both
@@ -175,6 +195,7 @@
   // Same reasoning for the template: an unlisted one stays selectable rather than being
   // silently rewritten to whatever happens to sit first in the menu.
   const promptMissing = $derived(prompt !== "" && !templates.some((t) => t.name === prompt));
+  const selectedTemplate = $derived(templates.find((t) => t.name === prompt));
   // And again for the model: a saved ref whose provider has since been disconnected
   // stays selected rather than being silently rewritten to whatever heads the list.
   const modelMissing = $derived(
@@ -207,6 +228,58 @@
       // with raw YAML values that are genuinely null.
       : wipError(Number.isNaN(Number(wip)) ? wip.trim() : Number(wip)),
   );
+
+  // Write the template this automaton sends without leaving the form. It still lands in
+  // the ordinary prompts dir — one artifact, invocable by hand and reusable by another
+  // automaton (docs/automatons.md) — so this removes the second trip, not the second file.
+  function newTemplate(): void {
+    templateError = "";
+    draftScope = scope;
+    draft = { name: "", description: "", argumentHint: "", body: "", creating: true };
+  }
+
+  function editTemplate(): void {
+    const t = selectedTemplate;
+    if (!t) return;
+    templateError = "";
+    draftScope = t.scope;
+    draft = {
+      name: t.name,
+      // A template with no `description:` of its own reports the body's first line
+      // instead (prompts/parse.ts), so saving through this form pins that fallback as a
+      // real key. It is what the `/` menu already shows, so nothing changes but the file.
+      description: t.description,
+      argumentHint: t.argumentHint ?? "",
+      body: t.body,
+      creating: false,
+    };
+  }
+
+  async function saveTemplate(): Promise<void> {
+    const d = draft;
+    if (!prompts || !d) return;
+    const n = d.name.trim();
+    templateBusy = true;
+    templateError = "";
+    try {
+      await prompts.promptsSave({
+        scope: draftScope,
+        name: n,
+        description: d.description.trim(),
+        // Absent and empty mean the same thing for a hint, so "" is not written.
+        argumentHint: d.argumentHint.trim() || undefined,
+        body: d.body,
+      });
+      await loadTemplates();
+      // Select what was just written. The picker is the automaton's only statement of
+      // what it sends, so authoring a template and not choosing it would be a no-op.
+      prompt = n;
+      draft = null;
+    } catch (e) {
+      templateError = e instanceof Error ? e.message : String(e);
+    }
+    templateBusy = false;
+  }
 
   function toggle(list: string[], value: string): string[] {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -293,17 +366,51 @@
 
   <div class="flex flex-col gap-1">
     <label class="text-xs opacity-70" for="a-prompt">Prompt template</label>
-    <select id="a-prompt" class="select select-bordered select-sm" bind:value={prompt}>
-      <option value="">Choose a template…</option>
-      {#if promptMissing}
-        <option value={prompt}>/{prompt} (not found in this scope)</option>
+    <div class="flex items-center gap-1">
+      <select id="a-prompt" class="select select-bordered select-sm min-w-0 flex-1" bind:value={prompt}>
+        <option value="">Choose a template…</option>
+        {#if promptMissing}
+          <option value={prompt}>/{prompt} (not found in this scope)</option>
+        {/if}
+        {#each templates as t (`${t.scope}/${t.name}`)}
+          <option value={t.name}>/{t.name}{t.description ? ` — ${t.description}` : ""}</option>
+        {/each}
+      </select>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs shrink-0"
+        disabled={!prompts || draft !== null}
+        onclick={newTemplate}
+      >New</button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs shrink-0"
+        disabled={!prompts || draft !== null || selectedTemplate === undefined}
+        title={promptMissing ? "No such template here — write it with New" : ""}
+        onclick={editTemplate}
+      >Edit</button>
+    </div>
+    {#if draft}
+      {#if draftScope !== scope}
+        <div class="text-[0.65rem] text-warning">
+          /{draft.name} lives in {draftScope}. Saving changes it everywhere it is inherited,
+          not just here.
+        </div>
       {/if}
-      {#each templates as t (`${t.scope}/${t.name}`)}
-        <option value={t.name}>/{t.name}{t.description ? ` — ${t.description}` : ""}</option>
-      {/each}
-    </select>
+      <PromptEditor
+        bind:draft
+        busy={templateBusy}
+        onsave={saveTemplate}
+        oncancel={() => (draft = null)}
+      />
+      {#if templateError}
+        <div class="break-all text-[0.65rem] text-error">{templateError}</div>
+      {/if}
+    {/if}
     <div class="text-[0.65rem] opacity-50">
-      Sent as the run's first message. Launch arguments are appended to it.
+      Sent as the run's first message. Launch arguments are appended to it. A template is a
+      file of its own — writing one here saves it to the scope's templates, where a chat
+      can invoke it by name too.
     </div>
   </div>
 
@@ -474,8 +581,9 @@
     <button
       type="button"
       class="btn btn-primary btn-xs"
+      title={draft ? "Save or cancel the template first" : ""}
       disabled={busy || name.trim() === "" || prompt === "" || scheduleError !== undefined ||
-        wipMessage !== undefined}
+        wipMessage !== undefined || draft !== null}
       onclick={save}
     >Save</button>
   </div>

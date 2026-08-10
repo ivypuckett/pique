@@ -74,7 +74,9 @@ user reads the text in the Library module
 step for your own work, because there is nobody to approve it to: the gate
 exists so that an agent cannot put an entry in your `/` menu that you have not
 read. The Library module is a full editor — create, edit, delete — not just a
-review queue.
+review queue. The Automatons module embeds the same create/edit form beside its
+template picker, so the prompt an automaton sends can be written without leaving
+it; see [automatons.md](automatons.md).
 
 ## Scope
 

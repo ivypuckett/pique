@@ -9,7 +9,7 @@
   } = $props();
 </script>
 
-<section class="m-1 flex h-full min-h-0 flex-col overflow-hidden rounded-box border border-base-300 bg-base-100">
+<section class="m-1 flex h-full min-h-0 flex-col overflow-hidden rounded-box bg-base-100">
   {#if header}
     <header class="flex h-9 shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-3">
       <span class="truncate text-sm font-medium">{title}</span>

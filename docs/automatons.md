@@ -77,8 +77,23 @@ prompt-template mechanism. An automaton references that one artifact instead of
 becoming a second one — so a template stays reviewable, quarantinable, invocable
 by hand, and reusable by several automatons.
 
-The cost is real: creating an automaton means writing two files. That only pays
-off if templates get reused.
+The cost is real: an automaton is still two files. What the editor removes is
+the second **trip** — the template picker has **New** and **Edit** beside it,
+and both open the ordinary template editor inline, so a prompt can be written
+while the automaton that sends it is being written. The file it saves is a
+normal template in the scope's `prompts/` dir: invocable by hand, listed in the
+Library, and reusable by another automaton. Saving it selects it in the picker,
+because a template authored here and not chosen would be a no-op.
+
+The two buttons write to different scopes on purpose. **New** writes into the
+scope the automaton belongs to; **Edit** writes back to the scope that OWNS the
+template, which for an inherited one is root — and the form says so above the
+editor, because a change there lands in every workspace. Writing an inherited
+template into the editing scope instead would fork a local copy that silently
+shadows the original everywhere it was already used.
+
+Each is its own save. The automaton's Save is disabled while a template editor
+is open, so an unsaved prompt cannot be lost to a form that closes on write.
 
 ### Arguments
 
