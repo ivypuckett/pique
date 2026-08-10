@@ -1,78 +1,10 @@
 @import "tailwindcss";
+/* No compiled themes: pique's themes live in ~/.pique/themes.json and are injected at
+   runtime as [data-theme] rules (src/lib/settings/themes.ts), so that a theme the user
+   pastes in and a theme pique ships go through exactly the same path. The ones pique
+   ships are seeds — src/lib/settings/seeds.ts. */
 @plugin "daisyui" {
-  themes: "catppuccin-frappe", amoled, dark, light, dracula, nord;
-}
-
-@plugin "daisyui/theme" {
-  name: "catppuccin-frappe";
-  default: true;
-  prefersdark: true;
-  color-scheme: "dark";
-  --color-base-100: #303446; /* base */
-  --color-base-200: #292c3c; /* mantle */
-  --color-base-300: #232634; /* crust */
-  --color-base-content: #c6d0f5; /* text */
-  --color-primary: #8caaee; /* blue */
-  --color-primary-content: #232634; /* crust */
-  --color-secondary: #ca9ee6; /* mauve */
-  --color-secondary-content: #232634; /* crust */
-  --color-accent: #81c8be; /* teal */
-  --color-accent-content: #232634; /* crust */
-  --color-neutral: #414559; /* surface0 */
-  --color-neutral-content: #c6d0f5; /* text */
-  --color-info: #85c1dc; /* sapphire */
-  --color-info-content: #232634; /* crust */
-  --color-success: #a6d189; /* green */
-  --color-success-content: #232634; /* crust */
-  --color-warning: #e5c890; /* yellow */
-  --color-warning-content: #232634; /* crust */
-  --color-error: #e78284; /* red */
-  --color-error-content: #232634; /* crust */
-  --radius-selector: 2rem;
-  --radius-field: 1rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 1;
-}
-
-/* True black for OLED panels: base-100 is #000 so unlit pixels stay off. The
-   accents are catppuccin-mocha — the darker sibling of the frappe palette above,
-   so the two themes read as a family. depth/noise are off because both lift the
-   base surfaces off pure black, which is the whole point of the theme. */
-@plugin "daisyui/theme" {
-  name: "amoled";
-  color-scheme: "dark";
-  --color-base-100: #000000; /* true black */
-  --color-base-200: #0b0b12; /* mocha crust, dimmed */
-  --color-base-300: #16161f; /* mocha mantle, dimmed */
-  --color-base-content: #cdd6f4; /* text */
-  --color-primary: #89b4fa; /* blue */
-  --color-primary-content: #000000;
-  --color-secondary: #cba6f7; /* mauve */
-  --color-secondary-content: #000000;
-  --color-accent: #94e2d5; /* teal */
-  --color-accent-content: #000000;
-  --color-neutral: #313244; /* surface0 */
-  --color-neutral-content: #cdd6f4; /* text */
-  --color-info: #74c7ec; /* sapphire */
-  --color-info-content: #000000;
-  --color-success: #a6e3a1; /* green */
-  --color-success-content: #000000;
-  --color-warning: #f9e2af; /* yellow */
-  --color-warning-content: #000000;
-  --color-error: #f38ba8; /* red */
-  --color-error-content: #000000;
-  --radius-selector: 2rem;
-  --radius-field: 1rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 0;
-  --noise: 0;
+  themes: false;
 }
 
 html,

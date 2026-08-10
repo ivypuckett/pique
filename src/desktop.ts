@@ -263,6 +263,12 @@ win.bind("pickDirectory", async (arg) => {
   return path ? { path } : null;
 });
 
+win.bind("openExternal", async (arg) => {
+  const { url } = arg as { url: string };
+  await dialog.openUrl(url);
+  return null;
+});
+
 win.bind("listDir", async (arg) => {
   const { path } = arg as { path?: string };
   // path undefined → the workspace default; an absolute child path resolves to itself.

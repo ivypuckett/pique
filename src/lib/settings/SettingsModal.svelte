@@ -1,9 +1,126 @@
 <script lang="ts">
-  import { settings, settingsOpen, THEMES, ZOOM_LEVELS } from "./store.ts";
+  import { settings, settingsOpen, ZOOM_LEVELS } from "./store.ts";
   import { providerBindings, type ProviderInfo } from "../chat/bindings.ts";
+  import { openExternal } from "./bindings.ts";
+  import {
+    deleteTheme,
+    duplicateCss,
+    endPreview,
+    previewTheme,
+    saveTheme,
+    themes,
+  } from "./themes.ts";
+  import { parseThemeCss } from "./theme_css.ts";
 
   // Same modifier glyph the status bar shows for the shortcuts it lists.
   const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
+
+  // Theme editing. A theme is edited as the CSS block daisyui's theme generator
+  // exports, because that is exactly what it is (see theme_css.ts) — one pasted from
+  // daisyui.com/theme-generator works unedited, and one edited here pastes back.
+  // `editingName` is the theme being edited, or null for one that does not exist yet:
+  // New, and Duplicate, which stays a draft until saved so backing out leaves nothing.
+  let editing = $state(false);
+  let editingName = $state<string | null>(null);
+  let draft = $state("");
+  let themeError = $state("");
+  let copied = $state(false);
+  let pendingDelete = $state(false);
+
+  const active = $derived($settings.appearance.theme);
+
+  // Where a pasteable theme comes from: its "CSS" export is exactly the format the
+  // editor below reads and writes.
+  const GENERATOR_URL = "https://daisyui.com/theme-generator";
+
+  // Out to the real browser in the desktop app — pique's webview has no back button, so
+  // following the link in place would strand the user in the theme generator. In web-dev
+  // there is no backend to hand it to and the anchor's target="_blank" handles it.
+  function openGenerator(e: MouseEvent): void {
+    if (openExternal(GENERATOR_URL)) e.preventDefault();
+  }
+
+  function openEditor(name: string | null, css: string): void {
+    editing = true;
+    editingName = name;
+    draft = css;
+    themeError = "";
+    pendingDelete = false;
+  }
+
+  function editActive(): void {
+    const t = $themes.find((t) => t.name === active);
+    if (t) openEditor(t.name, t.css);
+  }
+
+  function duplicateActive(): void {
+    try {
+      openEditor(null, duplicateCss($themes, active));
+    } catch (e) {
+      themeError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function saveDraft(): void {
+    try {
+      const next = saveTheme($themes, editingName, draft);
+      const name = parseThemeCss(draft).name;
+      themes.set(next);
+      // A theme you just wrote is the one you want to be looking at — and the preview
+      // already had it applied, so this is what makes that stick.
+      settings.update((s) => ({ ...s, appearance: { ...s.appearance, theme: name } }));
+      endPreview(name);
+      editing = false;
+      themeError = "";
+    } catch (e) {
+      themeError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function cancelEdit(): void {
+    editing = false;
+    themeError = "";
+    endPreview(active);
+  }
+
+  function confirmDelete(): void {
+    pendingDelete = false;
+    try {
+      // Dropping the active theme leaves data-theme naming nothing; the themes store
+      // reconciles the setting to the first remaining theme (themes.ts).
+      themes.set(deleteTheme($themes, active));
+      themeError = "";
+    } catch (e) {
+      themeError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function copyDraft(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(draft);
+      copied = true;
+      setTimeout(() => (copied = false), 1200);
+    } catch {
+      themeError = "clipboard unavailable — select the text and copy it";
+    }
+  }
+
+  // Repaint the app from the draft on every keystroke that parses, so the theme is
+  // edited against itself. A keystroke that does not parse shows the reason and leaves
+  // the last good preview up — reverting mid-word would strobe the whole UI.
+  $effect(() => {
+    if (!editing) return;
+    if (draft.trim() === "") {
+      themeError = "";
+      return;
+    }
+    try {
+      previewTheme(parseThemeCss(draft));
+      themeError = "";
+    } catch (e) {
+      themeError = e instanceof Error ? e.message : String(e);
+    }
+  });
 
   // Model providers. Null in web-dev (no bindings) → the section shows a
   // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
@@ -107,6 +224,9 @@
   // element without firing the event, leaving the store stuck open and the
   // modal wedged shut), so every close path here writes the store directly.
   function close(): void {
+    // An open editor is previewing its draft onto the whole app; closing out from under
+    // it would leave the app wearing a theme that was never saved.
+    if (editing) cancelEdit();
     settingsOpen.set(false);
   }
 
@@ -161,13 +281,71 @@
         <select
           class="select select-bordered select-sm min-w-44"
           aria-label="Theme"
+          disabled={editing}
           bind:value={$settings.appearance.theme}
         >
-          {#each THEMES as t (t)}
-            <option value={t}>{t}</option>
+          {#each $themes as t (t.name)}
+            <option value={t.name}>{t.name}</option>
           {/each}
         </select>
       </div>
+
+      {#if !editing}
+        <div class="mt-2 flex justify-end gap-2">
+          {#if pendingDelete}
+            <span class="self-center text-xs opacity-70">Delete “{active}”?</span>
+            <button type="button" class="btn btn-error btn-xs" onclick={confirmDelete}>Delete</button>
+            <button type="button" class="btn btn-ghost btn-xs" onclick={() => (pendingDelete = false)}
+            >Cancel</button>
+          {:else}
+            <button type="button" class="btn btn-xs" onclick={editActive}>Edit</button>
+            <button type="button" class="btn btn-xs" onclick={duplicateActive}>Duplicate</button>
+            <button type="button" class="btn btn-xs" onclick={() => openEditor(null, "")}>New</button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              disabled={$themes.length <= 1}
+              onclick={() => (pendingDelete = true)}
+            >Delete</button>
+          {/if}
+        </div>
+      {:else}
+        <div class="mt-3 rounded border border-base-300 p-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm font-medium">
+              {editingName === null ? "New theme" : `Editing “${editingName}”`}
+            </div>
+            <button type="button" class="btn btn-ghost btn-xs" onclick={copyDraft}>
+              {copied ? "Copied" : "Copy CSS"}
+            </button>
+          </div>
+          <div class="mt-0.5 text-xs opacity-70">
+            Paste the CSS export from
+            <a
+              class="link"
+              href={GENERATOR_URL}
+              target="_blank"
+              rel="noreferrer"
+              onclick={openGenerator}
+            >daisyui's theme generator</a>, or edit this one. Changes preview live;
+            nothing is saved until you press Save.
+          </div>
+          <textarea
+            class="textarea textarea-bordered mt-2 w-full font-mono text-xs leading-snug"
+            rows="16"
+            spellcheck="false"
+            aria-label="Theme CSS"
+            placeholder={'@plugin "daisyui/theme" {\n  name: "my-theme";\n  color-scheme: "dark";\n  --color-base-100: oklch(25% 0.016 252);\n  …\n}'}
+            bind:value={draft}
+          ></textarea>
+          <div class="mt-2 flex items-center gap-2">
+            <button type="button" class="btn btn-sm" disabled={draft.trim() === ""} onclick={saveDraft}
+            >Save</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick={cancelEdit}>Cancel</button>
+          </div>
+        </div>
+      {/if}
+      {#if themeError}<div class="mt-2 text-xs text-error">{themeError}</div>{/if}
 
       <div class="mt-4 flex items-center justify-between gap-4">
         <div>

@@ -6,17 +6,9 @@ import {
   writeConfig,
 } from "./bindings.ts";
 
-// The daisyui themes compiled in app.css, in picker order. This list and the
-// `themes:` list in src/app.css must stay in lockstep — one is the UI, the
-// other is what's actually compiled.
-export const THEMES: readonly string[] = [
-  "catppuccin-frappe",
-  "amoled",
-  "dark",
-  "light",
-  "dracula",
-  "nord",
-];
+// The theme list used to live here, in lockstep with the themes compiled into
+// app.css. Themes are now editable data (see ./themes.ts): the picker reads the
+// `themes` store, and app.css compiles none of them.
 
 // UI scale factors, in order — the rungs ctrl+= / ctrl+- step between (App.svelte).
 // A ladder rather than a fixed increment, so the steps stay proportional at both ends.

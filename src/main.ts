@@ -3,6 +3,7 @@ import App from "./App.svelte";
 import "./app.css";
 import { hydrateSession } from "./lib/store.ts";
 import { hydrateSettings, settings } from "./lib/settings/store.ts";
+import { hydrateThemes } from "./lib/settings/themes.ts";
 import { fillDisplay } from "./lib/settings/bindings.ts";
 
 // Fill the display immediately, before anything is awaited: the window is created at
@@ -11,8 +12,8 @@ import { fillDisplay } from "./lib/settings/bindings.ts";
 // sequenced with the hydration below — it reads no config and nothing waits on it.
 void fillDisplay();
 
-// Reflect the chosen daisyui theme onto <html data-theme>. The compiled theme set
-// lives in app.css (kept in lockstep with THEMES in settings/store.ts).
+// Reflect the chosen theme onto <html data-theme>. Nothing is compiled: the rule this
+// selects is injected from ~/.pique/themes.json by hydrateThemes() below.
 //
 // Zoom rides on the root font size rather than the CSS `zoom` property: tailwind sizes
 // everything in rem, so one number scales the whole UI, and the viewport units the
@@ -31,8 +32,13 @@ settings.subscribe((s) => {
 // to seed the root workspace's cwd on a pre-root layout, and hydrateSettings persists a
 // Settings object that no longer carries that field. Running them together left the
 // read racing the write, correct only by virtue of a 150ms debounce.
+// hydrateThemes comes last and before the mount: it injects the theme rules, so the app
+// would otherwise render with none of the custom properties it is built on, and it can
+// correct settings.appearance.theme when that names a theme that no longer exists —
+// which only works once hydrateSettings has put the real settings in place.
 hydrateSession()
   .then(hydrateSettings)
+  .then(hydrateThemes)
   .then(() => {
     mount(App, { target: document.getElementById("app")! });
   });

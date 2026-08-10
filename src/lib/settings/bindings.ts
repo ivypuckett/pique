@@ -64,6 +64,22 @@ export async function fillDisplay(): Promise<void> {
   });
 }
 
+interface OpenBindings {
+  openExternal(arg: { url: string }): Promise<unknown>;
+}
+
+// Hand a URL to the desktop's browser, returning whether the desktop backend took it.
+// Synchronous by design, despite the async work it kicks off: the caller is a link's
+// click handler deciding whether to preventDefault, and a preventDefault after an await
+// comes too late to stop the navigation. False means web-dev, where there is no backend
+// and the anchor's own target="_blank" is the right behavior anyway.
+export function openExternal(url: string): boolean {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  if (!b) return false;
+  void (b as OpenBindings).openExternal({ url });
+  return true;
+}
+
 interface DialogBindings {
   pickDirectory(arg: { startDir?: string }): Promise<{ path: string } | null>;
 }

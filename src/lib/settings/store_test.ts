@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
 import { DEFAULT_SETTINGS } from "./bindings.ts";
-import { mergeSettings, stepZoom, THEMES, ZOOM_LEVELS } from "./store.ts";
+import { mergeSettings, stepZoom, ZOOM_LEVELS } from "./store.ts";
 
 Deno.test("mergeSettings keeps a partial persisted section over defaults", () => {
   const merged = mergeSettings({ workspace: { gitScanDepth: 7 } });
@@ -15,18 +15,6 @@ Deno.test("mergeSettings fills a section's defaults when it is absent", () => {
     merged.workspace.gitScanDepth,
     DEFAULT_SETTINGS.workspace.gitScanDepth,
   );
-});
-
-Deno.test("THEMES has no duplicates", () => {
-  assertEquals(new Set(THEMES).size, THEMES.length);
-});
-
-Deno.test("THEMES includes the default theme", () => {
-  assert(THEMES.includes(DEFAULT_SETTINGS.appearance.theme));
-});
-
-Deno.test("THEMES leads with catppuccin-frappe", () => {
-  assertEquals(THEMES[0], "catppuccin-frappe");
 });
 
 Deno.test("ZOOM_LEVELS is ascending and includes the default", () => {
