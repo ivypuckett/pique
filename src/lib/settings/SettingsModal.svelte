@@ -390,7 +390,7 @@
         </div>
         <input
           class="input input-bordered input-sm mt-2 w-full font-mono"
-          placeholder="JetBrains Mono, monospace"
+          placeholder="Azeret Mono, monospace"
           spellcheck="false"
           aria-label="Monospace font"
           value={$settings.appearance.monoFont}
