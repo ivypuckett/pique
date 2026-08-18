@@ -24,6 +24,7 @@
 //    once. See docs/automatons.md.
 import { normalizeColumn } from "./column.ts";
 import type { Automaton } from "./parse.ts";
+import { isApproved } from "./approval.ts";
 import { listAutomatons } from "./service.ts";
 import { launchAutomaton, liveRunsOf } from "./run.ts";
 import { scopeCwd } from "./targets.ts";
@@ -36,6 +37,10 @@ import type { ScopeId } from "../scope/paths.ts";
 export interface DispatchDeps {
   // A scope's OWN definitions, never its inherited ones. See decision 1.
   list: (scope: ScopeId) => Promise<Automaton[]>;
+  // May this definition fire with no human present? A card arriving is not a human
+  // pressing Launch — an agent moves cards too (decision 5) — so this is the gate that
+  // stops an agent-authored definition firing itself. See approval.ts.
+  approved: (scope: ScopeId, a: Automaton) => Promise<boolean>;
   cwd: (scope: ScopeId) => Promise<string | undefined>;
   // The live CARD runs of this definition, as the cards they are working. Length is the
   // wip count, membership is the per-card guard.
@@ -145,6 +150,16 @@ async function guarded(
   cwd: string,
   deps: DispatchDeps,
 ): Promise<boolean> {
+  // Before any guard about slots: may this fire at all? Checked here rather than beside
+  // `watches` because this is where the arrival path and the drain path converge, so one
+  // check covers both — and an approval revoked while cards waited is honoured on drain
+  // rather than only on arrival. Answers false: nothing started, so it holds no slot.
+  if (!await deps.approved(scope, a)) {
+    console.warn(
+      `automaton kanban: ${scope}/${a.name} is not approved to fire unattended; not firing for ${card.cardId}`,
+    );
+    return false;
+  }
   const live = deps.live(scope, a.name);
   if (live.includes(card.cardId)) {
     console.warn(
@@ -279,6 +294,7 @@ export async function dispatchArrival(
 
 const liveDeps: DispatchDeps = {
   list: listAutomatons,
+  approved: isApproved,
   cwd: scopeCwd,
   live: liveRunsOf,
   launch: launchAutomaton,

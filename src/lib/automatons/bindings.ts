@@ -34,6 +34,23 @@ export interface AutomatonBindings {
     },
   ): Promise<unknown>;
   automatonsDelete(arg: { scope: string; name: string }): Promise<unknown>;
+  // The unattended-firing gate (approval.ts). `automatonsApproved` is the subset of the
+  // scope's own definitions that may currently fire on a `cron:` or a card — the badge
+  // in the list reads from it, and a definition edited since it was approved drops out
+  // of it by itself.
+  automatonsApproved(arg: { scope: string }): Promise<string[]>;
+  // Every file the approval would cover: the definition, the prompt it sends, and each
+  // skill it names. `digest` is what was read, and `automatonsApprove` refuses if the
+  // bytes moved since.
+  automatonsReview(
+    arg: { scope: string; name: string },
+  ): Promise<{ files: { path: string; text: string }[]; digest: string }>;
+  automatonsApprove(
+    arg: { scope: string; name: string; expectDigest: string },
+  ): Promise<unknown>;
+  automatonsRevokeApproval(
+    arg: { scope: string; name: string },
+  ): Promise<unknown>;
   automatonsLaunch(
     arg: { scope: string; name: string; args?: string; cwd?: string },
   ): Promise<{ id: string }>;

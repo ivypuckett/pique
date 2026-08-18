@@ -638,6 +638,32 @@ win.bind("automatonsDelete", async (arg) => {
   return true;
 });
 
+win.bind("automatonsApproved", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await automatonService.approvedNames(scope);
+});
+
+win.bind("automatonsReview", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  return await automatonService.reviewAutomaton(scope, name);
+});
+
+win.bind("automatonsApprove", async (arg) => {
+  const { scope, name, expectDigest } = arg as {
+    scope: string;
+    name: string;
+    expectDigest: string;
+  };
+  await automatonService.approveAutomaton(scope, name, expectDigest);
+  return true;
+});
+
+win.bind("automatonsRevokeApproval", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await automatonService.revokeAutomatonApproval(scope, name);
+  return true;
+});
+
 win.bind("automatonsLaunch", async (arg) => {
   const { scope, name, args, cwd: override } = arg as {
     scope: string;

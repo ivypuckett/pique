@@ -27,7 +27,7 @@ import {
   stopRun,
 } from "./run.ts";
 import { dispatchArrival } from "./kanban.ts";
-import { saveAutomaton } from "./service.ts";
+import { approveAutomaton, reviewAutomaton, saveAutomaton } from "./service.ts";
 import { sessionsDir } from "./paths.ts";
 import {
   board,
@@ -681,6 +681,10 @@ Deno.test("a card moved into the watched column fires the automaton", async () =
       skills: [],
       kanban: "Todo",
     });
+    // The dispatcher fires only what a human approved (approval.ts), so approval is now
+    // part of the chain this drives. Through the real path, over the real bytes.
+    const { digest } = await reviewAutomaton("root", "worker");
+    await approveAutomaton("root", "worker", digest);
     setCardArrivedHandler((scope, arrival) => {
       void dispatchArrival(scope, arrival);
     });

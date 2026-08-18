@@ -48,6 +48,16 @@
   let notice = $state("");
   let busy = $state(false);
 
+  // Which of this scope's definitions may currently fire with no human present
+  // (automatons/approval.ts). Names only: a definition edited since it was approved
+  // drops out of this list by itself, because the approval names bytes rather than a
+  // file. The expanded review, when one is open — its `digest` is what Approve sends
+  // back, so what was displayed and what gets approved are provably the same bytes.
+  let approved = $state<string[]>([]);
+  let reviewing = $state<
+    { name: string; files: { path: string; text: string }[]; digest: string } | null
+  >(null);
+
   // Launch arguments per automaton, keyed by name. Not part of the definition — they are
   // appended to the prompt template for this one run.
   let args = $state<Record<string, string>>({});
@@ -80,6 +90,65 @@
       !columns.some((c) => normalizeColumn(c.name) === normalizeColumn(a.kanban!));
   }
 
+  // Does this definition have an unattended trigger THIS scope would fire? Approval is
+  // only meaningful for those: one with neither key runs when the button is pressed and
+  // nothing else, and an inherited one fires in the scope that owns it, which is where
+  // it has to be approved.
+  function fires(a: AutomatonInfo): boolean {
+    return a.scope === scope && (a.cron !== undefined || a.kanban !== undefined);
+  }
+
+  // Read the closure, or collapse a panel already open on this row. Read here rather
+  // than in the panel so the digest Approve sends is the one THIS read produced —
+  // Library.svelte:toggle does the same for the same reason.
+  async function review(a: AutomatonInfo): Promise<void> {
+    if (!b) return;
+    if (reviewing?.name === a.name) {
+      reviewing = null;
+      return;
+    }
+    error = "";
+    notice = "";
+    try {
+      const read = await b.automatonsReview({ scope, name: a.name });
+      reviewing = { name: a.name, ...read };
+    } catch (e) {
+      error = message(e);
+    }
+  }
+
+  async function approve(a: AutomatonInfo): Promise<void> {
+    if (!b || reviewing?.name !== a.name) return;
+    const expectDigest = reviewing.digest;
+    busy = true;
+    error = "";
+    try {
+      await b.automatonsApprove({ scope, name: a.name, expectDigest });
+      reviewing = null;
+      notice = `${a.name} may now fire unattended.`;
+      await refresh();
+    } catch (e) {
+      error = message(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function revokeApproval(a: AutomatonInfo): Promise<void> {
+    if (!b) return;
+    busy = true;
+    error = "";
+    try {
+      await b.automatonsRevokeApproval({ scope, name: a.name });
+      notice = `${a.name} will not fire until it is approved again.`;
+      await refresh();
+    } catch (e) {
+      error = message(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   // The card a run was fired by, by title. Falls back to the id: a card deleted since is
   // exactly the case where the record is the only thing that still remembers it.
   function cardTitle(id: string): string {
@@ -105,6 +174,7 @@
     notice = "";
     try {
       automatons = await b.automatonsVisible({ scope });
+      approved = await b.automatonsApproved({ scope });
     } catch (e) {
       error = message(e);
     }
@@ -332,13 +402,45 @@
                         : `Watches ${a.kanban} in ${a.scope}; it does not fire here`}
                     >{a.kanban}</span>
                   {/if}
+                  <!-- A trigger is a REQUEST to run unattended, not permission to: until
+                       a human reads what the run would do and approves it, the clock and
+                       the board dispatcher both skip it (docs/security.md finding 1). -->
+                  {#if fires(a)}
+                    <span
+                      class="badge badge-xs shrink-0 {approved.includes(a.name)
+                        ? 'badge-success'
+                        : 'badge-warning'}"
+                      title={approved.includes(a.name)
+                        ? "Approved to fire unattended. Editing it, or the prompt or skills it names, withdraws that."
+                        : "Will not fire on its own until you read what it runs and approve it"}
+                    >{approved.includes(a.name) ? "approved" : "needs review"}</span>
+                  {/if}
                   {#if a.scope === scope}
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs ml-auto shrink-0"
-                      disabled={busy}
-                      onclick={() => editAutomaton(a)}
-                    >Edit</button>
+                    <div class="ml-auto flex shrink-0 gap-1">
+                      {#if fires(a)}
+                        {#if approved.includes(a.name)}
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs"
+                            disabled={busy}
+                            onclick={() => revokeApproval(a)}
+                          >Revoke</button>
+                        {:else}
+                          <button
+                            type="button"
+                            class="btn btn-warning btn-xs"
+                            disabled={busy}
+                            onclick={() => review(a)}
+                          >Review</button>
+                        {/if}
+                      {/if}
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        disabled={busy}
+                        onclick={() => editAutomaton(a)}
+                      >Edit</button>
+                    </div>
                   {/if}
                 </div>
                 <div class="truncate text-[0.65rem] opacity-60">
@@ -347,6 +449,36 @@
 
                 {#if a.error}
                   <div class="mt-1 break-all text-[0.65rem] text-error">{a.error}</div>
+                {/if}
+
+                {#if reviewing?.name === a.name}
+                  <div class="mt-1.5 rounded border border-warning/40 p-2">
+                    <div class="text-[0.65rem] opacity-70">
+                      Everything this run reads: the definition, the prompt it sends, and
+                      every skill it names. Approving lets it fire with nobody watching.
+                    </div>
+                    {#each reviewing.files as f (f.path)}
+                      <div class="mt-1.5 truncate font-mono text-[0.6rem] opacity-50" title={f.path}>
+                        {f.path}
+                      </div>
+                      <pre
+                        class="max-h-40 overflow-auto rounded bg-base-200 p-1 text-[0.6rem] whitespace-pre-wrap break-all">{f.text}</pre>
+                    {/each}
+                    <div class="mt-1.5 flex gap-1">
+                      <button
+                        type="button"
+                        class="btn btn-warning btn-xs"
+                        disabled={busy}
+                        onclick={() => approve(a)}
+                      >Approve</button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        disabled={busy}
+                        onclick={() => (reviewing = null)}
+                      >Cancel</button>
+                    </div>
+                  </div>
                 {/if}
 
                 <div class="mt-1.5 flex items-center gap-1">

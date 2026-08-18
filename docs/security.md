@@ -2,7 +2,9 @@
 
 Where pique's trust boundaries actually are, what holds them, and — at the end —
 what is known weak and what a review has already cleared. Audited 2026-08-15
-against `285c17e`, desktop runtime only.
+against `285c17e`, desktop runtime only. All six findings below were fixed on
+2026-08-17; each carries what closed it, and the reasoning is kept because the
+reasoning is the part worth re-reading.
 
 One fact governs everything here: pique ships as `deno desktop -A` (deno.json's
 `dev` task). The backend holds full system authority, and every `win.bind`
@@ -35,7 +37,7 @@ is a security property here and not a style preference. See
 | Local extension | `agent/pending/`               | `agent/extensions/`           | advisory |
 | Package         | `agent/pending/<slug>.json`    | `agent/settings.json`         | advisory |
 | Prompt template | `agent/prompts/pending/`       | `agent/prompts/`              | advisory |
-| Automaton       | `automatons/pending/` (unused) | `automatons/`                 | **none** |
+| Automaton       | `automatons/pending/` (unused) | `automatons/`                 | advisory |
 
 "Advisory" is [extensions.md](extensions.md)'s own word, and it is the right
 one: the gate governs what a human *moves* into the loading set, not what can
@@ -44,14 +46,16 @@ The gate is still worth having — it is what makes the ordinary path reviewable
 and it is a real gate against a package you fetched — but it is not a control
 against a misaligned agent, and no part of the UI should imply otherwise.
 
-The automaton row is the one that is not merely advisory but absent, and it is
-finding 1.
+The automaton row was not merely advisory but absent, which was finding 1. It is
+now advisory like the rest: `automatons/approval.ts` gates the two unattended
+triggers on a human-approved digest, while a dropped-in file stays listable and
+launchable by the button.
 
 ---
 
 ## Findings
 
-### 1. Agent-written automatons are unattended recurring execution — HIGH
+### 1. Agent-written automatons are unattended recurring execution — HIGH — FIXED
 
 [extensions.md](extensions.md) Deferred #1 discloses that the extension gate is
 advisory. The automaton path is not covered by that disclosure and is worse.
@@ -81,14 +85,30 @@ outside `agent/`, so that pi does not interpret a directory of markdown
 (`automatons/paths.ts`). The planned fix as written would not cover the worse
 hole.
 
-**Fix.** Make the two unattended triggers — `schedule.ts` and the kanban
-dispatcher — launch only definitions recorded in a human-approved,
-digest-keyed manifest, the way `enableExtension` already works. A dropped-in
-`.md` stays listable and stays launchable by the button; it never self-fires. If
-the `tool_call` interception of Deferred #1 is built, its path set must include
-`~/.pique/scopes/*/automatons/` and `agent/prompts/` as well as `agent/`.
+**Fixed** in `automatons/approval.ts`. Both unattended triggers now ask
+`isApproved` before launching — `schedule.ts` in `tickOnce`, `kanban.ts` in
+`guarded()`, which is where the arrival path and the drain path converge, so one
+check covers both and an approval withdrawn while cards wait is honoured. A
+dropped-in `.md` stays listable and launchable by the button; it never
+self-fires. `docs/automatons.md` documents the surface.
 
-### 2. The UI server binds to every interface on a fixed port — MEDIUM
+One thing the original fix note understated: a manifest keyed on the definition
+alone would not have been enough. An automaton is mostly an indirection —
+`prompt:` names the file holding the actual instructions — so approving `x.md`
+and digesting only `x.md` would let an agent rewrite the prompt underneath a
+live approval. The digest therefore covers the **closure**: the definition, the
+prompt template it resolves to, and every file under every skill it names.
+`approval_test.ts` pins both swaps.
+
+Still true, and still worth building: if the `tool_call` interception of
+[extensions.md](extensions.md) Deferred #1 is built, its path set must include
+`~/.pique/scopes/*/automatons/` and `agent/prompts/` as well as `agent/`. The
+manifest is an ordinary file and the agent has `write`, so this gate is advisory
+in exactly the way the extension gate is — it makes the ordinary path
+reviewable, and it is not a defence against an agent that targets the manifest
+itself.
+
+### 2. The UI server binds to every interface on a fixed port — MEDIUM — FIXED
 
 ```ts
 Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true })); // desktop.ts:729
@@ -104,12 +124,14 @@ resists traversal and has directory listing off. This is an unexpected listening
 service and asset disclosure, not remote code execution. There is still no
 reason for it.
 
-**Fix.** `Deno.serve({ hostname: "127.0.0.1" }, …)`. `port: 0` would also settle
-the collision, but deno desktop auto-navigates the adopted window to the served
-address (`desktop.ts` head comment) — confirm it reads the bound port before
-relying on it.
+**Fixed.** `Deno.serve({ hostname: "127.0.0.1" }, …)`. The port is deliberately
+left at 8000: deno desktop auto-navigates the adopted window to the served
+address (`desktop.ts` head comment), so `port: 0` would need that to read the
+bound port first, and the collision is a nuisance rather than the finding.
+Verified by running the call in isolation — loopback answers 200, the host's LAN
+address refuses.
 
-### 3. Credentials are written with default file permissions — MEDIUM
+### 3. Credentials are written with default file permissions — MEDIUM — FIXED
 
 `providers.ts:writeModelsJson` writes `~/.pi/agent/models.json` — which holds
 `apiKey` for a custom provider, via `buildCustomEntry` — with
@@ -118,16 +140,18 @@ stock machine: any other user on the host can read the key.
 `settings/file.ts:writeJson` has the same shape for `~/.pique/*.json`, and the
 `Deno.mkdir` calls beside both leave their directories 0755.
 
-**Fix.** `{ mode: 0o600 }` on the credential write, `{ mode: 0o700 }` on the
-mkdir. `auth.json` is written by pi itself and is upstream of pique; worth
-confirming what it does rather than assuming.
+**Fixed.** `{ mode: 0o600 }` on both writes, `{ mode: 0o700 }` on both mkdirs.
+Deno applies `mode` on every write rather than only at creation — verified — so
+an install that already wrote `models.json` at 0644 is narrowed on the next
+save, and no migration step is needed. `auth.json` is written by pi itself and
+is upstream of pique; still worth confirming what it does rather than assuming.
 
 Not fixable by a mode bit, and worth stating plainly next to the decision to
 share those files with the `pi` CLI: the chat agent has `read` and its cwd is
 usually `$HOME`, so it can read both files and send them anywhere. That is the
 direct cost of "this is not a sandbox".
 
-### 4. The digest gate is optional at the backend — LOW
+### 4. The digest gate is optional at the backend — LOW — FIXED
 
 `enableExtension(scope, id, expectDigest?)` verifies only when
 `expectDigest !== undefined` (`extensions/service.ts:268`). The frontend always
@@ -136,11 +160,19 @@ supplies it — Enable is `disabled` until the row is expanded
 not bypassable from the UI today. But the property depends on every future
 caller remembering an optional argument.
 
-**Fix.** Make `expectDigest` required for the pending → enabled transition. The
-neighbouring case is already fine: `reviewed` is not cleared when a row
-collapses, but a stale digest fails closed, because a mismatch refuses.
+**Fixed.** `expectDigest` is required for the pending → enabled transition, and
+refused at runtime as well as in the signature — a TypeScript type does not
+reach the webview, which is the untrusted caller that could omit it. The
+no-digest path is gone rather than narrowed: there is no such thing as enabling
+something nobody read. The neighbouring case was already fine: `reviewed` is not
+cleared when a row collapses, but a stale digest fails closed.
 
-### 5. The theme value validator does not block `url()` — LOW
+Note the same shape one level up: `Library.svelte` passes `reviewed?.digest`,
+which is `string | undefined`, and the build does not typecheck `.svelte`. It is
+correct in practice — Enable is `disabled` until the read lands — but it is why
+the runtime check is the part carrying the weight.
+
+### 5. The theme value validator does not block `url()` — LOW — FIXED
 
 `theme_css.ts:39` is `UNSAFE_VALUE_RE = /[{}@;<>]/`, and the comment above it
 gives the intent as stopping a value that could "close our rule and open
@@ -155,15 +187,21 @@ theme var into a url-accepting property — the only `var()` chain of that kind 
 a var in `background`, `mask` or `content` this becomes a beacon that fires on
 every launch.
 
-**Fix.** Reject `url(` and `image-set(` in values.
+**Fixed.** `UNSAFE_VALUE_RE` is now
+`/[{}@;<>]|\b(?:url|image-set)\s*\(/i`.
 
-### 6. Two comments claim more than the docs do — INFO
+### 6. Two comments claim more than the docs do — INFO — FIXED
 
-`extensions/agent-tools.ts:2` says written source "cannot execute until a human
-reviews and enables it", and the `define_extension` description tells the model
-the same thing. [extensions.md](extensions.md) Deferred #1 says the gate is
-advisory. The doc is correct. Align the comment and the tool description, so
-that nothing later gets built on the stronger claim.
+`extensions/agent-tools.ts:2` said written source "cannot execute until a human
+reviews and enables it", stated as a property of the system.
+[extensions.md](extensions.md) Deferred #1 says the gate is advisory, and the
+doc is correct.
+
+**Fixed** for the header comment, which now scopes the claim to its own path and
+points at the disclosure. The `define_extension` description and its return text
+were deliberately left: they say what happens to what *this tool* writes, which
+is accurate, and the model reporting that back to a user is the behaviour worth
+keeping.
 
 ---
 
@@ -201,8 +239,11 @@ what was looked at.
   `resolveExtensionRefs` requires a human to have enabled it somewhere on the
   chain.
 
-## Order of work
+## What is still open
 
-Finding 1 is the one that changes what an attacker can do, and it is a design
-change worth its own discussion. 2, 3, 4 and 5 are small mechanical diffs. 6 is
-a comment.
+Nothing from this review. The boundary that does not hold is unchanged and is
+not a finding but the design: there is no sandbox, the chat agent has `read` and
+`bash` with its cwd usually `$HOME`, and every gate above is advisory in that
+light. [extensions.md](extensions.md) Deferred #1 — `tool_call` interception —
+is the one piece of work that would change that, and its path set must cover
+`automatons/` and `agent/prompts/` as well as `agent/` (finding 1).

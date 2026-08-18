@@ -151,6 +151,9 @@ silently never does is the failure this format keeps refusing to ship. The
 editor checks the field as you type, so a broken one is not written in the first
 place.
 
+A schedule on an unapproved definition fires nothing; see
+[Approval](#approval-a-trigger-is-a-request-not-permission).
+
 Four things the schedule does **not** do:
 
 - **It is not inherited.** An automaton is launchable from every scope that
@@ -259,6 +262,42 @@ Mechanically it is `automatons/kanban.ts`, reached from the one point in
 trigger by construction. Like the scheduler it adds a caller, not a mechanism:
 the same `launchAutomaton`, with `trigger: "kanban"` and the card recorded on
 the run.
+
+## Approval: a trigger is a request, not permission
+
+Writing `cron:` or `kanban:` into a file asks for the automaton to run with
+nobody watching. It does not grant it. Neither trigger fires anything until a
+human has read what the run would do and pressed **Approve** in the Automatons
+module; the Launch button is unaffected, because a human pressing it _is_ the
+review.
+
+This exists because the two triggers are the only paths in pique that start a
+model with a full builtin set and no person present. The chat agent holds
+`write`, so before the gate, a file appearing in `automatons/` with a `cron:`
+and no `tools:` key was the whole of what it took to get a job running every
+minute, forever, across restarts — see [security.md](security.md) finding 1.
+
+**What is approved is the closure, not the file.** An automaton is mostly an
+indirection: `prompt:` names a template that holds the actual instructions and
+`skills:` names more text that steers the run. So the digest covers the
+definition, the prompt template it resolves to, and every file under every skill
+it names. Editing any of them withdraws the approval by construction — there is
+no "approved" flag to go stale, because the record is a hash of what was read.
+The list badges such a row `needs review` rather than silently not firing.
+
+`automatons/approved.json` holds it, as `name → digest`, in the same directory
+as the definitions. Revoke stops it firing and keeps the file; delete drops the
+entry with it, so a later file of the same name does not inherit a dead
+approval.
+
+**It is not containment.** `approved.json` is an ordinary file and the chat
+agent has `write` and `bash`, so an agent that specifically targets the manifest
+can forge an entry — and no location on this filesystem would be safe from it.
+This is the same advisory gate the extension review is
+([extensions.md](extensions.md)), and it buys the same thing: the ordinary path
+becomes reviewable, and what ends up running unattended got there because a
+human said so rather than because a file appeared. Deferred #1 there is what
+would make either gate real.
 
 ## The capability set
 

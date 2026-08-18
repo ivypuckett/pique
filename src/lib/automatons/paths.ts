@@ -7,6 +7,10 @@
 //                          start, the way prompts/ and extensions/ already do.
 //   automatons/runs/       One JSON record per run.
 //   automatons/sessions/   pi session JSONL — the transcripts.
+//   automatons/approved.json   Which definitions may fire UNATTENDED, by closure
+//                          digest (approval.ts). A `.json` cannot collide with the
+//                          `*.md` glob, so it sits in the live dir beside what it
+//                          governs rather than in a directory of its own.
 //
 // Deliberately OUTSIDE the scope's agent/ dir: pi auto-discovers inside an agentDir,
 // and a directory of markdown there invites it to interpret these files. Runs
@@ -27,6 +31,10 @@ export function pendingDir(scope: ScopeId): string {
 
 export function runsDir(scope: ScopeId): string {
   return `${automatonsDir(scope)}/runs`;
+}
+
+export function approvalsPath(scope: ScopeId): string {
+  return `${automatonsDir(scope)}/approved.json`;
 }
 
 export function sessionsDir(scope: ScopeId): string {

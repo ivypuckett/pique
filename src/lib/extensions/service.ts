@@ -35,6 +35,7 @@ import {
   scopeAgentDir,
   type ScopeId,
 } from "../scope/paths.ts";
+import { digestOf } from "../digest.ts";
 
 export {
   type ExtSearchResult,
@@ -222,25 +223,6 @@ async function fullSource(
     files.push({ path, text: raw });
   }
   return { files, skills };
-}
-
-// Paths as well as contents, so swapping which entry files a package resolves to counts
-// as a change even when every individual file still reads the same. NUL separates the
-// fields because it cannot occur in a path and will not occur in source — concatenating
-// them plainly would let a file whose text ends in the next file's name collide.
-async function digestOf(
-  files: { path: string; text: string }[],
-): Promise<string> {
-  const joined = files.map((f) => `${f.path}\u0000${f.text}`).join(
-    "\u0000\u0000",
-  );
-  const hash = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(joined),
-  );
-  return [...new Uint8Array(hash)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 // The bytes a human reads before enabling. For a package this resolves the entry files

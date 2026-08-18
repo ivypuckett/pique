@@ -1,7 +1,13 @@
 import { assertEquals } from "@std/assert";
 import { isDue, type TickDeps, tickOnce } from "./schedule.ts";
 import { scheduledTargets } from "./targets.ts";
-import { listAutomatons, saveAutomaton } from "./service.ts";
+import {
+  approveAutomaton,
+  listAutomatons,
+  reviewAutomaton,
+  saveAutomaton,
+} from "./service.ts";
+import { isApproved } from "./approval.ts";
 import { writeJson } from "../settings/file.ts";
 import type { Automaton } from "./parse.ts";
 
@@ -26,6 +32,9 @@ function deps(
   scopes: Record<string, Automaton[]>,
   opts: {
     running?: (scope: string, name: string) => boolean;
+    // Approved by default, so every test here goes on asking what it already asked —
+    // which minute fires what. The gate itself is exercised by its own tests below.
+    approved?: (scope: string, a: Automaton) => boolean;
     cwd?: (scope: string) => string;
     launch?: () => Promise<string>;
   } = {},
@@ -42,6 +51,8 @@ function deps(
           })),
         ),
       list: (scope) => Promise.resolve(scopes[scope] ?? []),
+      approved: (scope, a) =>
+        Promise.resolve(opts.approved?.(scope, a) ?? true),
       running: opts.running ?? (() => false),
       launch: (o) => {
         launched.push(o);
@@ -76,6 +87,34 @@ Deno.test("a due automaton launches with trigger cron in its scope's cwd", async
     cwd: "/proj/root",
     trigger: "cron",
   }]);
+});
+
+// docs/security.md finding 1: a `cron:` key is a REQUEST to run unattended, not
+// permission to. Before this gate, writing a file into automatons/ was the whole of what
+// it took to get a job running every minute forever with every pi builtin.
+Deno.test("a due automaton nobody approved does not fire", async () => {
+  const { deps: d, launched } = deps(
+    { root: [def("nightly", { cron: "0 9 * * *" })] },
+    { approved: () => false },
+  );
+  await tickOnce(NINE, d);
+  assertEquals(launched, []);
+});
+
+// The gate is per definition, not per scope: one approved automaton must not carry an
+// unapproved sibling along with it.
+Deno.test("approval is per definition", async () => {
+  const { deps: d, launched } = deps(
+    {
+      root: [
+        def("approved", { cron: "0 9 * * *" }),
+        def("sneaked-in", { cron: "0 9 * * *" }),
+      ],
+    },
+    { approved: (_scope, a) => a.name === "approved" },
+  );
+  await tickOnce(NINE, d);
+  assertEquals(launched.map((l) => l.name), ["approved"]);
 });
 
 // Decision 1: schedules are not inherited, so `list` is asked for each scope's OWN
@@ -196,10 +235,19 @@ Deno.test("a tick reads real definitions and the real layout", async () => {
       cron: "* * * * *",
     });
 
+    // Approved through the real path, over the real bytes, so this covers the gate as
+    // well as the listing: `hourly` and `ghost` are left unapproved, and neither was
+    // going to fire anyway — the two that do fire are the two a human signed off.
+    for (const [scope, name] of [["root", "nightly"], ["ws-1", "local"]]) {
+      const { digest } = await reviewAutomaton(scope, name);
+      await approveAutomaton(scope, name, digest);
+    }
+
     const launched: Launched[] = [];
     await tickOnce(NINE, {
       targets: scheduledTargets,
       list: listAutomatons,
+      approved: isApproved,
       running: () => false,
       launch: (o) => {
         launched.push(o);

@@ -23,6 +23,7 @@
 //    visible in the module's list.
 import { cronMatches, parseCron } from "./cron.ts";
 import type { Automaton } from "./parse.ts";
+import { isApproved } from "./approval.ts";
 import { listAutomatons } from "./service.ts";
 import { isAutomatonRunning, launchAutomaton } from "./run.ts";
 import { scheduledTargets, type Target } from "./targets.ts";
@@ -35,6 +36,9 @@ export interface TickDeps {
   targets: () => Promise<Target[]>;
   // A scope's OWN definitions, never its inherited ones. See decision 1.
   list: (scope: ScopeId) => Promise<Automaton[]>;
+  // May this definition fire with no human present? A `cron:` key is a request to run
+  // unattended, not permission to — see approval.ts and docs/security.md finding 1.
+  approved: (scope: ScopeId, a: Automaton) => Promise<boolean>;
   running: (scope: ScopeId, name: string) => boolean;
   launch: (
     opts: { scope: ScopeId; name: string; cwd: string; trigger: string },
@@ -82,6 +86,16 @@ export async function tickOnce(now: Date, deps: TickDeps): Promise<void> {
     }
     for (const a of defs) {
       if (!isDue(a, now)) continue;
+      // Logged every time it comes due rather than once, which is the same bargain the
+      // "still running" warning below already makes: a definition nobody approved is a
+      // misconfiguration to fix, and silence about a schedule that never fires is the
+      // more expensive failure. The Automatons list is where it says so quietly.
+      if (!await deps.approved(scope, a)) {
+        console.warn(
+          `automaton schedule: ${scope}/${a.name} is not approved to fire unattended; skipping`,
+        );
+        continue;
+      }
       if (deps.running(scope, a.name)) {
         console.warn(
           `automaton schedule: ${scope}/${a.name} is still running; skipping this fire`,
@@ -103,6 +117,7 @@ export async function tickOnce(now: Date, deps: TickDeps): Promise<void> {
 const liveDeps: TickDeps = {
   targets: scheduledTargets,
   list: listAutomatons,
+  approved: isApproved,
   running: isAutomatonRunning,
   launch: launchAutomaton,
 };

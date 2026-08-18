@@ -48,6 +48,9 @@ function deps(
     cwd?: string | undefined;
     live?: (scope: string, name: string) => string[];
     columnOf?: (scope: string, cardId: string) => Promise<string | undefined>;
+    // Approved by default, so every test here goes on asking what it already asked —
+    // which arrivals fire what, and how the slots work. The gate has its own tests.
+    approved?: (scope: string, a: Automaton) => boolean;
   } = {},
 ): {
   deps: DispatchDeps;
@@ -70,6 +73,8 @@ function deps(
     },
     deps: {
       list: () => Promise.resolve(defs),
+      approved: (scope, a) =>
+        Promise.resolve(opts.approved?.(scope, a) ?? true),
       cwd: () => Promise.resolve("cwd" in opts ? opts.cwd : "/proj/root"),
       live: opts.live ?? (() => running),
       columnOf: opts.columnOf ?? (() => Promise.resolve("In Progress")),
@@ -118,6 +123,41 @@ Deno.test("an arrival launches the watcher with the card id and title", async ()
     card: "card-1",
     trigger: "kanban",
   }]);
+});
+
+// docs/security.md finding 1. A card arriving is not a human pressing Launch — decision
+// 5 is that AGENT moves fire too, so without this an agent could write a definition
+// watching a column and then move a card into it, firing itself.
+Deno.test("an arrival for an automaton nobody approved does not fire", async () => {
+  const { deps: d, launched } = deps(
+    [def("worker", { kanban: "In Progress" })],
+    { approved: () => false },
+  );
+  await dispatchArrival("root", arrival(), d);
+  assertEquals(launched, []);
+});
+
+// The gate sits where the arrival path and the drain path converge, so an approval
+// withdrawn while cards waited is honoured when the slot frees rather than only on
+// arrival.
+// Uses its own name, per the queueing convention noted below.
+Deno.test("approval revoked while a card waits stops the drain", async () => {
+  let approved = true;
+  const { deps: d, launched, endAll } = deps(
+    [def("queued-10", { kanban: "In Progress", wip: 1 })],
+    { approved: () => approved },
+  );
+  await dispatchArrival("root", arrival({ cardId: "card-1" }), d);
+  await dispatchArrival("root", arrival({ cardId: "card-2" }), d);
+  assertEquals(launched.map((l) => l.card), ["card-1"]);
+  assertEquals(pendingCards("root", "queued-10"), ["card-2"]);
+
+  approved = false;
+  await endAll();
+  assertEquals(launched.map((l) => l.card), ["card-1"]);
+  // Drained rather than stranded: the card came off the queue, was refused, and left
+  // nothing behind for the next test sharing this module's state.
+  assertEquals(pendingCards("root", "queued-10"), []);
 });
 
 // The card is already being worked by that automaton; a second run would duplicate the
