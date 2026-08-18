@@ -92,6 +92,17 @@ export function deleteTheme(
   return list.filter((t) => t.name !== name);
 }
 
+// Put the shipped themes back the way a first run leaves them: a seed that was edited
+// reverts to its seed text, one that was deleted returns, and the seeds lead the list in
+// picker order. Themes the user wrote are not the factory's to reset — they are carried
+// across untouched, after the seeds. A renamed seed is one of those: the name it now has
+// is not a seed's, so it stays and the original comes back beside it.
+export function restoreDefaults(list: StoredTheme[]): StoredTheme[] {
+  const seeds = seedThemes();
+  const shipped = new Set(seeds.map((t) => t.name));
+  return [...seeds, ...list.filter((t) => !shipped.has(t.name))];
+}
+
 // The text for a copy of `name`, renamed "<name>-copy" (or -copy-2, …). Text only, not
 // a saved theme: the copy is a draft in the editor until the user saves it, so backing
 // out of a duplicate leaves nothing behind.
