@@ -69,6 +69,15 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it
 work") require constant clarification.
 
+## 5. No Branching in This Desktop Environment
+
+**Work directly on the current branch. Don't create git branches or
+worktrees here.**
+
+This desktop environment isn't set up for juggling multiple branches/worktrees
+- stay on whatever branch is currently checked out unless the user explicitly
+asks to switch or branch.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer
