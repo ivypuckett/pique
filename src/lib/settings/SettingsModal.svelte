@@ -246,7 +246,13 @@
 <svelte:window onkeydown={$settingsOpen ? onWindowKeydown : undefined} />
 
 <div class="modal" class:modal-open={$settingsOpen} role="dialog" aria-modal="true" aria-label="Settings">
-  <div class="modal-box flex max-h-[80vh] min-h-[22rem] max-w-3xl flex-col overflow-hidden p-0">
+  <!-- One height for every section, rather than one per section's content. The sections
+       differ by a lot — Providers grows a list, Appearance grows a 16-row textarea the
+       moment you press Edit — and sizing to content made the box jump under the pointer
+       as you moved down the nav, with the buttons you were reaching for moving with it.
+       Fixed height, viewport-capped; anything taller scrolls in the pane below, which
+       already had overflow-y-auto for exactly that. -->
+  <div class="modal-box flex h-[34rem] max-h-[80vh] max-w-3xl flex-col overflow-hidden p-0">
     <div class="flex shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-4 py-3">
       <span class="text-base font-medium">Settings</span>
       <button
