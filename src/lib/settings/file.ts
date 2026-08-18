@@ -30,8 +30,15 @@ export async function readJson(name: string): Promise<Json> {
 
 export async function writeJson(name: string, data: unknown): Promise<void> {
   const path = pathFor(name);
-  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
-  await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
+  // Owner-only: these are one user's prefs, and nothing else on the host has any
+  // business reading them. Deno's default would be 0755/0644.
+  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n", {
+    mode: 0o600,
+  });
 }
 
 // Expand a leading `~` (`~` or `~/...`) against $HOME; `~user` and non-leading `~`

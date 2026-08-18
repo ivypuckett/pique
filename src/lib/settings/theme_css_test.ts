@@ -129,6 +129,22 @@ Deno.test("rejects a value that could break out of its declaration", () => {
   );
 });
 
+Deno.test("rejects a value that fetches a URL", () => {
+  // themes.json is agent-writable and applied at boot, so a var reaching a
+  // url-accepting property would be a beacon that fires on every launch.
+  assertThrows(
+    () => parseThemeCss(`name: "x"; --c: url(https://tracker/beacon.png);`),
+    Error,
+    "invalid value",
+  );
+  assertThrows(
+    () =>
+      parseThemeCss(`name: "x"; --c: image-set("https://tracker/a.png" 1x);`),
+    Error,
+    "invalid value",
+  );
+});
+
 Deno.test("rejects a property that is not a custom property", () => {
   assertThrows(
     () => parseThemeCss(`name: "x"; background: url(http://tracker);`),

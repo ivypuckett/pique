@@ -35,8 +35,9 @@ const VAR_RE = /^--[a-zA-Z0-9_-]+$/;
 // own stylesheet. Values are custom properties (declaration position only, so no
 // property injection), but a value carrying its own braces or an at-rule could close
 // our rule and open something else — a url() that phones home, say. Reject the
-// characters that would let a value escape the declaration it sits in.
-const UNSAFE_VALUE_RE = /[{}@;<>]/;
+// characters that would let a value escape the declaration it sits in, and the two
+// functions that fetch a URL without needing any of them.
+const UNSAFE_VALUE_RE = /[{}@;<>]|\b(?:url|image-set)\s*\(/i;
 
 const KNOWN_KEYS = ["name", "default", "prefersdark", "color-scheme"];
 

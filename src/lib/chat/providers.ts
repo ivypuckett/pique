@@ -173,8 +173,15 @@ async function readModelsJson(): Promise<ModelsJson> {
 
 async function writeModelsJson(data: ModelsJson): Promise<void> {
   const path = piModelsPath();
-  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
-  await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");
+  // A custom provider's entry carries its apiKey, so keep the file to the owner —
+  // the default mode is 0644, readable by every other user on the host.
+  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n", {
+    mode: 0o600,
+  });
 }
 
 export async function listProviders(): Promise<ProviderInfo[]> {

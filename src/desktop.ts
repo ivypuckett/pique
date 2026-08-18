@@ -726,4 +726,11 @@ await automatons.reconcileRuns();
   });
 }
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
-Deno.serve((req) => serveDir(req, { fsRoot: "dist", quiet: true }));
+// Loopback only: this serves the UI to our own webview, and the default hostname
+// (0.0.0.0) would publish it to the LAN for as long as the app is open. The port is
+// left alone — deno desktop auto-navigates the adopted window to the served address
+// (see the head comment), so it must stay predictable.
+Deno.serve(
+  { hostname: "127.0.0.1" },
+  (req) => serveDir(req, { fsRoot: "dist", quiet: true }),
+);
