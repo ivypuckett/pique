@@ -53,15 +53,19 @@
     let alive = true;
     let id: string | undefined;
 
-    // The terminal paints its own text, so the rem-based UI zoom doesn't reach it —
-    // scale the xterm font by the same factor instead. Refit afterwards: a different
-    // cell size means a different number of rows and columns, which the pty has to be
-    // told about, and once a session is running only this can tell it (the pane's own
-    // size hasn't changed, so the ResizeObserver never fires).
+    // The terminal paints its own text, so neither the rem-based UI zoom nor the
+    // --font-mono override at the root (main.ts) reaches it — both have to be pushed
+    // onto xterm's own options instead. Refit afterwards: a different cell size means a
+    // different number of rows and columns, which the pty has to be told about, and once
+    // a session is running only this can tell it (the pane's own size hasn't changed, so
+    // the ResizeObserver never fires). Family and size share this subscription because
+    // they have the same consequence — either one changes the cell.
     const unzoom = settings.subscribe((s) => {
       const size = BASE_FONT_SIZE * s.appearance.zoom;
-      if (term.options.fontSize === size) return;
+      const family = s.appearance.monoFont.trim() || "monospace";
+      if (term.options.fontSize === size && term.options.fontFamily === family) return;
       term.options.fontSize = size;
+      term.options.fontFamily = family;
       fit.fit();
       if (id) b?.termResize({ id, cols: term.cols, rows: term.rows }).catch(() => {});
     });

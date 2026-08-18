@@ -10,7 +10,11 @@ export interface Settings {
   version: number;
   // zoom: the UI scale factor, applied as the root font size (main.ts) — every
   // rem-sized thing in the app follows it. One of ZOOM_LEVELS (settings/store.ts).
-  appearance: { theme: string; zoom: number };
+  // uiFont/monoFont: CSS font-family values, overriding tailwind's --font-sans and
+  // --font-mono at the root (main.ts). Empty means the built-in stack, so they are not
+  // optional fields with a compiled-in default — "" IS the default, and the settings
+  // field being blank and the setting being absent have to mean the same thing.
+  appearance: { theme: string; zoom: number; uiFont: string; monoFont: string };
   // gitScanDepth: how many directory levels to descend looking for git repos when the
   // workspace root is not itself a repo, to highlight changed folders. Absent → the
   // resolveGitScanDepth default (see settings/file.ts).
@@ -21,7 +25,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   version: 1,
-  appearance: { theme: "catppuccin-frappe", zoom: 1 },
+  appearance: { theme: "catppuccin-frappe", zoom: 1, uiFont: "", monoFont: "" },
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3, confirmDelete: true },

@@ -17,6 +17,15 @@ Deno.test("mergeSettings fills a section's defaults when it is absent", () => {
   );
 });
 
+Deno.test("a settings file written before the font fields existed reads as unset", () => {
+  // Every settings.json on disk predates them, and the empty string is what main.ts
+  // reads as "leave tailwind's own stack alone" — undefined would be written into the
+  // custom property verbatim.
+  const merged = mergeSettings({ appearance: { theme: "nord", zoom: 1 } });
+  assertEquals(merged.appearance.uiFont, "");
+  assertEquals(merged.appearance.monoFont, "");
+});
+
 Deno.test("ZOOM_LEVELS is ascending and includes the default", () => {
   assertEquals([...ZOOM_LEVELS].sort((a, b) => a - b), [...ZOOM_LEVELS]);
   assert(ZOOM_LEVELS.includes(DEFAULT_SETTINGS.appearance.zoom));
