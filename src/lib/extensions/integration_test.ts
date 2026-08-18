@@ -20,6 +20,14 @@ import { ROOT } from "../scope/paths.ts";
 const ENTRY_SOURCE =
   'export default function (pi) { pi.registerTool({ name: "hello" }); }\n';
 
+// Enable requires the digest of the source that was reviewed. Every enable below is a
+// setup step for something else, so read the pending source and hand back its digest —
+// exactly what Library does between Review and Enable.
+async function reviewAndEnable(scope: string, id: string): Promise<void> {
+  const { digest } = await readExtension(scope, id, "pending");
+  await enableExtension(scope, id, digest);
+}
+
 // A minimal pi package: a package.json and one auto-discovered extension entry.
 async function makePackage(dir: string): Promise<string> {
   const pkg = `${dir}/pkg`;
@@ -71,7 +79,7 @@ Deno.test("enabling a package moves it into pi's loading set", async () => {
     await fetchPackage("ws-1", source);
     const [pending] = await listExtensions("ws-1");
 
-    await enableExtension("ws-1", pending.id);
+    await reviewAndEnable("ws-1", pending.id);
 
     const listed = await listExtensions("ws-1");
     assertEquals(listed.length, 1);
@@ -93,7 +101,7 @@ Deno.test("revoking a package returns it to review without deleting the bytes", 
   await withTempHome(async (home) => {
     const source = await makePackage(home);
     await fetchPackage("ws-1", source);
-    await enableExtension("ws-1", (await listExtensions("ws-1"))[0].id);
+    await reviewAndEnable("ws-1", (await listExtensions("ws-1"))[0].id);
     const enabled = (await listExtensions("ws-1"))[0];
 
     await revokeExtension("ws-1", enabled.id);
@@ -106,7 +114,7 @@ Deno.test("revoking a package returns it to review without deleting the bytes", 
     assertEquals(review.files[0].text, ENTRY_SOURCE);
 
     // And a revoked package re-enables cleanly, through pi's normalized source form.
-    await enableExtension("ws-1", listed[0].id);
+    await reviewAndEnable("ws-1", listed[0].id);
     assertEquals((await listExtensions("ws-1"))[0].state, "enabled");
   });
 });
@@ -130,7 +138,7 @@ Deno.test("root's enabled package is visible to a workspace, labelled as root's"
     const source = await makePackage(home);
     await fetchPackage(ROOT, source);
     const [pending] = await listExtensions(ROOT);
-    await enableExtension(ROOT, pending.id);
+    await reviewAndEnable(ROOT, pending.id);
 
     const visible = await listVisibleExtensions("ws-1");
 

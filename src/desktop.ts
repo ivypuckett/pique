@@ -486,7 +486,7 @@ win.bind("extensionsEnable", async (arg) => {
   const { scope, id, expectDigest } = arg as {
     scope: string;
     id: string;
-    expectDigest?: string;
+    expectDigest: string;
   };
   await extensions.enableExtension(scope, id, expectDigest);
   return true;

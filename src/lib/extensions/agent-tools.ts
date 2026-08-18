@@ -1,8 +1,13 @@
 // The agent half of extension authoring: one pi tool that lets an agent write another
-// extension. Written source lands in the quarantine dir ONLY (paths.ts) — it cannot
-// execute until a human reviews and enables it in the Library module, which moves it
-// into the auto-discovered extensions dir. Passed to createAgentSession as customTools
-// (see chat/agent.ts). Runs Deno-side only.
+// extension. Source written THROUGH THIS TOOL lands in the quarantine dir only
+// (paths.ts), and a human reviewing and enabling it in the Library module is what moves
+// it into the auto-discovered extensions dir.
+//
+// That is a property of this path, not of the system: the gate is advisory
+// (docs/extensions.md), because the same agent holds `write` and `bash` and can put a
+// file straight into `extensions/` without coming through here. Do not build anything
+// on the stronger reading. Passed to createAgentSession as customTools (see
+// chat/agent.ts). Runs Deno-side only.
 import { Type } from "typebox";
 import {
   defineTool,

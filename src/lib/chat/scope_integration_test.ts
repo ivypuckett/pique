@@ -5,7 +5,11 @@
 import { assertEquals } from "@std/assert";
 import { activeToolNames, startAgent, stopAgent } from "./agent.ts";
 import { enableLocal } from "../extensions/local.ts";
-import { enableExtension, listExtensions } from "../extensions/service.ts";
+import {
+  enableExtension,
+  listExtensions,
+  readExtension,
+} from "../extensions/service.ts";
 import { fetchPackage } from "../extensions/packages.ts";
 import { ensureExtensionDirs, pendingPath } from "../extensions/paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
@@ -184,7 +188,8 @@ async function installAndEnable(scope: ScopeId, source: string): Promise<void> {
     e.origin === "package" && e.state === "pending"
   );
   if (!pending) throw new Error("the fixture package was not quarantined");
-  await enableExtension(scope, pending.id);
+  const { digest } = await readExtension(scope, pending.id, "pending");
+  await enableExtension(scope, pending.id, digest);
 }
 
 Deno.test("a scope's OWN enabled package reaches its agent", async () => {

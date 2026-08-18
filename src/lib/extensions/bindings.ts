@@ -27,9 +27,9 @@ export interface ExtensionBindings {
     arg: { scope: string; id: string; state: ExtState },
   ): Promise<ExtensionSource>;
   // `expectDigest` is the reading the user reviewed; the backend refuses the enable
-  // if the bytes changed since (service.ts:enableExtension).
+  // if it is missing, or if the bytes changed since (service.ts:enableExtension).
   extensionsEnable(
-    arg: { scope: string; id: string; expectDigest?: string },
+    arg: { scope: string; id: string; expectDigest: string },
   ): Promise<unknown>;
   // Enabled extensions pi could not load — `enabled` and broken look identical
   // in the list otherwise.

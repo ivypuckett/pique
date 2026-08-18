@@ -261,23 +261,28 @@ export async function readExtension(
   return { files: shown, skills, truncated, digest: await digestOf(files) };
 }
 
-// `expectDigest` is the reading the human actually approved. A Library tab can sit open
-// for hours between Review and Enable, and an agent with `write` can rewrite the file in
-// that window — so the check is here rather than in the component, where it would be a
-// courtesy rather than a gate.
+// `expectDigest` is the reading the human actually approved, and it is mandatory: this
+// is the pending → enabled transition, and there is no such thing as enabling something
+// nobody read. A Library tab can sit open for hours between Review and Enable, and an
+// agent with `write` can rewrite the file in that window — so the check is here rather
+// than in the component, where it would be a courtesy rather than a gate.
+//
+// Required in the signature so no backend caller can forget it, and checked at runtime
+// because the webview is untrusted (docs/security.md) and types do not reach it.
 export async function enableExtension(
   scope: ScopeId,
   id: string,
-  expectDigest?: string,
+  expectDigest: string,
 ): Promise<void> {
   const { origin, key } = parseId(id);
-  if (expectDigest !== undefined) {
-    const { files } = await fullSource(scope, id, "pending");
-    if (await digestOf(files) !== expectDigest) {
-      throw new Error(
-        "This extension changed on disk after you reviewed it — read it again before enabling.",
-      );
-    }
+  if (typeof expectDigest !== "string" || expectDigest === "") {
+    throw new Error("Cannot enable an extension without reviewing it first.");
+  }
+  const { files } = await fullSource(scope, id, "pending");
+  if (await digestOf(files) !== expectDigest) {
+    throw new Error(
+      "This extension changed on disk after you reviewed it — read it again before enabling.",
+    );
   }
   if (origin === "local") return await enableLocal(scope, key);
   return await enablePackage(scope, key);

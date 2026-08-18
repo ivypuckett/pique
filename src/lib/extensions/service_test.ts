@@ -138,7 +138,8 @@ Deno.test("enable and revoke move a local extension between the two states", asy
   await withTempHome(async () => {
     await seedLocal("ws-1", "my_ext");
 
-    await enableExtension("ws-1", "local:my_ext");
+    const { digest } = await readExtension("ws-1", "local:my_ext", "pending");
+    await enableExtension("ws-1", "local:my_ext", digest);
     assertEquals(summary(await listExtensions("ws-1")), [
       { id: "local:my_ext", origin: "local", state: "enabled", scope: "ws-1" },
     ]);
@@ -290,14 +291,31 @@ Deno.test("the digest covers the full source, not the truncated display", async 
   });
 });
 
-Deno.test("enabling without a digest still works, for callers that never reviewed", async () => {
+Deno.test("enabling without a digest is refused", async () => {
   await withTempHome(async () => {
     await seedLocal("ws-1", "direct", "// src");
-    await enableExtension("ws-1", "local:direct");
+
+    // The webview is an untrusted caller and can omit the argument entirely, so the
+    // refusal has to be a runtime check and not just a required parameter.
+    let message = "";
+    try {
+      await (enableExtension as (s: string, i: string) => Promise<void>)(
+        "ws-1",
+        "local:direct",
+      );
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    assertEquals(
+      message.includes("without reviewing"),
+      true,
+      `the enable must be refused, got: ${message || "no error"}`,
+    );
+
     const after = (await listExtensions("ws-1")).find((e) =>
       e.name === "direct"
     );
-    assertEquals(after?.state, "enabled");
+    assertEquals(after?.state, "pending");
   });
 });
 
