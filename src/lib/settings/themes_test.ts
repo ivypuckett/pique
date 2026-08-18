@@ -2,6 +2,7 @@ import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   deleteTheme,
   duplicateCss,
+  restoreDefaults,
   saveTheme,
   seedThemes,
   themesFromStored,
@@ -73,6 +74,26 @@ Deno.test("saving rejects text that would not make a theme", () => {
 
 Deno.test("deleting removes just that theme", () => {
   assertEquals(deleteTheme(list("a", "b"), "a").map((t) => t.name), ["b"]);
+});
+
+Deno.test("restoring defaults reverts an edited seed and brings a deleted one back", () => {
+  const seeds = seedThemes();
+  const mangled = seeds
+    .filter((t) => t.name !== "nord")
+    .map((t) => (t.name === "dark" ? { name: t.name, css: css("dark") } : t));
+  assertEquals(restoreDefaults(mangled), seeds);
+});
+
+Deno.test("restoring defaults keeps the user's own themes, after the seeds", () => {
+  const mine = list("mine", "also-mine");
+  const next = restoreDefaults([mine[0], ...seedThemes(), mine[1]]);
+  assertEquals(next.map((t) => t.name), [
+    ...seedThemes().map((t) => t.name),
+    "mine",
+    "also-mine",
+  ]);
+  // A theme the user wrote is carried across untouched, not re-derived.
+  assertEquals(next.at(-2), mine[0]);
 });
 
 Deno.test("the last theme cannot be deleted", () => {

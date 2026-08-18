@@ -7,6 +7,7 @@
     duplicateCss,
     endPreview,
     previewTheme,
+    restoreDefaults,
     saveTheme,
     themes,
   } from "./themes.ts";
@@ -26,6 +27,7 @@
   let themeError = $state("");
   let copied = $state(false);
   let pendingDelete = $state(false);
+  let pendingRestore = $state(false);
 
   const active = $derived($settings.appearance.theme);
 
@@ -46,6 +48,7 @@
     draft = css;
     themeError = "";
     pendingDelete = false;
+    pendingRestore = false;
   }
 
   function editActive(): void {
@@ -93,6 +96,14 @@
     } catch (e) {
       themeError = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  // Confirmed rather than immediate: restoring cannot lose a theme the user wrote, but
+  // it does discard edits made to a shipped one, and those look identical in the picker.
+  function confirmRestore(): void {
+    pendingRestore = false;
+    themes.set(restoreDefaults($themes));
+    themeError = "";
   }
 
   async function copyDraft(): Promise<void> {
@@ -297,10 +308,17 @@
             <button type="button" class="btn btn-error btn-xs" onclick={confirmDelete}>Delete</button>
             <button type="button" class="btn btn-ghost btn-xs" onclick={() => (pendingDelete = false)}
             >Cancel</button>
+          {:else if pendingRestore}
+            <span class="self-center text-xs opacity-70">Restore the shipped themes? Your own are kept.</span>
+            <button type="button" class="btn btn-warning btn-xs" onclick={confirmRestore}>Restore</button>
+            <button type="button" class="btn btn-ghost btn-xs" onclick={() => (pendingRestore = false)}
+            >Cancel</button>
           {:else}
             <button type="button" class="btn btn-xs" onclick={editActive}>Edit</button>
             <button type="button" class="btn btn-xs" onclick={duplicateActive}>Duplicate</button>
             <button type="button" class="btn btn-xs" onclick={() => openEditor(null, "")}>New</button>
+            <button type="button" class="btn btn-ghost btn-xs" onclick={() => (pendingRestore = true)}
+            >Restore defaults</button>
             <button
               type="button"
               class="btn btn-ghost btn-xs"
