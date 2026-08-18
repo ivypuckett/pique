@@ -122,6 +122,19 @@
     }
   });
 
+  // The font fields commit on change — blur or Enter — and not on input, which is what
+  // `bind:value` would have given. A keystroke is not a cheap write here: it repaints
+  // the app off the new --font-sans/--font-mono, and every open terminal re-measures its
+  // cell and tells its pty the new size (terminal/Terminal.svelte), so typing a family
+  // name ran that per character and per tab. Nothing about the value is worth applying
+  // half-typed anyway — "JetBrains Mo" is not a font.
+  function commitFont(field: "uiFont" | "monoFont", value: string): void {
+    settings.update((s) => ({
+      ...s,
+      appearance: { ...s.appearance, [field]: value },
+    }));
+  }
+
   // Model providers. Null in web-dev (no bindings) → the section shows a
   // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
   const prov = providerBindings();
@@ -346,6 +359,44 @@
         </div>
       {/if}
       {#if themeError}<div class="mt-2 text-xs text-error">{themeError}</div>{/if}
+
+      <!-- Free text, and no picker of installed families: the value is a CSS
+           font-family, so what is worth writing here is a stack with fallbacks, which no
+           list of single families can offer. Enumerating them would also have meant a
+           backend — the webview has no queryLocalFonts() — and the only cross-platform
+           way to do that is guessing at names, which is worse than typing one. Each
+           field is rendered IN the family it sets, so a name that resolves to nothing
+           shows itself as unchanged text. -->
+      <div class="mt-4">
+        <div class="text-sm">Interface font</div>
+        <div class="mt-0.5 text-xs opacity-70">
+          A CSS font-family value for the app's text — one family, or several to fall
+          through. Empty uses the built-in stack.
+        </div>
+        <input
+          class="input input-bordered input-sm mt-2 w-full font-sans"
+          placeholder="Inter, system-ui, sans-serif"
+          spellcheck="false"
+          aria-label="Interface font"
+          value={$settings.appearance.uiFont}
+          onchange={(e) => commitFont("uiFont", e.currentTarget.value)}
+        />
+      </div>
+
+      <div class="mt-4">
+        <div class="text-sm">Monospace font</div>
+        <div class="mt-0.5 text-xs opacity-70">
+          Used by the terminal, diffs, and anything else showing code or paths.
+        </div>
+        <input
+          class="input input-bordered input-sm mt-2 w-full font-mono"
+          placeholder="JetBrains Mono, monospace"
+          spellcheck="false"
+          aria-label="Monospace font"
+          value={$settings.appearance.monoFont}
+          onchange={(e) => commitFont("monoFont", e.currentTarget.value)}
+        />
+      </div>
 
       <div class="mt-4 flex items-center justify-between gap-4">
         <div>
