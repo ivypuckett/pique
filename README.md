@@ -64,4 +64,5 @@ Notes:
 - Library: Extensions, prompt templates and skills for the current scope —
   review, enable, edit.
 - Automatons: Named agents — one prompt template plus the extensions and skills
-  they may load — launched by a button and, later, by a card move or a schedule.
+  they may load — launched by a button, or unattended by a schedule or a card
+  arriving in a column, which first need a human to approve the definition.
