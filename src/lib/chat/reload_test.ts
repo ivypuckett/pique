@@ -18,6 +18,7 @@ import {
   activeToolNames,
   historyOf,
   listCommands,
+  listModels,
   promptAgent,
   readAgent,
   reloadAgent,
@@ -82,8 +83,14 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
             baseUrl,
             api: "openai-completions",
             apiKey: "mock",
+            // Two, so a test can move the scope's default to a model that is genuinely
+            // available — the case reload reports on.
             models: [{
               id: "mock-model",
+              contextWindow: 128000,
+              input: ["text"],
+            }, {
+              id: "mock-model-2",
               contextWindow: 128000,
               input: ["text"],
             }],
@@ -207,6 +214,46 @@ Deno.test("the conversation survives a reload", async () => {
         before.length,
         "reload must not drop the conversation",
       );
+    } finally {
+      stopAgent(chat);
+    }
+  });
+});
+
+// The scope's model default is resolved in startAgent, and a reload deliberately does not
+// re-apply it — a conversation keeps the model it has been running. Saying nothing about
+// it was the problem: someone who changes the default in another view and reloads here
+// would otherwise be told only "no tool changes".
+Deno.test("a model default changed elsewhere is reported, never applied", async () => {
+  await withTempHome(async () => {
+    const chat = await startAgent({ scope: SCOPE });
+    try {
+      await writeScopeConfig(SCOPE, {
+        chat: { defaultProvider: "mock", defaultModel: "mock-model-2" },
+      });
+
+      const summary = await reloadAgent(chat);
+
+      assertEquals(summary.modelDefault, {
+        provider: "mock",
+        id: "mock-model-2",
+      });
+      assertEquals(
+        (await listModels(chat)).find((m) => m.current)?.id,
+        "mock-model",
+        "the running conversation keeps its model",
+      );
+    } finally {
+      stopAgent(chat);
+    }
+  });
+});
+
+Deno.test("a reload reports no model default when the scope's is what runs", async () => {
+  await withTempHome(async () => {
+    const chat = await startAgent({ scope: SCOPE });
+    try {
+      assertEquals((await reloadAgent(chat)).modelDefault, undefined);
     } finally {
       stopAgent(chat);
     }

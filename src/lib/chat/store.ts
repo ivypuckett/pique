@@ -25,6 +25,8 @@ export type { Item };
 // The line `/reload` leaves in the transcript. A reload that changes nothing still says
 // so — silence would be indistinguishable from a command that did not register — and a
 // failed extension is named first, because that is the case the user has to act on.
+// Tools are not the only thing a reload moves, so the prompt and the model follow: "no
+// tool changes" on its own is what made an applied SYSTEM.md edit look like a no-op.
 export function formatReloadNotice(summary: ReloadSummary): string {
   const parts: string[] = [];
   for (const f of summary.failed) {
@@ -34,6 +36,14 @@ export function formatReloadNotice(summary: ReloadSummary): string {
   if (summary.removed.length) parts.push(`−${summary.removed.join(" −")}`);
   if (!summary.added.length && !summary.removed.length) {
     parts.push("no tool changes");
+  }
+  if (summary.promptChanged) parts.push("system prompt updated");
+  // Reported rather than applied, so the line says what to do about it.
+  if (summary.modelDefault) {
+    const m = summary.modelDefault;
+    parts.push(
+      `model default is now ${m.provider}/${m.id} — new chat to use it`,
+    );
   }
   return `Reloaded — ${parts.join("; ")}`;
 }

@@ -96,11 +96,12 @@ first, ancestors after — is what makes the workspace's copy the survivor.
 
 ## Editing takes effect immediately
 
-Prompt templates are read from the resource loader on every prompt, not baked in
-at session creation the way the system prompt is. So saving or approving one
-refreshes the running conversations (`chatReloadPrompts` →
+Prompt templates are read from the resource loader on every prompt, so saving or
+approving one refreshes the running conversations (`chatReloadPrompts` →
 `resourceLoader.reload()`) and the `/` menu, **without** restarting the agent or
-losing the transcript.
+losing the transcript. The system prompt is the one that needs asking for: it is
+rebuilt only when pi's own `reload()` runs, which is what `/reload` does — see
+[extensions.md](extensions.md) Deferred #2.
 
 ## Steering vs. sending
 
@@ -113,11 +114,11 @@ decides which one to use:
 | A standing instruction, every conversation in this scope | `<scope>/agent/SYSTEM.md` | the system prompt, replacing pi's preamble |
 | An instruction for one task, on demand                   | `agent/prompts/<name>.md` | a user turn, when you type `/name`         |
 
-Nothing is selectable per conversation: pi fixes the system prompt at session
-creation and exposes no setter, so anything that varied per conversation would
-have to restart the agent and discard the transcript. Templates avoid that
-entirely by not touching the system prompt — which is why editing one takes
-effect immediately (above).
+Nothing is selectable per conversation: the system prompt belongs to the scope,
+and every view in it runs the same one. Editing that file does reach a running
+conversation, but only when it asks — `/reload` — whereas a template takes
+effect the moment it is saved, because it never touches the system prompt at all
+(above).
 
 pique used to have a third thing, a **profile**, whose body was appended to the
 system prompt and which carried a tool allowlist. It is gone; templates and

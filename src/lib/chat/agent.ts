@@ -36,6 +36,15 @@ export type ReloadSummary = {
   added: string[];
   removed: string[];
   failed: Array<{ name: string; error: string }>;
+  // Whether the scope's SYSTEM.md changed under this conversation and was applied. The
+  // comparison is against the text the session last resolved rather than across the
+  // reload, because the edit happened before `/reload` was ever typed; and it is the
+  // BASE prompt rather than the assembled one, which also moves when the tool set does.
+  promptChanged?: boolean;
+  // The scope's default model, when this conversation is not running it and a new chat
+  // here would be. Reload reports it and does not apply it: a conversation does not get
+  // its model swapped underneath it. Absent unless the two genuinely differ.
+  modelDefault?: { provider: string; id: string };
 };
 
 // One rendered line of the transcript. The streaming path builds these from ChatEvents
@@ -172,9 +181,14 @@ interface Agent {
   unsubscribe: () => void;
   queue: ChatEvent[];
   // Held so prompt templates can be re-read without restarting the conversation
-  // (reloadPrompts, below). Everything else the loader carries is fixed at session start.
+  // (reloadPrompts, below).
   // deno-lint-ignore no-explicit-any
   resourceLoader: any;
+  // What the agent resolves its defaults against, kept so a reload can re-resolve them.
+  scope: ScopeId;
+  // The base prompt this conversation is currently running, so a reload can tell whether
+  // the scope's SYSTEM.md moved under it. Updated by every reload that re-resolves it.
+  basePrompt: string | undefined;
 }
 const agents = new Map<string, Agent>();
 let nextId = 1;
@@ -242,7 +256,13 @@ export async function startAgent(
     additionalPromptTemplatePaths: inheritedPromptDirs(scope),
     // The scope's base prompt: the nearest SYSTEM.md on the chain (scope/prompt.ts),
     // undefined when there is none — which is what leaves pi's own preamble in place.
-    systemPrompt: await resolveBasePrompt(scope),
+    // Handed over as the override CALLBACK rather than as `systemPrompt`, because the
+    // loader invokes it afresh inside every reload() while a string is captured once.
+    // That is what lets `/reload` pick up an edited SYSTEM.md, and it re-runs the whole
+    // chain resolution, so a workspace file created later correctly shadows root's. The
+    // base it is handed — the loader's own agentDir discovery — is discarded: it sees one
+    // dir and would miss the inheritance this resolves.
+    systemPromptOverride: () => resolveBasePrompt(scope),
   });
   // createAgentSession only reloads a loader it creates itself, so ours must be
   // reloaded by hand or it yields no extensions at all.
@@ -276,7 +296,14 @@ export async function startAgent(
   });
   session.setThinkingLevel(thinking);
   const id = `chat-${nextId++}`;
-  agents.set(id, { session, unsubscribe, queue, resourceLoader });
+  agents.set(id, {
+    session,
+    unsubscribe,
+    queue,
+    resourceLoader,
+    scope,
+    basePrompt: resolveBasePrompt(scope),
+  });
   return id;
 }
 
@@ -430,35 +457,44 @@ export function activeToolNames(id: string): string[] {
 
 // The prompt this agent actually runs with: the scope's base — pi's own preamble, or the
 // SYSTEM.md that replaced it — plus what pi appends itself (project context, skills, cwd).
-// Assembled at session creation and fixed for its lifetime; pi exposes no setter.
+// Reassembled by every reload, so this tracks an edited SYSTEM.md rather than reporting
+// what the session started with (base_prompt_integration_test.ts).
 export function systemPromptOf(id: string): string {
   return agents.get(id)?.session.systemPrompt ?? "";
 }
 
 // Re-read the resource loader so prompt templates saved or approved in Library →
-// Prompts become invocable in a conversation that is already running. Unlike the system
-// prompt — which pi bakes in at session creation — templates are read from the loader
-// on every prompt(), so refreshing the loader is enough and the transcript survives.
+// Prompts become invocable in a conversation that is already running. Templates are read
+// from the loader on every prompt(), so refreshing the loader is enough and the
+// transcript survives. This does NOT rebuild the system prompt — pi only does that when
+// its own reload() runs — so the agent's recorded basePrompt stays accurate.
 export async function reloadPrompts(id: string): Promise<void> {
   await agents.get(id)?.resourceLoader.reload();
 }
 
-// Re-read everything the session loaded at startup — extensions included — so an extension
-// enabled or revoked in Library reaches a conversation that is already running. pi's own
-// `/reload` is a TUI action, but the flow behind it is `session.reload()`, which rebuilds
-// the extension runner from a re-read loader and hands the fresh tools to the active set.
-// The messages are untouched, so the transcript and the model's context both survive
-// (reload_test.ts). Two things it does NOT do: the system prompt is baked in at session
-// creation and stays, and pi skips the extensions' own `session_start` event here because
-// pique binds no TUI context — an extension doing its setup in that handler rather than at
+// Re-read everything the session loaded at startup — extensions and the scope's SYSTEM.md
+// included — so a change made in Library or on disk reaches a conversation that is already
+// running. pi's own `/reload` is a TUI action, but the flow behind it is `session.reload()`,
+// which rebuilds the extension runner AND the system prompt from a re-read loader, and
+// hands the fresh tools to the active set. The messages are untouched, so the transcript
+// and the model's context both survive (reload_test.ts).
+//
+// What it still does NOT do: the scope's model default is resolved in startAgent and is
+// only reported here, never applied — a conversation does not get its model swapped
+// underneath it; and pi skips the extensions' own `session_start` event because pique
+// binds no TUI context, so an extension doing its setup in that handler rather than at
 // module scope will not have run.
 export async function reloadAgent(id: string): Promise<ReloadSummary> {
   const agent = agents.get(id);
   if (!agent) return { added: [], removed: [], failed: [] };
   const before = new Set<string>(agent.session.getActiveToolNames());
+  const promptBefore = agent.basePrompt;
   await agent.session.reload();
   const after: string[] = agent.session.getActiveToolNames();
   const afterSet = new Set(after);
+  // Resolved again by the same rule the session's loader just used, so the record tracks
+  // what the conversation now actually runs.
+  agent.basePrompt = resolveBasePrompt(agent.scope);
   // The same loader instance the session holds, so this reads the errors from the
   // reload that just happened rather than a stale scan.
   const errors: Array<{ path: string; error: string }> =
@@ -470,7 +506,28 @@ export async function reloadAgent(id: string): Promise<ReloadSummary> {
       name: e.path.split("/").pop()?.replace(/\.[jt]s$/, "") ?? e.path,
       error: e.error,
     })),
+    promptChanged: agent.basePrompt !== promptBefore,
+    modelDefault: await pendingModelDefault(agent),
   };
+}
+
+// The scope's default model when this conversation is not running it — the case where
+// someone changed the default from another view, or edited the config on disk. Undefined
+// unless a new chat in this scope would genuinely come up on a different model: a default
+// that is merely unavailable resolves to the same fallback this session already took, and
+// nagging about a model no new chat would reach either would be noise.
+async function pendingModelDefault(
+  agent: Agent,
+): Promise<{ provider: string; id: string } | undefined> {
+  const live = agent.session.model;
+  if (!live || !runtime) return undefined;
+  const { provider, modelId } = resolveChatDefaults(
+    await resolveScopeConfig(agent.scope),
+  );
+  if (provider === live.provider && modelId === live.id) return undefined;
+  return runtime.getModel(provider, modelId)
+    ? { provider, id: modelId }
+    : undefined;
 }
 
 // The `/` menu list: the same three sources pi's TUI concatenates in getCommands —

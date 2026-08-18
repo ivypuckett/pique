@@ -350,7 +350,7 @@ export async function launchAutomaton(
       additionalExtensionPaths: extensionPaths,
       additionalSkillPaths: skillPaths,
       additionalPromptTemplatePaths: inheritedPromptDirs(scope),
-      systemPrompt: await resolveBasePrompt(scope),
+      systemPrompt: resolveBasePrompt(scope),
     });
     // createAgentSession only reloads a loader it creates itself, so ours must be
     // reloaded by hand or it yields no extensions at all.

@@ -11,12 +11,14 @@ export function basePromptPath(scope: ScopeId): string {
 
 // The nearest SYSTEM.md on the chain, or undefined when none exists. Undefined must
 // reach pi AS undefined — that is what keeps pi's own preamble as the default.
-export async function resolveBasePrompt(
-  scope: ScopeId,
-): Promise<string | undefined> {
+//
+// Synchronous because pi's resource loader calls it from inside its own reload(), which
+// gives it no place to await: chat/agent.ts hands this over as a callback rather than a
+// string, so an edited SYSTEM.md is re-read on `/reload` (extensions.md).
+export function resolveBasePrompt(scope: ScopeId): string | undefined {
   for (const s of [...chain(scope)].reverse()) {
     try {
-      return await Deno.readTextFile(basePromptPath(s));
+      return Deno.readTextFileSync(basePromptPath(s));
     } catch (err) {
       if (!(err instanceof Deno.errors.NotFound)) throw err;
     }

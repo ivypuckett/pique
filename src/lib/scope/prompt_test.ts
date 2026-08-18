@@ -40,24 +40,24 @@ Deno.test("the base prompt is the nearest SYSTEM.md on the chain", async () => {
   await withTempHome(async () => {
     // Undefined, not "": chat/agent.ts hands this straight to pi, and undefined is what
     // leaves pi's own preamble in place.
-    assertEquals(await resolveBasePrompt("ws-1"), undefined);
+    assertEquals(resolveBasePrompt("ws-1"), undefined);
 
     await writeBasePrompt(ROOT, "root base");
     assertEquals(
-      await resolveBasePrompt("ws-1"),
+      resolveBasePrompt("ws-1"),
       "root base",
       "root's reaches a workspace",
     );
-    assertEquals(await resolveBasePrompt(ROOT), "root base");
+    assertEquals(resolveBasePrompt(ROOT), "root base");
 
     await writeBasePrompt("ws-1", "workspace base");
     assertEquals(
-      await resolveBasePrompt("ws-1"),
+      resolveBasePrompt("ws-1"),
       "workspace base",
       "the nearest one wins",
     );
     assertEquals(
-      await resolveBasePrompt(ROOT),
+      resolveBasePrompt(ROOT),
       "root base",
       "root is unaffected",
     );

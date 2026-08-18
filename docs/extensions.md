@@ -234,12 +234,28 @@ would claim otherwise.
 
 ### 2. Live reload — shipped as `/reload`, with three pieces left
 
-A running chat re-reads extensions, prompts and skills when someone types
-`/reload` in it. The mechanism is `AgentSession.reload()`, a public SDK method
-rather than the TUI affair the earlier note here assumed: it re-reads the
-resource loader, rebuilds the extension runner from what that yields, and passes
-`includeAllExtensionTools`, so a newly enabled extension's tools land in the
-session's _active_ set and not merely its registry.
+A running chat re-reads extensions, prompts, skills and its **base system
+prompt** when someone types `/reload` in it. The mechanism is
+`AgentSession.reload()`, a public SDK method rather than the TUI affair the
+earlier note here assumed: it re-reads the resource loader, rebuilds the
+extension runner from what that yields, and passes `includeAllExtensionTools`,
+so a newly enabled extension's tools land in the session's _active_ set and not
+merely its registry.
+
+**An edited `SYSTEM.md` lands too**, which an earlier note here denied. There is
+indeed no setter for the prompt, but there does not need to be: pi rebuilds it
+from the resource loader inside `reload()`, so a loader that re-resolves is
+enough. What made the edit invisible was pique's own doing — `startAgent` handed
+the loader the file's _contents_, a string captured once, and the loader only
+re-reads a source it can treat as a path. It now passes the loader's
+`systemPromptOverride` **callback** instead, which the loader invokes afresh on
+every reload. That re-runs the whole chain resolution rather than re-reading one
+pinned file, so the three cases beyond a plain edit behave: a workspace
+`SYSTEM.md` created later starts shadowing root's, a deleted one falls back to
+the next on the chain, and deleting the last one restores pi's own preamble.
+`chat/base_prompt_integration_test.ts` drives all four against real sessions,
+plus the invariant the notice depends on — that `chatReloadPrompts`, which
+reloads the loader alone, leaves the running prompt where it is.
 
 It is a typed command rather than an automatic consequence of Enable, so tools
 never change under a conversation that did not ask. pi does **not** expand
@@ -248,7 +264,10 @@ never change under a conversation that did not ask. pi does **not** expand
 becomes a turn, and `chat/agent.ts:listCommands` contributes the entry to the
 `/` menu as the one command sourced from pique itself. The reply is a `notice`
 line, styled as pique speaking rather than as the model, naming what was added,
-removed, or failed to load.
+removed, or failed to load — and, when they apply, that the system prompt was
+updated and that the scope's model default is not what this conversation runs.
+Tools were once the only thing it mentioned, which left an applied `SYSTEM.md`
+edit reported as "no tool changes".
 
 Reporting failures there is the point of the summary: pi's reload swallows a
 module that will not import, so without it a broken extension is
@@ -269,11 +288,13 @@ still able to run a turn.
 
 **What is left:**
 
-- The **system prompt** is fixed at session creation (pi exposes no setter), and
-  the scope's **model default** is resolved in `startAgent`. Neither is
-  re-resolved by a reload, so a changed `SYSTEM.md` or model pick still needs a
-  new module. `/reload` says "no tool changes" in that case, which is honest but
-  not obviously the whole story to someone who just edited a prompt.
+- The scope's **model default** is resolved in `startAgent` and a reload does
+  not re-apply it: a conversation keeps the model it has been running rather
+  than having one swapped in underneath it. It is now _reported_ instead — the
+  notice names the scope's default when a new chat here would come up on a
+  different model, which happens when the pick was made in another view or on
+  disk. A default that is merely unavailable is not mentioned, since a new chat
+  would fall back to exactly what this session already took.
 - Whether a **provider** accepts a request whose history names a tool absent
   from the current tool list is untested — the mock endpoint accepts anything.
   It only arises after a revoke in a conversation that already used the tool.

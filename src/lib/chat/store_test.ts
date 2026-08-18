@@ -374,3 +374,29 @@ Deno.test("formatReloadNotice names failures first, then the tool changes", () =
     "only the first line of the error, and the failure comes first",
   );
 });
+
+// The two things a reload does that are NOT tool changes. Saying "no tool changes" and
+// stopping is what made a `/reload` after editing SYSTEM.md look like a no-op, when the
+// edit had in fact been applied.
+Deno.test("formatReloadNotice reports the system prompt and the scope's model", () => {
+  assertEquals(
+    formatReloadNotice({
+      added: [],
+      removed: [],
+      failed: [],
+      promptChanged: true,
+    }),
+    "Reloaded — no tool changes; system prompt updated",
+    "an applied SYSTEM.md edit has to be visible, or the reload reads as a no-op",
+  );
+  assertEquals(
+    formatReloadNotice({
+      added: ["t"],
+      removed: [],
+      failed: [],
+      modelDefault: { provider: "anthropic", id: "claude-opus-5" },
+    }),
+    "Reloaded — +t; model default is now anthropic/claude-opus-5 — new chat to use it",
+    "the model is reported, not applied: this conversation keeps the model it has",
+  );
+});
