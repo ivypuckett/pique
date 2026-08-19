@@ -2,6 +2,7 @@
 // convention: the desktop process owns these files and exposes them to the
 // frontend over win.bind (see the config* handlers in src/desktop.ts). Runs
 // Deno-side only. Each named config is one file: ~/.pique/<name>.json.
+import { dirname } from "@std/path";
 import { home } from "../home.ts";
 
 // A parsed JSON value — the boundary type carried over win.bind (see desktop.ts).
@@ -31,10 +32,7 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   const path = pathFor(name);
   // Owner-only: these are one user's prefs, and nothing else on the host has any
   // business reading them. Deno's default would be 0755/0644.
-  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), {
-    recursive: true,
-    mode: 0o700,
-  });
+  await Deno.mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n", {
     mode: 0o600,
   });

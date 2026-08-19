@@ -129,6 +129,22 @@ Deno.test("parentDir strips the last segment, bottoming out at root", () => {
   assertEquals(parentDir("/top"), "/");
 });
 
+// Windows paths reach the frontend already normalized to forward slashes (../path.ts),
+// so a drive letter is the only thing that distinguishes them here. The drive root is
+// the floor, the same way "/" is on POSIX.
+Deno.test("parentDir walks a normalized Windows path", () => {
+  assertEquals(parentDir("C:/Users/x/proj/a.ts"), "C:/Users/x/proj");
+  assertEquals(parentDir("C:/proj"), "C:");
+});
+
+// The drive letter is read as an ordinary segment, so "C:" lands in the set — posix
+// has no notion of a drive root. Inert: the set is only ever membership-tested against
+// real node paths, and no node is ever "C:". The hand-rolled loop did the same.
+Deno.test("dirtyDirsFrom collects ancestors of a normalized Windows path", () => {
+  const dirs = dirtyDirsFrom(["C:/proj/src/a.ts"]);
+  assertEquals([...dirs].sort(), ["C:", "C:/proj", "C:/proj/src"]);
+});
+
 Deno.test("dirtyDirsFrom collects every ancestor folder of each change", () => {
   const dirs = dirtyDirsFrom(["/root/a/b/c.ts", "/root/x.ts"]);
   // ancestors of the nested file, plus the root; never the files themselves.

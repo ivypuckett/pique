@@ -1,5 +1,11 @@
 import type { Entry } from "../fs.ts";
 
+// Path splitting here is hand-rolled on "/" deliberately, and must stay that way:
+// this module is bundled into the webview, and Vite cannot resolve JSR specifiers, so
+// @std/path is not importable from the frontend. It is also unnecessary — every path
+// reaching the frontend has been normalized to forward slashes by the backend (see
+// ../path.ts), so there is only ever one separator to split on, on every host.
+
 export interface Node {
   name: string;
   path: string;

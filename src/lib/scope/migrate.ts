@@ -10,6 +10,7 @@
 import { readJson, writeJson } from "../settings/file.ts";
 import { ROOT, scopeBoardPath, scopeDir, scopesDir } from "./paths.ts";
 import { writeScopeConfig } from "./config.ts";
+import { dirname } from "@std/path";
 import { home } from "../home.ts";
 
 async function exists(path: string): Promise<boolean> {
@@ -24,7 +25,7 @@ async function exists(path: string): Promise<boolean> {
 // SQLite leaves -shm/-wal siblings next to the db; move them with it or the board
 // opens as an empty database.
 async function moveBoard(from: string, to: string): Promise<void> {
-  await Deno.mkdir(to.slice(0, to.lastIndexOf("/")), { recursive: true });
+  await Deno.mkdir(dirname(to), { recursive: true });
   for (const suffix of ["", "-shm", "-wal"]) {
     if (await exists(from + suffix)) {
       await Deno.rename(from + suffix, to + suffix);

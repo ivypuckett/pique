@@ -1,6 +1,12 @@
 // Backend directory reader and editor for the file-tree module. Pure Deno fs — no
 // webview. Symlinks are reported (isSymlink) but NOT followed: isDir reflects the link
 // itself, so a symlink is never expandable and cannot create a traversal loop.
+//
+// Paths are built with @std/path so they are native, then normalized to forward
+// slashes on the way out — every path here is destined for the file tree in the
+// webview (see path.ts).
+import { dirname, join } from "@std/path";
+import { toWebPath } from "./path.ts";
 
 // A `type` alias (not `interface`) so Entry[] structurally satisfies win.bind's
 // object-shaped return type in desktop.ts — matching the codebase's ModelInfo pattern.
@@ -16,7 +22,7 @@ export async function listDir(path: string): Promise<Entry[]> {
   for await (const e of Deno.readDir(path)) {
     entries.push({
       name: e.name,
-      path: `${path.replace(/\/$/, "")}/${e.name}`,
+      path: toWebPath(join(path, e.name)),
       isDir: e.isDirectory,
       isSymlink: e.isSymlink,
     });
@@ -52,11 +58,11 @@ export async function createEntry(
   name: string,
 ): Promise<string> {
   const { rel, isDir } = parseEntryName(name);
-  const path = `${parent.replace(/\/$/, "")}/${rel}`;
-  await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+  const path = join(parent, rel);
+  await Deno.mkdir(dirname(path), { recursive: true });
   if (isDir) await Deno.mkdir(path);
   else await Deno.writeTextFile(path, "", { createNew: true });
-  return path;
+  return toWebPath(path);
 }
 
 // Rename an entry within its own directory, returning its new absolute path. Deno.rename
@@ -64,11 +70,15 @@ export async function createEntry(
 // typo'd rename must not eat another file.
 export async function renameEntry(path: string, name: string): Promise<string> {
   const { rel } = parseEntryName(name);
-  const dest = `${path.slice(0, path.lastIndexOf("/"))}/${rel}`;
-  if (dest === path) return path;
+  const dest = join(dirname(path), rel);
+  const web = toWebPath(dest);
+  // Normalized both sides: `path` arrives forward-slashed from the tree while `dest`
+  // is native, so comparing them raw would miss a rename to the name it already has
+  // and then refuse it as occupied by itself.
+  if (web === toWebPath(path)) return web;
   if (await exists(dest)) throw new Error(`already exists: ${rel}`);
   await Deno.rename(path, dest);
-  return dest;
+  return web;
 }
 
 // Delete an entry, recursively for a directory. Permanent — the confirmation the tree

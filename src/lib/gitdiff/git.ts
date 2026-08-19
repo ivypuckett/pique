@@ -1,6 +1,12 @@
 // Backend for the git-diff module. Pure Deno subprocess — no webview.
 // Runs `git diff` (working tree vs index) or `git diff --cached` (index vs HEAD)
 // and returns the raw unified-diff text. The frontend splits and renders it.
+//
+// Changed paths are compared against the file tree's own node paths, so they cross the
+// win.bind boundary and get normalized to forward slashes (see ../path.ts). Diff
+// headers are forward-slashed too — that is git's format, not the host's.
+import { dirname, join, relative } from "@std/path";
+import { toWebPath } from "../path.ts";
 
 // The directory to run git from. When a path is targeted we run from that path's own
 // directory so git discovers the repo that contains it — a workspace rooted at a parent
@@ -13,8 +19,7 @@ async function runDir(cwd: string, path?: string): Promise<string> {
   } catch {
     // fall through to the parent dir
   }
-  const i = path.lastIndexOf("/");
-  return i <= 0 ? "/" : path.slice(0, i);
+  return dirname(path);
 }
 
 // One changed path reported by `git status`, made absolute. `untracked` marks files
@@ -37,7 +42,7 @@ export function parsePorcelain(out: string, top: string): ChangedPath[] {
     const rel = rec.slice(3);
     if (xy[0] === "R" || xy[0] === "C") i++; // rename/copy: consume the trailing origin path
     changes.push({
-      path: `${top.replace(/\/$/, "")}/${rel}`,
+      path: toWebPath(join(top, rel)),
       untracked: xy === "??",
     });
   }
@@ -86,7 +91,7 @@ export async function findRepos(root: string, depth = 3): Promise<string[]> {
       continue;
     }
     out.push(
-      ...await findRepos(`${root.replace(/\/$/, "")}/${e.name}`, depth - 1),
+      ...await findRepos(join(root, e.name), depth - 1),
     );
   }
   return out;
@@ -174,12 +179,13 @@ export async function gitDiff(
     throw new Error(`No git repository in ${cwd}${below}.`);
   }
   if (repos.length === 1) return await diffIn(repos[0], staged);
-  const root = cwd.replace(/\/$/, "");
   const parts: string[] = [];
   for (const repo of repos) {
     const diff = await diffIn(repo, staged);
     if (diff !== "") {
-      parts.push(prefixDiffPaths(diff, repo.slice(root.length + 1)));
+      // Forward-slashed: this becomes part of a diff header path, which is git's
+      // format on every host, not the host separator.
+      parts.push(prefixDiffPaths(diff, toWebPath(relative(cwd, repo))));
     }
   }
   return parts.join("");
