@@ -15,6 +15,7 @@
 // arg/return shapes in sync by hand (separate module graphs, as with chat/ext).
 
 import { ensureRuntime } from "./agent.ts";
+import { home } from "../home.ts";
 
 // JSON-safe projection of a pi Provider for the Settings UI.
 export type ProviderInfo = {
@@ -156,9 +157,7 @@ export function apiKeyInteraction(apiKey: string) {
 // --- Runtime + models.json plumbing ------------------------------------------
 
 function piModelsPath(): string {
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("HOME is not set");
-  return `${home}/.pi/agent/models.json`;
+  return `${home()}/.pi/agent/models.json`;
 }
 
 // Missing or corrupt file → {} so callers add the first entry cleanly (mirrors

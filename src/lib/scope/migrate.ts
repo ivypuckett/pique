@@ -10,12 +10,7 @@
 import { readJson, writeJson } from "../settings/file.ts";
 import { ROOT, scopeBoardPath, scopeDir, scopesDir } from "./paths.ts";
 import { writeScopeConfig } from "./config.ts";
-
-function home(): string {
-  const h = Deno.env.get("HOME");
-  if (!h) throw new Error("HOME is not set");
-  return h;
-}
+import { home } from "../home.ts";
 
 async function exists(path: string): Promise<boolean> {
   try {

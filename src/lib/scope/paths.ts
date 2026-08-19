@@ -11,6 +11,7 @@
 // Everything a scope inherits it inherits through `chain`, which is the ONLY place
 // the shape of the hierarchy is encoded — widen it there if scopes ever nest deeper
 // than root → workspace. Runs Deno-side only.
+import { home } from "../home.ts";
 
 // Scope ids key a directory name, so constrain them the way kanban/paths.ts did the
 // board filename: no separators, no traversal.
@@ -38,12 +39,6 @@ export function assertViewId(id: string): void {
 export function chain(id: ScopeId): ScopeId[] {
   assertScopeId(id);
   return id === ROOT ? [ROOT] : [ROOT, id];
-}
-
-function home(): string {
-  const h = Deno.env.get("HOME");
-  if (!h) throw new Error("HOME is not set");
-  return h;
 }
 
 export function scopesDir(): string {

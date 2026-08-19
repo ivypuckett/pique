@@ -2,6 +2,7 @@
 // convention: the desktop process owns these files and exposes them to the
 // frontend over win.bind (see the config* handlers in src/desktop.ts). Runs
 // Deno-side only. Each named config is one file: ~/.pique/<name>.json.
+import { home } from "../home.ts";
 
 // A parsed JSON value — the boundary type carried over win.bind (see desktop.ts).
 export type Json = null | boolean | number | string | Json[] | {
@@ -13,9 +14,7 @@ const NAME_RE = /^[a-z][a-z0-9-]*$/;
 
 function pathFor(name: string): string {
   if (!NAME_RE.test(name)) throw new Error(`invalid config name: ${name}`);
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("HOME is not set");
-  return `${home}/.pique/${name}.json`;
+  return `${home()}/.pique/${name}.json`;
 }
 
 // Missing or corrupt file → null so the caller falls back to defaults, matching
@@ -41,13 +40,14 @@ export async function writeJson(name: string, data: unknown): Promise<void> {
   });
 }
 
-// Expand a leading `~` (`~` or `~/...`) against $HOME; `~user` and non-leading `~`
-// are left as-is. Blank input returns "".
-function expandTilde(dir: string, home: string): string {
+// Expand a leading `~` (`~` or `~/...`) against the home directory; `~user` and
+// non-leading `~` are left as-is. Blank input returns "". Resolved lazily so a path
+// that needs no expansion is still usable where home() would throw.
+function expandTilde(dir: string): string {
   const trimmed = dir.trim();
   if (trimmed === "") return "";
-  if (trimmed === "~") return home;
-  if (trimmed.startsWith("~/")) return home + trimmed.slice(1);
+  if (trimmed === "~") return home();
+  if (trimmed.startsWith("~/")) return home() + trimmed.slice(1);
   return trimmed;
 }
 
@@ -58,17 +58,16 @@ function expandTilde(dir: string, home: string): string {
 // and non-leading `~` are left as-is. `layout` is whatever readJson("layout")
 // returned — possibly null, pre-root, or malformed — so every field is guarded.
 export function resolveWorkspaceDir(layout: Json): string {
-  const home = Deno.env.get("HOME") ?? "/";
   if (layout && typeof layout === "object" && !Array.isArray(layout)) {
     const root = (layout as { [k: string]: Json }).root;
     if (root && typeof root === "object" && !Array.isArray(root)) {
       const dir = (root as { [k: string]: Json }).cwd;
       if (typeof dir === "string" && dir.trim() !== "") {
-        return expandTilde(dir, home);
+        return expandTilde(dir);
       }
     }
   }
-  return home;
+  return home();
 }
 
 // How many directory levels to descend, when the workspace root is not itself a git
@@ -125,7 +124,7 @@ export function resolveModuleDir(
   layout: Json,
 ): string {
   if (typeof override === "string" && override.trim() !== "") {
-    return expandTilde(override, Deno.env.get("HOME") ?? "/");
+    return expandTilde(override);
   }
   return resolveWorkspaceDir(layout);
 }

@@ -35,6 +35,22 @@ Deno.test("a scope owns one directory holding its agent dir, config and board", 
   });
 });
 
+// The scope dir backs config, board, sessions and the agent dir, so it resolving is
+// what boot depends on — on Windows, off USERPROFILE. The mixed separators below are
+// current behaviour, not endorsed: Windows accepts "/" on input, and joining is a
+// separate sweep.
+Deno.test("scopes resolve off USERPROFILE where HOME is unset", () => {
+  const prev = Deno.env.get("HOME");
+  Deno.env.delete("HOME");
+  Deno.env.set("USERPROFILE", "C:\\Users\\x");
+  try {
+    assertEquals(scopeDir("ws-1"), "C:\\Users\\x/.pique/scopes/ws-1");
+  } finally {
+    Deno.env.delete("USERPROFILE");
+    if (prev) Deno.env.set("HOME", prev);
+  }
+});
+
 Deno.test("a workspace inherits from root, root from nothing", () => {
   assertEquals(chain("ws-1"), ["root", "ws-1"]);
   assertEquals(chain(ROOT), ["root"]);
