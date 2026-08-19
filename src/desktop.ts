@@ -254,15 +254,6 @@ win.bind("scopeChatDefaults", async (arg) => {
   return chat.resolveChatDefaults(await scopeConfig.resolveScopeConfig(scope));
 });
 
-win.bind("pickDirectory", async (arg) => {
-  const { startDir } = arg as { startDir?: string };
-  const start = startDir && startDir.trim() !== ""
-    ? startDir
-    : await moduleDir();
-  const path = await dialog.pickDirectory(start);
-  return path ? { path } : null;
-});
-
 win.bind("openExternal", async (arg) => {
   const { url } = arg as { url: string };
   await dialog.openUrl(url);

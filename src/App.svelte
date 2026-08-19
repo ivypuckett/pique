@@ -30,15 +30,21 @@
     selectGroup,
     workspaceRailHidden,
   } from "./lib/store.ts";
-  import { pickDirectory } from "./lib/settings/bindings.ts";
   import { MODULES } from "./lib/modules/manifest.ts";
 
-  // ctrl+j o: pick a folder, then open a new workspace seeded with it. Picking is
-  // async (native dialog); on cancel — or in a browser tab, where there's no picker —
-  // pickDirectory resolves null and no workspace is created.
+  // ctrl+j o: open a new workspace and put the caret in its directory box (TopBar's
+  // PathInput), which starts at the directory the workspace inherits from root. The
+  // picker IS that box, so there is nothing to cancel — esc just leaves the new
+  // workspace on the inherited directory. Found by aria-label for the same reason
+  // visibleChatInput below is: the box lives in a component this one doesn't reach into.
   async function openWorkspaceFromPicker(): Promise<void> {
-    const dir = await pickDirectory();
-    if (dir) addWorkspace(dir);
+    addWorkspace();
+    await tick();
+    document
+      .querySelector<HTMLInputElement>(
+        'input[aria-label="Working directory for new modules in this workspace"]',
+      )
+      ?.focus();
   }
 
   const isMac = navigator.userAgent.includes("Mac");
@@ -234,6 +240,9 @@
 
         let handled = true;
         let sticky = true; // cleared by the strokes that open a tab
+        // Cleared by the strokes that place the caret themselves: settleFocus would
+        // otherwise hand it straight back to the terminal of the workspace they opened.
+        let settle = true;
         if (mode === "view") {
           switch (e.code) {
             case "KeyN": addView(); break;
@@ -245,7 +254,7 @@
         } else if (mode === "workspace") {
           switch (e.code) {
             case "KeyN": addWorkspace(); break;
-            case "KeyO": openWorkspaceFromPicker(); break;
+            case "KeyO": openWorkspaceFromPicker(); settle = false; break;
             case "KeyW": askCloseWorkspace(); break;
             case "KeyK": focusAdjacentWorkspace(-1); break;
             case "KeyJ": focusAdjacentWorkspace(1); break;
@@ -290,7 +299,7 @@
         if (handled) {
           e.preventDefault();
           e.stopPropagation();
-          settleFocus();
+          if (settle) settleFocus();
           if (sticky) armChord(mode); // stay in the mode and restart the idle timer
           else clearChord();
         } else {

@@ -1,6 +1,8 @@
 // Frontend half of the config binding contract. The backend half is the config*
 // win.bind handlers in src/desktop.ts, which delegate to settings/file.ts —
 // keep arg/return shapes in sync by hand (separate module graphs).
+import type { Entry } from "../fs.ts";
+
 // App-level user prefs — the ones that are NOT per-scope. Chat defaults used to live
 // here; they are now per-scope and inherited, so they sit in
 // ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
@@ -84,16 +86,24 @@ export function openExternal(url: string): boolean {
   return true;
 }
 
-interface DialogBindings {
-  pickDirectory(arg: { startDir?: string }): Promise<{ path: string } | null>;
+interface ListBindings {
+  listDir(arg: { path?: string }): Promise<Entry[]>;
 }
 
-// Opens the native folder picker via the desktop backend. Null in web-dev (no
-// bindings) and on cancel — callers keep the current value in both cases.
-export async function pickDirectory(startDir?: string): Promise<string | null> {
+// What `path` contains, for the working-directory picker (../PathInput.svelte). Shares
+// the file tree's listDir bind, which expands a leading "~" backend-side, so the picker
+// can list exactly the string the box shows.
+//
+// Null means the path is not a readable directory — it doesn't exist, or it's a file.
+// That is how the picker both greys out a bad path and refuses to commit it, so the two
+// failure modes must stay distinct from an empty directory. Web-dev, where there is no
+// backend at all, returns empty rather than null: no completions, but nothing rejected.
+export async function listEntries(path: string): Promise<Entry[] | null> {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
-  const res = await (b as DialogBindings | undefined)?.pickDirectory({
-    startDir,
-  });
-  return res?.path ?? null;
+  if (!b) return [];
+  try {
+    return await (b as ListBindings).listDir({ path });
+  } catch {
+    return null;
+  }
 }

@@ -217,7 +217,7 @@ what was looked at.
   paths and `.` / `..` segments. `packageSlug` percent-encodes and then asserts
   that no separator survived. No traversal found on any `win.bind` path.
 - **Command injection.** Every `Deno.Command` is an argv array with no shell:
-  `git.ts`, `dialog.ts` (kdialog, zenity, xdg-open), and the PTY spawn in
+  `git.ts`, `dialog.ts` (xdg-open), and the PTY spawn in
   `terminal/pty.ts`. `openUrlCommand` is https-only and its one caller passes a
   compiled-in constant.
 - **SQL injection.** `kanban/board.ts` is parameterized throughout; the single

@@ -9,39 +9,21 @@
     workspaceRailHidden,
   } from "./store.ts";
   import { settingsOpen } from "./settings/store.ts";
-  import { pickDirectory } from "./settings/bindings.ts";
+  import PathInput from "./PathInput.svelte";
   import { ROOT } from "./scope/paths.ts";
 
   // This workspace's own override, falling back to root's (root has nothing to fall
   // back to); blank shows a "~" hint, since the backend resolves the default to the
-  // home directory.
+  // home directory. It is also where the picker starts, so editing a workspace's
+  // directory begins at the one it is already using.
   const dir = $derived(
     $activeWorkspace.cwd ?? ($activeWorkspace.id === ROOT ? "" : $session.root.cwd) ?? "",
   );
-
-  // The button is a fixed 32ch monospace box; ~28 chars fit inside its padding.
-  // A path longer than that keeps its tail (the meaningful end) behind a leading
-  // "…"; CSS ellipsis can't do this on the left without reordering absolute paths.
-  const MAX = 28;
-  const shown = $derived.by(() => {
-    const s = dir || "~";
-    return s.length > MAX ? "…" + s.slice(-(MAX - 1)) : s;
-  });
-
-  async function pickDir(): Promise<void> {
-    const picked = await pickDirectory(dir);
-    if (picked) setWorkspaceDir(picked);
-  }
 </script>
 
 <header class="flex h-9 shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-3">
   <div class="flex min-w-0 items-center gap-3">
-    <button
-      class="input input-bordered input-xs w-[32ch] shrink-0 overflow-hidden whitespace-nowrap text-left font-mono text-xs"
-      aria-label="Working directory for new modules in this workspace"
-      title={dir || "~"}
-      onclick={pickDir}
-    >{shown}</button>
+    <PathInput path={dir} onCommit={setWorkspaceDir} />
     <div class="flex items-center gap-1">
       <span class="text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">View</span>
       <ul class="menu menu-horizontal menu-xs gap-1 p-0">
