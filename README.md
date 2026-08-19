@@ -11,6 +11,11 @@ A harness to get you curious.
    workspace carry parallel lines of work.)
 2. System prompts can do more harm than good. Not specifying one within pique
    removes it entirely.
+3. Linux, macOS and Windows are all supported targets. Linux is what pique is
+   developed against today, and the codebase still carries POSIX assumptions the
+   other two trip over — an unset `$HOME`, `kdialog`/`zenity` as the only folder
+   pickers, `/` hardcoded as the path separator. Those are bugs to fix, not the
+   design.
 
 ## Information Architecture
 
