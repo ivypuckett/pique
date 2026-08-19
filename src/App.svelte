@@ -74,6 +74,30 @@
     return null;
   }
 
+  // The visible chat's message box. Same reason visibleTree walks a list: every view of
+  // every workspace keeps its chat mounted, so the one on screen is the one with a
+  // layout box. Chat is the center column of every view and has no hidden state, so
+  // there is always exactly one.
+  function visibleChatInput(): HTMLElement | null {
+    const inputs = document.querySelectorAll<HTMLElement>('input[aria-label="Chat message"]');
+    for (const input of inputs) {
+      if (input.offsetParent !== null) return input;
+    }
+    return null;
+  }
+
+  // ctrl+shift+m: put the caret in the message box, from wherever you were. One-way on
+  // purpose, unlike ctrl+shift+e — the way back is whatever you came from, and the chat
+  // column is always on screen, so there is nothing to reveal first.
+  //
+  // m for the box's own "Message…", and not c: the webview keeps ctrl+shift+c for copy,
+  // which a terminal tab needs since ctrl+c there is the interrupt. Shifted for the
+  // reason ctrl+shift+e is — the capture-phase listener swallows whatever it binds, and
+  // a bare ctrl+m is the return key (^M) to anything running in a terminal.
+  function focusChat() {
+    visibleChatInput()?.focus();
+  }
+
   // The presented view's active tab: only its content is on screen (hidden tabs and
   // background views are display:none, so offsetParent is null) — and a module can keep
   // several panes mounted itself — Library hides its inactive sub-tab — so the same test
@@ -291,6 +315,13 @@
         e.preventDefault();
         e.stopPropagation();
         toggleEditorFocus();
+      }
+
+      // ctrl+shift+m: put the caret in the chat's message box — see focusChat.
+      if (e.code === "KeyM" && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusChat();
       }
 
       // ctrl+,: open the settings modal. A plain shortcut, not a chord — it

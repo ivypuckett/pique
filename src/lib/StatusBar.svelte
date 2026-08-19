@@ -83,5 +83,9 @@
       <kbd class="kbd kbd-xs">{mod}⇧E</kbd>
       <span class="opacity-70">tree</span>
     </span>
+    <span class="hidden items-center gap-1 @[760px]:flex">
+      <kbd class="kbd kbd-xs">{mod}⇧M</kbd>
+      <span class="opacity-70">message</span>
+    </span>
   {/if}
 </footer>

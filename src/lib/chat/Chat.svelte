@@ -158,6 +158,7 @@
       <input
         class="input input-bordered flex-1"
         placeholder="Message… (/ for commands)"
+        aria-label="Chat message"
         bind:value={$input}
         bind:this={inputEl}
         oninput={() => { dismissed = false; }}

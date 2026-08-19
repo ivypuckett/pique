@@ -32,7 +32,8 @@ What _does_ work in web mode, and is worth testing here:
   `ctrl+,`). `ctrl+t e` and `ctrl+shift+e` select the editor row, but the tree
   itself needs the desktop app — web mode renders a placeholder in its place, so
   neither the caret landing in the tree nor `ctrl+shift+e`'s trip back can be
-  seen from here.
+  seen from here. `ctrl+shift+m` is inert here for a related reason: the message
+  box is disabled without a backend, and a disabled input takes no focus.
 - Settings modal UI and the theme switcher (applies live to
   `<html data-theme>`).
 - The module rail: every row, the tab strip filtering to the selected one, `+`

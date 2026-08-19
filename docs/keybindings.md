@@ -83,6 +83,7 @@ No prefix, no mode.
 | `ctrl+b` | show/hide the workspace rail |
 | `ctrl+shift+b` | collapse/expand the right pane |
 | `ctrl+shift+e` | file tree ⇄ the file open beside it |
+| `ctrl+shift+m` | put the caret in the chat's message box |
 | `ctrl+,` | settings |
 | `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in, out, reset |
 
@@ -99,6 +100,22 @@ because an editor tab is `$EDITOR` running in a terminal and the capture-phase
 listener swallows whatever it binds: a bare `ctrl+e` would take vim's
 scroll-one-line away in exactly the place this shortcut exists to serve. `ctrl+e`
 stays unbound.
+
+`ctrl+shift+m` reaches the message box from anywhere, for the moment mid-command
+when you want to ask instead of type. It is one-way, unlike `ctrl+shift+e`: the
+way back is whatever you came from, and the chat column is on screen in every
+view, so there is nothing to reveal first.
+
+`m` is for the box's own *Message…*, and the letter matters twice over. It is
+**shifted** for the reason the editing shortcut is — the capture-phase listener
+swallows whatever it binds, and a bare `ctrl+m` is the return key (`^M`) to
+anything running in a terminal. And it is not `c`, the obvious first choice: the
+webview keeps `ctrl+shift+c` for copy, which a terminal tab has no way to spare,
+since `ctrl+c` there is the interrupt.
+
+The message box is disabled until the agent is ready and while it is streaming,
+and a disabled input takes no focus, so the shortcut is inert in those windows —
+including all of web mode, where there is no backend behind the chat.
 
 Bindings are matched on `event.code`, not `event.key`: `ctrl+shift+=` is how `+`
 is typed on most layouts, and reading `key` there would see `+` on one keyboard
