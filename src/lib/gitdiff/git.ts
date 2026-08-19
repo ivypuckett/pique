@@ -44,13 +44,11 @@ export function parsePorcelain(out: string, top: string): ChangedPath[] {
   return changes;
 }
 
-// Changed paths for the single repo containing `dir`, or null if `dir` is not in a repo.
-async function repoChanges(dir: string): Promise<ChangedPath[] | null> {
-  const top = await run(dir, ["rev-parse", "--show-toplevel"]);
-  if (top === null) return null;
-  const out = await run(dir, ["status", "--porcelain", "-z"]);
+// Changed paths for the repo whose toplevel is `top`, or null if git fails there.
+async function repoChanges(top: string): Promise<ChangedPath[] | null> {
+  const out = await run(top, ["status", "--porcelain", "-z"]);
   if (out === null) return null;
-  return parsePorcelain(out, top.trim());
+  return parsePorcelain(out, top);
 }
 
 // Run git in `dir`, returning stdout, or null on a non-zero exit (e.g. not a repo).
@@ -66,18 +64,14 @@ async function run(dir: string, args: string[]): Promise<string | null> {
   return new TextDecoder().decode(stdout);
 }
 
-// Changed paths under `root`. If `root` is itself a repo we read it directly; otherwise
-// (a workspace holding many repos) we descend through non-repo subdirs to find the repos
-// inside and union their changes, so their folders can be highlighted. Depth-capped and
-// skipping hidden dirs / node_modules to keep the scan cheap.
-export async function changedPaths(
-  root: string,
-  depth = 3,
-): Promise<ChangedPath[]> {
-  const direct = await repoChanges(root);
-  if (direct !== null) return direct;
+// Toplevel dirs of the repos at or under `root`. If `root` is inside a repo that repo is
+// the whole answer; otherwise (a workspace holding many repos) we descend through the
+// non-repo subdirs to find the repos inside. Depth-capped and skipping hidden dirs /
+// node_modules to keep the scan cheap. Sorted so the caller's output is stable.
+export async function findRepos(root: string, depth = 3): Promise<string[]> {
+  const top = await run(root, ["rev-parse", "--show-toplevel"]);
+  if (top !== null) return [top.trim()];
   if (depth <= 0) return [];
-  const out: ChangedPath[] = [];
   let subs: Deno.DirEntry[];
   try {
     subs = [];
@@ -85,30 +79,68 @@ export async function changedPaths(
   } catch {
     return [];
   }
+  subs.sort((a, b) => a.name.localeCompare(b.name));
+  const out: string[] = [];
   for (const e of subs) {
     if (!e.isDirectory || e.name.startsWith(".") || e.name === "node_modules") {
       continue;
     }
     out.push(
-      ...await changedPaths(`${root.replace(/\/$/, "")}/${e.name}`, depth - 1),
+      ...await findRepos(`${root.replace(/\/$/, "")}/${e.name}`, depth - 1),
     );
   }
   return out;
 }
 
-export async function gitDiff(
-  cwd: string,
+// Changed paths under `root`, unioned across every repo found there, so the folders of a
+// multi-repo workspace can be highlighted too.
+export async function changedPaths(
+  root: string,
+  depth = 3,
+): Promise<ChangedPath[]> {
+  const out: ChangedPath[] = [];
+  for (const repo of await findRepos(root, depth)) {
+    out.push(...await repoChanges(repo) ?? []);
+  }
+  return out;
+}
+
+// Re-root one repo's diff under `prefix` (its path relative to the workspace) so files
+// from different repos stay distinguishable once several diffs are concatenated — two
+// repos both changing src/a.ts would otherwise render as the same name twice.
+// Only the header lines of each file section are rewritten: a removed body line reading
+// "-- x" arrives as "--- x", so anything from the first `@@` onward is left alone.
+export function prefixDiffPaths(diff: string, prefix: string): string {
+  if (prefix === "") return diff;
+  let header = false;
+  return diff.split("\n").map((line) => {
+    if (line.startsWith("diff --git ")) header = true;
+    else if (line.startsWith("@@")) header = false;
+    if (!header) return line;
+    const m = line.match(/^(diff --git a\/)(.*)( b\/)(.*)$/);
+    if (m) return `${m[1]}${prefix}/${m[2]}${m[3]}${prefix}/${m[4]}`;
+    for (const [tag, side] of [["--- ", "a/"], ["+++ ", "b/"]]) {
+      if (line.startsWith(tag + side)) {
+        return `${tag}${side}${prefix}/${line.slice(tag.length + side.length)}`;
+      }
+    }
+    return line; // /dev/null, index, mode and similarity lines carry no path to re-root
+  }).join("\n");
+}
+
+// Run `git diff` in `dir` and return its output, throwing git's own message on failure.
+async function diffIn(
+  dir: string,
   staged: boolean,
   path?: string,
 ): Promise<string> {
-  const args = [
-    "diff",
-    ...(staged ? ["--cached"] : []),
-    ...(path ? ["--", path] : []),
-  ];
   const cmd = new Deno.Command("git", {
-    args,
-    cwd: await runDir(cwd, path),
+    args: [
+      "diff",
+      ...(staged ? ["--cached"] : []),
+      ...(path ? ["--", path] : []),
+    ],
+    cwd: dir,
     stdout: "piped",
     stderr: "piped",
   });
@@ -119,4 +151,36 @@ export async function gitDiff(
     throw new Error(msg || `git diff exited with code ${code}`);
   }
   return new TextDecoder().decode(stdout);
+}
+
+export async function gitDiff(
+  cwd: string,
+  staged: boolean,
+  path?: string,
+  depth = 3,
+): Promise<string> {
+  if (path) return await diffIn(await runDir(cwd, path), staged, path);
+  // A workspace rooted at a parent of many repos (e.g. ~/workspace) is not itself a repo,
+  // so `git diff` there only prints its "not a git repository" usage text. Diff each repo
+  // underneath instead and concatenate, which is what the file tree already highlights.
+  const repos = await findRepos(cwd, depth);
+  // Nothing here is a repo. Say so plainly rather than letting git print its --no-index
+  // usage text, and name the depth we searched — repos nested deeper than the configured
+  // gitScanDepth look identical to none at all from here.
+  if (repos.length === 0) {
+    const below = depth > 0
+      ? ` or the ${depth} level${depth === 1 ? "" : "s"} below it`
+      : "";
+    throw new Error(`No git repository in ${cwd}${below}.`);
+  }
+  if (repos.length === 1) return await diffIn(repos[0], staged);
+  const root = cwd.replace(/\/$/, "");
+  const parts: string[] = [];
+  for (const repo of repos) {
+    const diff = await diffIn(repo, staged);
+    if (diff !== "") {
+      parts.push(prefixDiffPaths(diff, repo.slice(root.length + 1)));
+    }
+  }
+  return parts.join("");
 }

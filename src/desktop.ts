@@ -301,8 +301,16 @@ win.bind("gitDiff", async (arg) => {
     staged?: boolean;
     path?: string;
   };
+  const depth = settings.resolveGitScanDepth(
+    await settings.readJson("settings"),
+  );
   return {
-    diff: await git.gitDiff(await moduleDir(override), staged ?? false, path),
+    diff: await git.gitDiff(
+      await moduleDir(override),
+      staged ?? false,
+      path,
+      depth,
+    ),
   };
 });
 
