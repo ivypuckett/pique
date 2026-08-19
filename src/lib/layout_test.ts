@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { railGroups } from "./modules/manifest.ts";
 import {
   createInitialView,
   gridTemplateColumns,
@@ -12,7 +13,7 @@ import {
   addEditorTab,
   addTab,
   closeTab,
-  EXPLORER,
+  EDITOR,
   focusAdjacentGroup,
   focusAdjacentTab,
   focusTabAt,
@@ -28,7 +29,7 @@ import {
 Deno.test("createInitialView starts at chat 57ch, tree 30ch", () => {
   const v = createInitialView();
   assertEquals(v.chatWidthCh, 57);
-  assertEquals(v.explorerWidthCh, 30);
+  assertEquals(v.editorWidthCh, 30);
 });
 
 Deno.test("the right pane starts on one tab", () => {
@@ -50,12 +51,12 @@ Deno.test("resizeBoundary clamps both panes to MIN_WIDTH_CH", () => {
   );
 });
 
-Deno.test("resizeBoundary explorer-tabs sets the file tree's character width", () => {
-  const v = resizeBoundary(createInitialView(), "explorer-tabs", 24, 100);
-  assertEquals(v.explorerWidthCh, 24);
+Deno.test("resizeBoundary editor-tabs sets the file tree's character width", () => {
+  const v = resizeBoundary(createInitialView(), "editor-tabs", 24, 100);
+  assertEquals(v.editorWidthCh, 24);
   // clamped to MIN_WIDTH_CH at the edges
   assertEquals(
-    resizeBoundary(v, "explorer-tabs", 2, 100).explorerWidthCh,
+    resizeBoundary(v, "editor-tabs", 2, 100).editorWidthCh,
     MIN_WIDTH_CH,
   );
 });
@@ -144,12 +145,12 @@ Deno.test("addTab appends a second terminal", () => {
 });
 
 Deno.test("addTab ignores a path-scoped diff when opening the git diff module", () => {
-  // The diff from the tree is in the explorer group, so it is not the Git Diff module
+  // The diff from the tree is in the editor group, so it is not the Git Diff module
   // and cannot be revealed in its place.
   const v = addTab(addDiffTab(createInitialView(), "src/a.ts"), "gitdiff");
   assertEquals(v.right.tabs.map((t) => [t.title, t.group]), [
     ["Terminal", "terminal"],
-    ["a.ts", EXPLORER],
+    ["a.ts", EDITOR],
     ["Git Diff", "gitdiff"],
   ]);
   assertEquals(v.right.activeGroup, "gitdiff");
@@ -206,8 +207,8 @@ Deno.test("newTab does nothing on a row that may only hold one", () => {
   assertEquals(newTab(v), v);
 });
 
-Deno.test("newTab does nothing on the explorer row — its tabs come from the tree", () => {
-  const v = selectGroup(createInitialView(), EXPLORER);
+Deno.test("newTab does nothing on the editor row — its tabs come from the tree", () => {
+  const v = selectGroup(createInitialView(), EDITOR);
   assertEquals(newTab(v), v);
 });
 
@@ -226,9 +227,9 @@ Deno.test("selectGroup opens the module when its row is empty", () => {
   assertEquals(groupTabs(v, "library").map((t) => t.title), ["Library"]);
 });
 
-Deno.test("selectGroup selects the empty explorer row rather than opening a module", () => {
-  const v = selectGroup(createInitialView(), EXPLORER);
-  assertEquals(v.right.activeGroup, EXPLORER);
+Deno.test("selectGroup selects the empty editor row rather than opening a module", () => {
+  const v = selectGroup(createInitialView(), EDITOR);
+  assertEquals(v.right.activeGroup, EDITOR);
   assertEquals(v.right.tabs.length, 1); // just the terminal it started with
   assertEquals(activeTabId(v), "");
 });
@@ -246,11 +247,11 @@ Deno.test("selectGroup reopens a module whose last tab was closed", () => {
 });
 
 Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
-  // rail order: explorer, terminal, gitdiff, kanban, library, automatons
+  // rail order: editor, terminal, gitdiff, kanban, library, automatons
   let v = createInitialView(); // terminal selected
   v = focusAdjacentGroup(v, -1);
-  assertEquals(v.right.activeGroup, EXPLORER);
-  assertEquals(focusAdjacentGroup(v, -1).right.activeGroup, EXPLORER); // clamped at the top
+  assertEquals(v.right.activeGroup, EDITOR);
+  assertEquals(focusAdjacentGroup(v, -1).right.activeGroup, EDITOR); // clamped at the top
   v = focusAdjacentGroup(v, 1);
   assertEquals(v.right.activeGroup, "terminal");
   v = focusAdjacentGroup(v, 1);
@@ -272,9 +273,9 @@ Deno.test("focusAdjacentGroup shows an already-open row without opening a second
   assertEquals(groupTabs(v, "gitdiff").map((t) => t.id), ["right-2"]);
 });
 
-Deno.test("focusAdjacentGroup opens nothing on the explorer row", () => {
-  const v = focusAdjacentGroup(createInitialView(), -1); // onto the explorer row
-  assertEquals(v.right.activeGroup, EXPLORER);
+Deno.test("focusAdjacentGroup opens nothing on the editor row", () => {
+  const v = focusAdjacentGroup(createInitialView(), -1); // onto the editor row
+  assertEquals(v.right.activeGroup, EDITOR);
   assertEquals(v.right.tabs.length, 1); // just the terminal it started with
   assertEquals(activeTabId(v), "");
 });
@@ -306,7 +307,7 @@ Deno.test("focusTabAt shows the nth tab of the group and ignores a digit past th
 });
 
 Deno.test("focusAdjacentTab is a no-op on an empty group", () => {
-  const empty = selectGroup(createInitialView(), EXPLORER); // no files open beside the tree
+  const empty = selectGroup(createInitialView(), EDITOR); // no files open beside the tree
   assertEquals(activeTabId(focusAdjacentTab(empty, 1)), "");
 });
 
@@ -315,16 +316,16 @@ Deno.test("closeTab refuses to close a singleton row's module", () => {
   assertEquals(closeTab(v, "right-2"), v); // the row IS the module; nothing to close
 });
 
-Deno.test("closeTab still closes a file open in the explorer row", () => {
-  const v = addEditorTab(createInitialView(), "src/a.ts"); // a terminal, group explorer
+Deno.test("closeTab still closes a file open in the editor row", () => {
+  const v = addEditorTab(createInitialView(), "src/a.ts"); // a terminal, group editor
   const closed = closeTab(v, activeTabId(v));
-  assertEquals(groupTabs(closed, EXPLORER), []);
-  assertEquals(closed.right.activeGroup, EXPLORER); // the row stays selected, tree and all
+  assertEquals(groupTabs(closed, EDITOR), []);
+  assertEquals(closed.right.activeGroup, EDITOR); // the row stays selected, tree and all
 });
 
-Deno.test("closeTab still closes a path-scoped diff in the explorer row", () => {
-  const v = addDiffTab(createInitialView(), "src/a.ts"); // a gitdiff, group explorer
-  assertEquals(groupTabs(closeTab(v, activeTabId(v)), EXPLORER), []);
+Deno.test("closeTab still closes a path-scoped diff in the editor row", () => {
+  const v = addDiffTab(createInitialView(), "src/a.ts"); // a gitdiff, group editor
+  assertEquals(groupTabs(closeTab(v, activeTabId(v)), EDITOR), []);
 });
 
 Deno.test("closeTab removes a tab", () => {
@@ -397,16 +398,16 @@ Deno.test("isViewState accepts a real view and rejects malformed shapes", () => 
   assertEquals(isViewState(noTabs), true);
 });
 
-Deno.test("addEditorTab adds a terminal tab in the explorer group, titled with the basename", () => {
+Deno.test("addEditorTab adds a terminal tab in the editor group, titled with the basename", () => {
   const v = createInitialView();
   const before = v.right.tabs.length;
   const next = addEditorTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
   assertEquals(next.right.tabs.length, before + 1);
   const tab = next.right.tabs.at(-1)!;
   assertEquals(tab.kind, "terminal");
-  assertEquals(tab.group, EXPLORER);
+  assertEquals(tab.group, EDITOR);
   assertEquals(tab.title, "layout.ts");
-  assertEquals(next.right.activeGroup, EXPLORER);
+  assertEquals(next.right.activeGroup, EDITOR);
   assertEquals(activeTabId(next), tab.id);
   assertEquals(tab.props, {
     argv: ["$EDITOR", "/home/ivy/workspace/pique/src/lib/layout.ts"],
@@ -420,23 +421,23 @@ Deno.test("addEditorTab falls back to the full path when there is no basename", 
   assertEquals(tab.title, "/");
 });
 
-Deno.test("editors stack up in the explorer group beside the tree", () => {
+Deno.test("editors stack up in the editor group beside the tree", () => {
   let v = addEditorTab(createInitialView(), "src/a.ts");
   v = addEditorTab(v, "src/b.ts");
-  assertEquals(groupTabs(v, EXPLORER).map((t) => t.title), ["a.ts", "b.ts"]);
+  assertEquals(groupTabs(v, EDITOR).map((t) => t.title), ["a.ts", "b.ts"]);
   assertEquals(groupTabs(v, "terminal").length, 1); // the shell is untouched
 });
 
-Deno.test("addDiffTab adds a gitdiff tab in the explorer group, scoped to the file path", () => {
+Deno.test("addDiffTab adds a gitdiff tab in the editor group, scoped to the file path", () => {
   const v = createInitialView();
   const before = v.right.tabs.length;
   const next = addDiffTab(v, "/home/ivy/workspace/pique/src/lib/layout.ts");
   assertEquals(next.right.tabs.length, before + 1);
   const tab = next.right.tabs.at(-1)!;
   assertEquals(tab.kind, "gitdiff");
-  assertEquals(tab.group, EXPLORER);
+  assertEquals(tab.group, EDITOR);
   assertEquals(tab.title, "layout.ts");
-  assertEquals(next.right.activeGroup, EXPLORER);
+  assertEquals(next.right.activeGroup, EDITOR);
   assertEquals(activeTabId(next), tab.id);
   assertEquals(tab.props, {
     path: "/home/ivy/workspace/pique/src/lib/layout.ts",
@@ -503,7 +504,7 @@ Deno.test("migrateView groups a pre-groups pane by kind and keeps the shown tab"
   // and the rest of the view survives
   assertEquals(v.id, "view-1");
   assertEquals(v.chatWidthCh, 80);
-  assertEquals(v.explorerWidthCh, 24); // carried out of the old explorer object
+  assertEquals(v.editorWidthCh, 24); // carried out of the old explorer object
 });
 
 Deno.test("migrateView keeps the first of a singleton kind that was duplicated", () => {
@@ -518,7 +519,7 @@ Deno.test("migrateView keeps the first of a singleton kind that was duplicated",
   assertEquals(activeTabId(v), "right-1");
 });
 
-Deno.test("migrateView moves editors and path-scoped diffs into the explorer group", () => {
+Deno.test("migrateView moves editors and path-scoped diffs into the editor group", () => {
   const v = migrateView(oldView([
     { id: "right-1", title: "Terminal", kind: "terminal" },
     {
@@ -529,9 +530,9 @@ Deno.test("migrateView moves editors and path-scoped diffs into the explorer gro
     },
     { id: "right-3", title: "b.ts", kind: "gitdiff", props: { path: "src/b.ts" } },
   ], "right-2"))!;
-  assertEquals(groupTabs(v, EXPLORER).map((t) => t.title), ["a.ts", "b.ts"]);
+  assertEquals(groupTabs(v, EDITOR).map((t) => t.title), ["a.ts", "b.ts"]);
   assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1"]);
-  assertEquals(v.right.activeGroup, EXPLORER);
+  assertEquals(v.right.activeGroup, EDITOR);
   assertEquals(activeTabId(v), "right-2");
 });
 
@@ -566,22 +567,22 @@ Deno.test("migrateView adopts a grouped pane whose width is still in an explorer
     tabs: [
       { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
       { id: "right-2", title: "Kanban", kind: "kanban", group: "kanban" },
-      { id: "right-3", title: "a.ts", kind: "terminal", group: EXPLORER, props: { path: "a" } },
+      { id: "right-3", title: "a.ts", kind: "terminal", group: EDITOR, props: { path: "a" } },
     ],
-    activeTabs: { terminal: "right-1", kanban: "right-2", explorer: "right-3" },
+    activeTabs: { terminal: "right-1", kanban: "right-2", editor: "right-3" },
   }))!;
   assertEquals(v.right.tabs.map((t) => [t.id, t.group]), [
     ["right-1", "terminal"],
     ["right-2", "kanban"],
-    ["right-3", EXPLORER],
+    ["right-3", EDITOR],
   ]);
   assertEquals(v.right.activeGroup, "kanban"); // the selected row is kept, not re-derived
   assertEquals(v.right.activeTabs, {
     terminal: "right-1",
     kanban: "right-2",
-    explorer: "right-3",
+    editor: "right-3",
   });
-  assertEquals(v.explorerWidthCh, 42); // carried out of the old explorer object
+  assertEquals(v.editorWidthCh, 42); // carried out of the old explorer object
   assertEquals(isViewState(v), true);
 });
 
@@ -607,6 +608,71 @@ Deno.test("migrateView keeps a grouped pane's selected row even with nothing ope
   assertEquals(activeTabId(v), "");
 });
 
+// The rename of the explorer row to the editor. The dangerous shape is the second one: a
+// view written by the build immediately before the rename is structurally current, so it
+// reaches isViewState and would be adopted whole, its tabs stranded in a row the rail no
+// longer lists.
+Deno.test("migrateView renames the explorer group an older grouped pane still names", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "explorer",
+    tabs: [
+      { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
+      { id: "right-2", title: "a.ts", kind: "terminal", group: "explorer", props: { path: "a" } },
+    ],
+    activeTabs: { terminal: "right-1", explorer: "right-2" },
+  }))!;
+  assertEquals(v.right.activeGroup, EDITOR);
+  assertEquals(v.right.tabs.map((t) => t.group), ["terminal", EDITOR]);
+  assertEquals(v.right.activeTabs, { terminal: "right-1", editor: "right-2" });
+  assertEquals(isViewState(v), true);
+});
+
+// The shape the build immediately before the rename wrote: the row's id in three places,
+// and the width under its old name.
+function preRenameView(widthKey: string): unknown {
+  return {
+    id: "view-1",
+    chatWidthCh: 57,
+    [widthKey]: 42,
+    right: {
+      collapsed: false,
+      activeGroup: "explorer",
+      tabs: [{
+        id: "right-1",
+        title: "a.ts",
+        kind: "terminal",
+        group: "explorer",
+        props: { path: "a" },
+      }],
+      activeTabs: { explorer: "right-1" },
+    },
+  };
+}
+
+Deno.test("migrateView renames the explorer group and carries its width across", () => {
+  const v = migrateView(preRenameView("explorerWidthCh"))!;
+  assertEquals(v.right.activeGroup, EDITOR);
+  assertEquals(v.right.tabs[0].group, EDITOR);
+  assertEquals(v.right.activeTabs, { editor: "right-1" });
+  assertEquals(v.editorWidthCh, 42);
+  assertEquals("explorerWidthCh" in v, false); // moved, so it stops being written back
+  assertEquals(railGroups().includes(v.right.activeGroup), true); // reachable from the rail
+});
+
+// Why the rewrite runs ahead of migrateView's isViewState short circuit rather than inside
+// the migrations below it. isRightState asks only that a group be a non-empty string, so a
+// view still naming the explorer passes the guard — and short-circuiting there would adopt
+// it whole, stranding the tree's tabs in a row railGroups no longer offers.
+Deno.test("migrateView renames the explorer group even in a view the guard accepts", () => {
+  const accepted = preRenameView("editorWidthCh");
+  assertEquals(isViewState(accepted), true);
+  const v = migrateView(accepted)!;
+  assertEquals(v.right.activeGroup, EDITOR);
+  assertEquals(v.right.tabs[0].group, EDITOR);
+  assertEquals(v.right.activeTabs, { editor: "right-1" });
+});
+
 Deno.test("migrateView refuses a view with no recognisable pane", () => {
   assertEquals(migrateView(null), null);
   assertEquals(migrateView({}), null);
@@ -622,7 +688,7 @@ Deno.test("migrateView fills in a width it cannot read", () => {
   raw.explorer = { widthCh: "wide" };
   const v = migrateView(raw)!;
   assertEquals(v.chatWidthCh, base.chatWidthCh);
-  assertEquals(v.explorerWidthCh, base.explorerWidthCh);
+  assertEquals(v.editorWidthCh, base.editorWidthCh);
 });
 
 Deno.test("a migrated view passes the guard the store uses", () => {

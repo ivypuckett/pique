@@ -10,7 +10,7 @@
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
   import { ROOT } from "./lib/scope/paths.ts";
-  import { activeTabId, EXPLORER } from "./lib/layout.ts";
+  import { activeTabId, EDITOR } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
     activeView,
@@ -111,13 +111,30 @@
     focusActiveTab();
   }
 
-  // ctrl+t e: show the explorer row and put the caret in the tree. The tree is that row's
+  // ctrl+t e: show the editor row and put the caret in the tree. The tree is that row's
   // content, so there is nothing to toggle. Focusing it is an explicit step — settleFocus
   // only ever hands focus to a terminal.
-  async function showExplorer() {
-    onTabs((id) => selectGroup(id, EXPLORER));
+  async function showEditor() {
+    onTabs((id) => selectGroup(id, EDITOR));
     await tick();
     visibleTree()?.focus();
+  }
+
+  // ctrl+shift+e: the round trip between the tree and the file you are editing, in one
+  // key. Opening a file already lands the caret in it (addEditorTab sets autoFocus), so
+  // this is the way back — and pressing it again in the tree returns you to the tab you
+  // came from, which is why it is a plain shortcut and not another ctrl+t stroke.
+  //
+  // Shifted deliberately: an editor tab is $EDITOR in a terminal, and the capture-phase
+  // listener swallows whatever it binds, so a bare ctrl+e would take vim's scroll-by-a-
+  // line away in the one place this shortcut is for.
+  //
+  // Nothing open beside the tree means nothing to go back to: focusActiveTab finds no
+  // shown pane and the caret stays put.
+  function toggleEditorFocus() {
+    const tree = visibleTree();
+    if (tree?.contains(document.activeElement)) focusActiveTab();
+    else showEditor();
   }
 
   // Every chord stroke changes what is on screen, so every one of them ends here: take
@@ -227,9 +244,9 @@
               onTabs((id) => selectGroup(id, def.kind));
             } else {
               switch (e.code) {
-                // e is the explorer's letter — it has no module, so it is not in the
+                // e is the editor's letter — it has no module, so it is not in the
                 // manifest — and n is one more of whatever row you are on.
-                case "KeyE": showExplorer(); break;
+                case "KeyE": showEditor(); break;
                 case "KeyN": onTabs((id) => newTab(id)); break;
                 // w closes, h/l move along the strip and the arrows move up and down the
                 // rail, rather than opening anything — so all of them keep the mode armed,
@@ -266,6 +283,14 @@
         e.stopPropagation();
         const rail = e.shiftKey ? moduleRailHidden : workspaceRailHidden;
         rail.update((h) => !h);
+      }
+
+      // ctrl+shift+e: hop between the file tree and the file open beside it. Plain
+      // ctrl+e stays unbound — see toggleEditorFocus.
+      if (e.code === "KeyE" && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleEditorFocus();
       }
 
       // ctrl+,: open the settings modal. A plain shortcut, not a chord — it

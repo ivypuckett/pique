@@ -15,7 +15,7 @@ modes rather than counting as an unrecognised key.
 | --- | --- | --- |
 | `ctrl+h` | view | `n` new · `w` close · `h`/`l` previous/next · `enter` focus |
 | `ctrl+j` | workspace | `n` new · `o` open a folder · `w` close · `k`/`j` up/down · `enter` focus |
-| `ctrl+t` | pane | `e` explorer · `t` terminal · `g` git diff · `k` kanban · `b` library · `a` automatons · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
+| `ctrl+t` | pane | `e` editor · `t` terminal · `g` git diff · `k` kanban · `b` library · `a` automatons · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
 
 The pane chord's letters are the module rail's rows, one letter each, and they
 **show** a row rather than adding to it: `ctrl+t k` twice is still one Kanban.
@@ -41,7 +41,7 @@ row selected, showing the key that would open another — it does not move you
 somewhere else.
 
 Only two rows have tabs to close: **terminal**, which can hold several, and
-**explorer**, whose tabs are the files you opened from the tree. A singleton row
+**editor**, whose tabs are the files you opened from the tree. A singleton row
 — Git Diff, Kanban, Library, Automatons — *is* its module: it has no tab strip,
 no close button, and `ctrl+t w` does nothing there. It mounts the first time you
 visit it and stays for the life of the view, the way the file tree does.
@@ -65,7 +65,7 @@ after `ctrl+t k` into a renamed column. Everything else keeps focus where it
 already was. `ctrl+t` additionally reveals the right pane if it was collapsed.
 
 `ctrl+t e` is the one exception that focuses something else: it selects the
-explorer row and puts the caret in the file tree, which is an explicit step in
+editor row and puts the caret in the file tree, which is an explicit step in
 its handler rather than anything `settleFocus` does.
 
 `enter` means "take me to what is on screen now": settle focus, leave the mode.
@@ -82,8 +82,23 @@ No prefix, no mode.
 | --- | --- |
 | `ctrl+b` | show/hide the workspace rail |
 | `ctrl+shift+b` | collapse/expand the right pane |
+| `ctrl+shift+e` | file tree ⇄ the file open beside it |
 | `ctrl+,` | settings |
 | `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in, out, reset |
+
+`ctrl+shift+e` is the editing round trip. Opening a file from the tree already
+puts the caret in it — `addEditorTab` sets `autoFocus` — so this is the way back,
+and pressing it again from the tree returns you to the tab you left. From any
+other row it selects the editor row and focuses the tree, the same as
+`ctrl+t e`; with nothing open beside the tree there is nothing to go back to and
+the caret stays where it is.
+
+It is a plain shortcut rather than a fourth `ctrl+t` stroke because it is meant to
+be pressed mid-edit, where a prefix is three keys and a pause. It is **shifted**
+because an editor tab is `$EDITOR` running in a terminal and the capture-phase
+listener swallows whatever it binds: a bare `ctrl+e` would take vim's
+scroll-one-line away in exactly the place this shortcut exists to serve. `ctrl+e`
+stays unbound.
 
 Bindings are matched on `event.code`, not `event.key`: `ctrl+shift+=` is how `+`
 is typed on most layouts, and reading `key` there would see `+` on one keyboard

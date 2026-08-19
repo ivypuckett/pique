@@ -27,7 +27,7 @@
       { key: "esc", label: "exit" },
     ],
     pane: [
-      { key: "e", label: "explorer" },
+      { key: "e", label: "editor" },
       // The modules come from the manifest, so a new one shows up here without an edit.
       ...MODULES.map((m) => ({ key: m.key, label: m.label.toLowerCase() })),
       { key: "n", label: "new" },
@@ -78,6 +78,10 @@
     <span class="hidden items-center gap-1 @[560px]:flex">
       <kbd class="kbd kbd-xs">{mod},</kbd>
       <span class="opacity-70">settings</span>
+    </span>
+    <span class="hidden items-center gap-1 @[660px]:flex">
+      <kbd class="kbd kbd-xs">{mod}⇧E</kbd>
+      <span class="opacity-70">tree</span>
     </span>
   {/if}
 </footer>

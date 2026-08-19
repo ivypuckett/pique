@@ -29,8 +29,10 @@ What _does_ work in web mode, and is worth testing here:
 
 - Layout shell: workspaces, views, tabs, split columns, collapse/expand, reset.
 - Keyboard chords and shortcuts (`ctrl+h`/`ctrl+j`/`ctrl+t` prefixes, `ctrl+b`,
-  `ctrl+,`). `ctrl+t e` selects the explorer row, but the tree itself needs the
-  desktop app.
+  `ctrl+,`). `ctrl+t e` and `ctrl+shift+e` select the editor row, but the tree
+  itself needs the desktop app — web mode renders a placeholder in its place, so
+  neither the caret landing in the tree nor `ctrl+shift+e`'s trip back can be
+  seen from here.
 - Settings modal UI and the theme switcher (applies live to
   `<html data-theme>`).
 - The module rail: every row, the tab strip filtering to the selected one, `+`

@@ -58,7 +58,7 @@ Notes:
 
 - Kanban Board: Standard kanban-style board accessible for both agents and
   humans.
-- Explorer: File explorer which opens into an $EDITOR terminal window.
+- Editor: File tree which opens files into an $EDITOR terminal window.
 - Terminal: Terminal which opens with current $SHELL.
 - Diff: Git diff of highlighted item (or current workspace folder).
 - Library: Extensions, prompt templates and skills for the current scope —

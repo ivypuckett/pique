@@ -8,8 +8,11 @@
 // The component for each kind lives beside it in registry.ts.
 
 // The rail row that holds the file tree and the files opened from it. It has no module of
-// its own, which is why it is a bare id rather than a MODULES entry.
-export const EXPLORER = "explorer";
+// its own, which is why it is a bare id rather than a MODULES entry. moduleLabel has no
+// entry to read a label from either, so it capitalises this id — the row is named here and
+// nowhere else. It was called the explorer until the rename; migrateView still answers to
+// that id, since it is written into every layout.json older than the change.
+export const EDITOR = "editor";
 
 export type ModuleDef = {
   kind: string; // key into the registry
@@ -18,7 +21,7 @@ export type ModuleDef = {
   duplicable?: boolean; // may a view hold more than one?
 };
 
-// Chat is the center column and the file tree is the explorer row's own content; neither
+// Chat is the center column and the file tree is the editor row's own content; neither
 // is a module you open, so neither has a row here.
 export const MODULES: ModuleDef[] = [
   { kind: "terminal", label: "Terminal", key: "t", duplicable: true },
@@ -34,10 +37,10 @@ export function moduleDef(kind: string): ModuleDef | undefined {
   return MODULES.find((m) => m.kind === kind);
 }
 
-// The rail's rows, top to bottom — the order ctrl+t's arrows walk. The explorer heads the
+// The rail's rows, top to bottom — the order ctrl+t's arrows walk. The editor heads the
 // list: it is a row without a module, holding the tree and the files opened from it.
 export function railGroups(): string[] {
-  return [EXPLORER, ...MODULES.map((m) => m.kind)];
+  return [EDITOR, ...MODULES.map((m) => m.kind)];
 }
 
 // Whether a view may hold a second tab of this kind. An unknown kind — one read back
@@ -49,7 +52,7 @@ export function isDuplicable(kind: string): boolean {
 
 // Whether a row shows a tab strip at all. A singleton row IS its module — a lone chip with
 // a close button beside a rail row that already names it says nothing — so only a row that
-// can hold more than one has tabs. The explorer's are the files opened from the tree.
+// can hold more than one has tabs. The editor's are the files opened from the tree.
 export function hasTabs(group: string): boolean {
-  return group === EXPLORER || isDuplicable(group);
+  return group === EDITOR || isDuplicable(group);
 }

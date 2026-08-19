@@ -2,7 +2,7 @@
   import { moduleRailHidden, resizeBoundary } from "./store.ts";
   import {
     type ColumnId,
-    EXPLORER,
+    EDITOR,
     type RightState,
     SPLITTER_PX,
     trackPair,
@@ -17,11 +17,11 @@
   // `id` picks the branch: "center" is the chat column, which is one fixed module and so
   // carries no state of its own, and "right" the tabbed pane. The two share nothing but
   // the module frame.
-  let { viewId, right, id, explorerWidthCh, cwd, workspaceId, el = $bindable() }: {
+  let { viewId, right, id, editorWidthCh, cwd, workspaceId, el = $bindable() }: {
     viewId: string;
     right?: RightState;
     id: ColumnId;
-    explorerWidthCh?: number;
+    editorWidthCh?: number;
     cwd?: string;
     workspaceId?: string;
     el?: HTMLElement;
@@ -32,13 +32,13 @@
 
   // Inner splitter between the file tree and the files open beside it; the tree is its
   // left column, sized in ch, so the pointer's px are converted through one character's width.
-  function onExplorerDrag(clientX: number) {
+  function onEditorDrag(clientX: number) {
     if (!bodyEl) return;
     const flexPx = bodyEl.clientWidth - SPLITTER_PX;
     const ch = chPx(bodyEl);
     if (flexPx <= 0 || ch <= 0) return;
     const left = bodyEl.getBoundingClientRect().left;
-    resizeBoundary(viewId, "explorer-tabs", (clientX - left) / ch, flexPx / ch);
+    resizeBoundary(viewId, "editor-tabs", (clientX - left) / ch, flexPx / ch);
   }
 </script>
 
@@ -57,32 +57,32 @@
   </div>
 {:else}
   <!-- Right pane: the module rail down its right edge picks the row; the tab strip along
-       the top lists that row's tabs. The file tree belongs to the explorer row alone,
+       the top lists that row's tabs. The file tree belongs to the editor row alone,
        where it sits to the left of the files opened from it — every other row has the
        width to itself. -->
   {@const pane = right!}
   {@const shown = pane.activeTabs[pane.activeGroup] ?? ""}
-  {@const onExplorer = pane.activeGroup === EXPLORER}
+  {@const onEditor = pane.activeGroup === EDITOR}
   <!-- With nothing open beside it the tree takes the row, so the splitter and the (empty)
        tab area are out of the grid entirely rather than sharing width with nothing. -->
-  {@const withFiles = onExplorer && pane.tabs.some((t) => t.group === EXPLORER)}
+  {@const withFiles = onEditor && pane.tabs.some((t) => t.group === EDITOR)}
   <div class="flex h-full min-w-0">
     <div class="flex min-w-0 flex-1 flex-col">
       <TabStrip {viewId} right={pane} />
       <div
         class="grid min-h-0 min-w-0 flex-1 grid-rows-1"
-        style:grid-template-columns={withFiles ? trackPair(explorerWidthCh ?? 30) : "1fr"}
+        style:grid-template-columns={withFiles ? trackPair(editorWidthCh ?? 30) : "1fr"}
         bind:this={bodyEl}
       >
         <!-- The tree stays mounted while you work in another row — hidden, not unmounted,
              so its expanded folders and cursor are where you left them on the way back. -->
-        <div class="min-w-0 overflow-hidden" class:hidden={!onExplorer}>
-          <FileTree title="Files" {cwd} {workspaceId} {viewId} tabId="explorer" />
+        <div class="min-w-0 overflow-hidden" class:hidden={!onEditor}>
+          <FileTree title="Files" {cwd} {workspaceId} {viewId} tabId="editor" />
         </div>
         {#if withFiles}
-          <Splitter onDrag={onExplorerDrag} />
+          <Splitter onDrag={onEditorDrag} />
         {/if}
-        <div class="relative min-w-0" class:hidden={onExplorer && !withFiles}>
+        <div class="relative min-w-0" class:hidden={onEditor && !withFiles}>
           <!-- Every open tab of every group stays mounted, so a terminal keeps running while
                you work in another module; only the selected group's shown one is visible. -->
           {#each pane.tabs as tab (tab.id)}

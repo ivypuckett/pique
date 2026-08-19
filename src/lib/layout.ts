@@ -1,11 +1,11 @@
 import {
-  EXPLORER,
+  EDITOR,
   isDuplicable,
   moduleDef,
   railGroups,
 } from "./modules/manifest.ts";
 
-export { EXPLORER };
+export { EDITOR };
 
 export type ColumnId = "center" | "right";
 
@@ -13,7 +13,7 @@ export interface ModuleRef {
   id: string;
   title: string;
   kind: string; // key into the module registry
-  // Which rail row the tab belongs to. Its kind for an ordinary module; "explorer" for
+  // Which rail row the tab belongs to. Its kind for an ordinary module; "editor" for
   // an editor or a path-scoped diff, which are that file rather than the module, and so
   // belong beside the file tree instead of among the terminals.
   group: string;
@@ -44,9 +44,9 @@ export interface ViewState {
   // Chat itself carries no state here: it is one fixed module filling the center column,
   // mounted by Column.svelte rather than driven by a tab list.
   right: RightState; // the tabbed pane
-  // The file tree's width inside the explorer row, where it shares the pane with the
+  // The file tree's width inside the editor row, where it shares the pane with the
   // editors opened from it. The tree is never hidden there — it is that row's content.
-  explorerWidthCh: number;
+  editorWidthCh: number;
 }
 
 export const MIN_WIDTH_CH = 10;
@@ -65,14 +65,14 @@ export function createInitialView(id = "view-1"): ViewState {
       }],
       activeTabs: { terminal: "right-1" },
     },
-    explorerWidthCh: 30,
+    editorWidthCh: 30,
   };
 }
 
 // Visual order is chat | [tree · tabs | rail]. "center-right" is the outer splitter
-// between chat and the pane; "explorer-tabs" is the inner one between the file tree and
-// the editors beside it, inside the explorer row.
-export type Boundary = "center-right" | "explorer-tabs";
+// between chat and the pane; "editor-tabs" is the inner one between the file tree and
+// the editors beside it, inside the editor row.
+export type Boundary = "center-right" | "editor-tabs";
 
 export const SPLITTER_PX = 6;
 
@@ -94,8 +94,8 @@ export function resizeBoundary(
     MIN_WIDTH_CH,
     Math.max(MIN_WIDTH_CH, availableCh - MIN_WIDTH_CH),
   );
-  if (b === "explorer-tabs") {
-    return { ...v, explorerWidthCh: first };
+  if (b === "editor-tabs") {
+    return { ...v, editorWidthCh: first };
   }
   return { ...v, chatWidthCh: first };
 }
@@ -140,10 +140,10 @@ export function activeTabId(v: ViewState): string {
 }
 
 // Show a rail row. Select-or-create: a module group with nothing open gets a tab, which
-// is how ctrl+t k has always behaved. The explorer has no module of its own, so it is
+// is how ctrl+t k has always behaved. The editor row has no module of its own, so it is
 // only ever selected — its tabs come from the tree.
 export function selectGroup(v: ViewState, group: string): ViewState {
-  if (groupTabs(v, group).length > 0 || group === EXPLORER) {
+  if (groupTabs(v, group).length > 0 || group === EDITOR) {
     return { ...v, right: { ...v.right, activeGroup: group } };
   }
   return moduleDef(group) ? addTab(v, group) : v;
@@ -178,7 +178,7 @@ function withTab(v: ViewState, tab: ModuleRef): ViewState {
 // the manifest) is *revealed* rather than duplicated: a second Kanban tab is two views
 // of the one board, and pressing ctrl+t k twice used to make one.
 //
-// Editors and path-scoped diffs are in the explorer group, not the module's, so one open
+// Editors and path-scoped diffs are in the editor group, not the module's, so one open
 // beside the file tree never stands in for Git Diff itself.
 export function addTab(v: ViewState, kind: string): ViewState {
   if (!isDuplicable(kind)) {
@@ -190,7 +190,7 @@ export function addTab(v: ViewState, kind: string): ViewState {
 }
 
 // One more of what the selected row already holds (ctrl+t n, and the strip's +). A
-// singleton row can't have a second, so there it does nothing — and the explorer's tabs
+// singleton row can't have a second, so there it does nothing — and the editor's tabs
 // come from the tree, not from here.
 export function newTab(v: ViewState): ViewState {
   const group = v.right.activeGroup;
@@ -202,24 +202,24 @@ function basename(path: string): string {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
-// Add an explorer-group terminal tab that runs $EDITOR on `path` and closes itself on exit.
+// Add an editor-group terminal tab that runs $EDITOR on `path` and closes itself on exit.
 export function addEditorTab(v: ViewState, path: string): ViewState {
   return withTab(v, {
     id: nextRightId(v.right.tabs),
     title: basename(path),
     kind: "terminal",
-    group: EXPLORER,
+    group: EDITOR,
     props: { argv: ["$EDITOR", path], autoCloseOnExit: true, autoFocus: true },
   });
 }
 
-// Add an explorer-group tab showing the git diff of a single file (called by the file-tree module).
+// Add an editor-group tab showing the git diff of a single file (called by the file-tree module).
 export function addDiffTab(v: ViewState, path: string): ViewState {
   return withTab(v, {
     id: nextRightId(v.right.tabs),
     title: basename(path),
     kind: "gitdiff",
-    group: EXPLORER,
+    group: EDITOR,
     props: { path },
   });
 }
@@ -261,13 +261,13 @@ export function closeTab(v: ViewState, tabId: string): ViewState {
   const tab = v.right.tabs.find((t) => t.id === tabId);
   if (!tab) return v;
   // A singleton row is its module, so there is nothing to close: it mounts on first visit
-  // and stays for the life of the view. Editors in the explorer row are closable — they
+  // and stays for the life of the view. Editors in the editor row are closable — they
   // are files, not the module.
   if (moduleDef(tab.group) && !isDuplicable(tab.group)) return v;
   const activeTabs = { ...v.right.activeTabs };
   if (activeTabs[tab.group] === tabId) {
     // Prefer the previous tab of the same group; fall back to the next. A group whose
-    // last tab is closed carries no entry at all — the explorer row is the only one that
+    // last tab is closed carries no entry at all — the editor row is the only one that
     // can end up that way, and the tree is its content.
     const siblings = groupTabs(v, tab.group);
     const idx = siblings.findIndex((t) => t.id === tabId);
@@ -322,7 +322,51 @@ export function isViewState(v: unknown): v is ViewState {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
   return typeof obj.id === "string" && typeof obj.chatWidthCh === "number" &&
-    isRightState(obj.right) && typeof obj.explorerWidthCh === "number";
+    isRightState(obj.right) && typeof obj.editorWidthCh === "number";
+}
+
+// The editor row's id before it was renamed. Every layout.json written before the rename
+// names it, in the group of each tab the tree opened, in activeGroup, and as a key of
+// activeTabs — beside an `explorerWidthCh` that is now `editorWidthCh`.
+const LEGACY_EDITOR = "explorer";
+
+// Rewrite that id wherever a persisted view carries it. This has to run BEFORE isViewState,
+// not as one of the migrations below it: a view written by the build just before the rename
+// is structurally current — isRightState only asks that a group be a non-empty string — so
+// it passes the guard and is adopted whole. Its tabs would then sit in a row railGroups no
+// longer offers: open, mounted, and unreachable from the rail.
+function renameEditorGroup(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null) return raw;
+  const obj = { ...(raw as Record<string, unknown>) };
+  // Moved, not copied: left behind, the old key rides along in a view the guard now
+  // accepts and is written back to layout.json on every save, outliving the rename.
+  if (typeof obj.explorerWidthCh === "number") {
+    if (typeof obj.editorWidthCh !== "number") obj.editorWidthCh = obj.explorerWidthCh;
+    delete obj.explorerWidthCh;
+  }
+  if (typeof obj.right !== "object" || obj.right === null) return obj;
+  const pane = { ...(obj.right as Record<string, unknown>) };
+  if (pane.activeGroup === LEGACY_EDITOR) pane.activeGroup = EDITOR;
+  if (Array.isArray(pane.tabs)) {
+    // Only the tabs that name it: a pre-groups row has no group at all, and giving it an
+    // undefined one here would cost the derivation below its chance to read the kind.
+    pane.tabs = pane.tabs.map((t) =>
+      typeof t === "object" && t !== null &&
+        (t as Record<string, unknown>).group === LEGACY_EDITOR
+        ? { ...t, group: EDITOR }
+        : t
+    );
+  }
+  if (typeof pane.activeTabs === "object" && pane.activeTabs !== null) {
+    const active = { ...(pane.activeTabs as Record<string, unknown>) };
+    if (LEGACY_EDITOR in active) {
+      active[EDITOR] = active[LEGACY_EDITOR];
+      delete active[LEGACY_EDITOR];
+    }
+    pane.activeTabs = active;
+  }
+  obj.right = pane;
+  return obj;
 }
 
 // Adopt a view persisted by an older build. Two shapes reach here: the pre-groups one,
@@ -331,7 +375,8 @@ export function isViewState(v: unknown): v is ViewState {
 // but whose width still sits in an `explorer` object. Returning null (rather than letting
 // isViewState reject the tree three levels up) is what keeps a stale layout from resetting
 // every workspace and its working directory — see migrateSession.
-export function migrateView(raw: unknown): ViewState | null {
+export function migrateView(rawIn: unknown): ViewState | null {
+  const raw = renameEditorGroup(rawIn);
   if (isViewState(raw)) return raw;
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
@@ -346,14 +391,14 @@ export function migrateView(raw: unknown): ViewState | null {
   const tabs: ModuleRef[] = [];
   for (const row of source as (Omit<ModuleRef, "group"> & { group?: unknown })[]) {
     // Keep a group the tab already names. Failing that, a tab with props is that file, so
-    // it joins the explorer group beside the tree.
+    // it joins the editor group beside the tree.
     const group = typeof row.group === "string" && row.group !== ""
       ? row.group
       : row.props
-      ? EXPLORER
+      ? EDITOR
       : row.kind;
     // Singletons that were duplicated before the rule existed keep their first tab only.
-    if (group !== EXPLORER && !isDuplicable(row.kind) &&
+    if (group !== EDITOR && !isDuplicable(row.kind) &&
       tabs.some((t) => t.group === group)
     ) continue;
     tabs.push({ ...row, group });
@@ -383,8 +428,8 @@ export function migrateView(raw: unknown): ViewState | null {
   if (wasActive) activeTabs[wasActive.group] = wasActive.id;
 
   const base = createInitialView(typeof obj.id === "string" ? obj.id : "view-1");
-  const explorerWidth = typeof obj.explorerWidthCh === "number"
-    ? obj.explorerWidthCh
+  const savedWidth = typeof obj.editorWidthCh === "number"
+    ? obj.editorWidthCh
     : (obj.explorer as Record<string, unknown> | undefined)?.widthCh;
   const migrated: ViewState = {
     ...base,
@@ -392,10 +437,10 @@ export function migrateView(raw: unknown): ViewState | null {
       ? obj.chatWidthCh
       : base.chatWidthCh,
     // Both older shapes kept the width inside an `explorer` object, beside a `hidden`
-    // flag the docked addon needed and the explorer row does not.
-    explorerWidthCh: typeof explorerWidth === "number"
-      ? explorerWidth
-      : base.explorerWidthCh,
+    // flag the docked addon needed and the editor row does not.
+    editorWidthCh: typeof savedWidth === "number"
+      ? savedWidth
+      : base.editorWidthCh,
     right: {
       // The group that was already selected, or the one that was on screen; failing both
       // the first tab's, failing that the default view's, so a pane migrated empty still
