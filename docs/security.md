@@ -38,10 +38,11 @@ is a security property here and not a style preference. See
 | Package         | `agent/pending/<slug>.json`    | `agent/settings.json`         | advisory |
 | Prompt template | `agent/prompts/pending/`       | `agent/prompts/`              | advisory |
 | Automaton       | `automatons/pending/` (unused) | `automatons/`                 | advisory |
+| Subagent        | none — by design               | `agent/agents/`               | none     |
 
 "Advisory" is [extensions.md](extensions.md)'s own word, and it is the right
-one: the gate governs what a human *moves* into the loading set, not what can
-*appear* there. An agent holding `write` puts a file in the live dir directly.
+one: the gate governs what a human _moves_ into the loading set, not what can
+_appear_ there. An agent holding `write` puts a file in the live dir directly.
 The gate is still worth having — it is what makes the ordinary path reviewable,
 and it is a real gate against a package you fetched — but it is not a control
 against a misaligned agent, and no part of the UI should imply otherwise.
@@ -50,6 +51,29 @@ The automaton row was not merely advisory but absent, which was finding 1. It is
 now advisory like the rest: `automatons/approval.ts` gates the two unattended
 triggers on a human-approved digest, while a dropped-in file stays listable and
 launchable by the button.
+
+The subagent row is ungated, and unlike the automaton row that is a decision
+rather than an oversight. `define_subagent` writes straight to `agent/agents/`
+and `run_subagent` can invoke it on the next tool call, with no human in
+between. The reasoning is not that a definition is "only text" — a prompt
+template is only text as well, and an agent-written one is quarantined. It is
+that a subagent is strictly _less_ capable than the agent that defines it: it
+runs a subset of the definer's tools, chosen by the definer, in a nested session
+(`agents/service.ts:runSubagent`) whose temp `agentDir` gives it none of pique's
+own tools and no `run_subagent` of its own. The definer already holds `write`
+and `bash`. Anything it could phrase as a subagent instruction it can simply do,
+so there is no escalation for a gate to stand in front of, and a quarantine with
+no approval UI behind it would imply a review that nobody is performing.
+
+What the decision accepts, stated plainly because it is the part that is easy to
+miss: a definition written into **root** is inherited by every workspace
+([scopes.md](scopes.md)) and re-read on every `run_subagent` call, so an
+instruction that arrived through prompt injection outlives the conversation that
+introduced it and is re-applied in sessions the user will not connect to it.
+Extensions and prompt templates have the same persistence and answer it with an
+advisory gate; subagents answer it with the capability argument above. If that
+trade stops looking right, the fix is the one below — interception, not a
+quarantine dir.
 
 ---
 
@@ -187,8 +211,7 @@ theme var into a url-accepting property — the only `var()` chain of that kind 
 a var in `background`, `mask` or `content` this becomes a beacon that fires on
 every launch.
 
-**Fixed.** `UNSAFE_VALUE_RE` is now
-`/[{}@;<>]|\b(?:url|image-set)\s*\(/i`.
+**Fixed.** `UNSAFE_VALUE_RE` is now `/[{}@;<>]|\b(?:url|image-set)\s*\(/i`.
 
 ### 6. Two comments claim more than the docs do — INFO — FIXED
 
@@ -199,7 +222,7 @@ doc is correct.
 
 **Fixed** for the header comment, which now scopes the claim to its own path and
 points at the disclosure. The `define_extension` description and its return text
-were deliberately left: they say what happens to what *this tool* writes, which
+were deliberately left: they say what happens to what _this tool_ writes, which
 is accurate, and the model reporting that back to a user is the behaviour worth
 keeping.
 
@@ -217,9 +240,9 @@ what was looked at.
   paths and `.` / `..` segments. `packageSlug` percent-encodes and then asserts
   that no separator survived. No traversal found on any `win.bind` path.
 - **Command injection.** Every `Deno.Command` is an argv array with no shell:
-  `git.ts`, `dialog.ts` (xdg-open), and the PTY spawn in
-  `terminal/pty.ts`. `openUrlCommand` is https-only and its one caller passes a
-  compiled-in constant.
+  `git.ts`, `dialog.ts` (xdg-open), and the PTY spawn in `terminal/pty.ts`.
+  `openUrlCommand` is https-only and its one caller passes a compiled-in
+  constant.
 - **SQL injection.** `kanban/board.ts` is parameterized throughout; the single
   dynamic statement (`getLogs`) selects between two constant query strings.
 - **HTML injection.** No `{@html}`, `innerHTML`, `eval` or `new Function`
@@ -246,4 +269,5 @@ not a finding but the design: there is no sandbox, the chat agent has `read` and
 `bash` with its cwd usually `$HOME`, and every gate above is advisory in that
 light. [extensions.md](extensions.md) Deferred #1 — `tool_call` interception —
 is the one piece of work that would change that, and its path set must cover
-`automatons/` and `agent/prompts/` as well as `agent/` (finding 1).
+`automatons/`, `agent/prompts/` and `agent/agents/` as well as `agent/` (finding
+1, and the subagent row above).

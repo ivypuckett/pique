@@ -57,6 +57,9 @@ Notes:
 - Automaton: A prompt template plus the exact extension and skill set a run may
   load, launched without a conversation — see
   [docs/automatons.md](docs/automatons.md).
+- Subagent: A named system prompt, plus an optional tool and model restriction,
+  that a chat agent delegates a task to. It runs in its own isolated session and
+  reports back as text — see [docs/subagents.md](docs/subagents.md).
 
 ### Modules
 

@@ -132,6 +132,8 @@ import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
 import { inheritedExtensionPaths } from "../extensions/service.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
+import { subagentTools } from "../agents/agent-tools.ts";
+import { listVisibleAgents } from "../agents/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
 import { resolveBasePrompt } from "../scope/prompt.ts";
 import {
@@ -231,10 +233,12 @@ export async function startAgent(
   // Tools compiled into pique, all bound to this scope: define_extension and
   // define_prompt quarantine into it, and the Kanban tools address its board. Tools
   // from extensions the user has *enabled* don't appear here — those load below.
+  const agentDefs = await listVisibleAgents(scope);
   const customTools = [
     ...extensionAuthoringTools(scope),
     ...promptAuthoringTools(scope),
     ...kanbanTools(scope),
+    ...subagentTools(scope, cwd, modelRuntime, model, agentDefs),
   ];
 
   // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
