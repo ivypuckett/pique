@@ -73,6 +73,10 @@ export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "thinking"; delta: string }
   | { kind: "tool_start"; id: string; name: string; args: string }
+  // A partial result from a tool still running (pi's onUpdate), replacing whatever the
+  // last one showed. run_subagent is the only tool that sends these today, streaming
+  // the nested session's tool calls; the call stays open until its tool_end.
+  | { kind: "tool_update"; id: string; result: string }
   | {
     kind: "tool_end";
     id: string;
@@ -106,6 +110,15 @@ export function toFrontendEvent(event: any): ChatEvent | null {
         id: event.toolCallId,
         name: event.toolName,
         args: preview(event.args),
+      };
+    case "tool_execution_update":
+      // Unlike tool_execution_end's result, which is previewed whole, only the text
+      // blocks survive here: a partial result is shown to a human mid-run, and the
+      // AgentToolResult envelope around it is noise.
+      return {
+        kind: "tool_update",
+        id: event.toolCallId,
+        result: preview(textOf(event.partialResult?.content)),
       };
     case "tool_execution_end":
       return {

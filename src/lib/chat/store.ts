@@ -132,6 +132,17 @@ function createSession(
         isError: false,
         done: false,
       }]);
+    } else if (ev.kind === "tool_update") {
+      // Result only: the call is still running, so `done` stays false and the spinner
+      // with it. tool_end replaces this text with the real result.
+      items.update((xs) =>
+        xs.map((
+          i,
+        ) => (i.role === "tool" && i.id === ev.id
+          ? { ...i, result: ev.result }
+          : i)
+        )
+      );
     } else if (ev.kind === "tool_end") {
       items.update((xs) =>
         xs.map((

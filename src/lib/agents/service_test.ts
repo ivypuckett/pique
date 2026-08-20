@@ -1,6 +1,11 @@
 import { assertEquals } from "@std/assert";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { listAgents, listVisibleAgents, runSubagent } from "./service.ts";
+import {
+  listAgents,
+  listVisibleAgents,
+  progressLine,
+  runSubagent,
+} from "./service.ts";
 import { parseAgentDef } from "./parse.ts";
 import { agentsDir } from "./paths.ts";
 import { ROOT } from "../scope/paths.ts";
@@ -95,13 +100,44 @@ function sse(): string {
     "data: [DONE]\n\n";
 }
 
+// One streamed tool call, so a test can make the child do something before it answers.
+function sseToolCall(name: string, args: unknown): string {
+  const chunk = (choice: unknown) =>
+    `data: ${
+      JSON.stringify({
+        id: "mock-completion",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "mock-model",
+        choices: [choice],
+      })
+    }\n\n`;
+  return chunk({
+    index: 0,
+    delta: {
+      role: "assistant",
+      tool_calls: [{
+        index: 0,
+        id: "call-1",
+        type: "function",
+        function: { name, arguments: JSON.stringify(args) },
+      }],
+    },
+  }) +
+    chunk({ index: 0, delta: {}, finish_reason: "tool_calls" }) +
+    "data: [DONE]\n\n";
+}
+
 let lastRequest = "";
+// Responses to serve before falling back to the plain reply, oldest first. A child that
+// makes a tool call needs two turns, and both come from this one endpoint.
+let scripted: string[] = [];
 
 const server = Deno.serve(
   { port: 0, onListen: () => {} },
   async (req) => {
     lastRequest = await req.text();
-    return new Response(sse(), {
+    return new Response(scripted.shift() ?? sse(), {
       headers: { "content-type": "text/event-stream" },
     });
   },
@@ -114,6 +150,7 @@ async function withMockRuntime(
 ): Promise<void> {
   await withTempHome(async (home) => {
     const cwd = await Deno.makeTempDir();
+    scripted = [];
     try {
       await Deno.mkdir(`${home}/.pi/agent`, { recursive: true });
       await Deno.writeTextFile(
@@ -166,6 +203,52 @@ Deno.test("runSubagent runs the definition's system prompt and returns its reply
       JSON.stringify(system).includes("You are a scout."),
       true,
       "the definition's body must reach the child as its system prompt",
+    );
+  });
+});
+
+Deno.test("progressLine projects the child's tool calls and nothing else", () => {
+  assertEquals(
+    progressLine({
+      type: "tool_execution_start",
+      toolName: "read",
+      args: { file: "a.ts" },
+    }),
+    'read {"file":"a.ts"}',
+  );
+  assertEquals(
+    progressLine({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "hi" },
+    }),
+    null,
+    "the child's text is the call's return value; streaming it too would say it twice",
+  );
+  assertEquals(progressLine(undefined), null);
+});
+
+Deno.test("runSubagent reports each tool call the child makes, as it makes it", async () => {
+  await withMockRuntime(async (runtime, cwd) => {
+    // Turn one is a tool call, turn two the reply that ends the run.
+    scripted = [sseToolCall("ls", { path: "." })];
+    const def = parseAgentDef(
+      "scout",
+      "---\ndescription: recon\ntools: ls\n---\nYou are a scout.\n",
+    );
+    const seen: string[] = [];
+    const result = await runSubagent({
+      def,
+      task: "look around",
+      cwd,
+      modelRuntime: runtime,
+      fallbackModel: runtime.getModel("mock", "mock-model"),
+      onProgress: (line) => seen.push(line),
+    });
+    assertEquals(result, REPLY);
+    assertEquals(
+      seen,
+      ['ls {"path":"."}'],
+      "the parent has to see the child working, or a long run looks like a hang",
     );
   });
 });

@@ -119,11 +119,31 @@ The result is every assistant text block the run produced, joined. A child that
 ends in an error state raises, so the parent sees a failed tool call rather than
 an empty answer.
 
+## Progress
+
+While the run is going, each tool call the child makes is reported under the
+open `run_subagent` call in the transcript, one `name {args}` line per call, so
+a long delegation reads as work rather than as a hang:
+
+```
+… run_subagent
+{"agent":"scout","task":"…"}
+→ ls {"path":"src"}
+grep {"pattern":"openBoard"}
+read {"file":"src/lib/kanban/board.ts"}
+```
+
+This rides on pi's partial-result callback (`onUpdate`), so it is display only:
+each line replaces the previous block rather than appending to the transcript,
+and the final result overwrites all of it when the call ends. Nothing here is
+part of what the parent model reads back — it gets the answer, the same as
+before.
+
+The child's own _text_ is deliberately not streamed: that text is what the call
+returns, so showing it live would print the answer twice.
+
 ## Known limits
 
-- **No progress.** The parent sees one tool call that returns everything at the
-  end; the child's own tool calls are not streamed into the transcript. A long
-  delegation looks like a hang.
 - **No timeout or turn cap.** A child that will not converge runs until it is
   aborted.
 - **No UI.** Definitions are created by `define_subagent` or by hand; there is

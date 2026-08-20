@@ -60,6 +60,24 @@ Deno.test("toFrontendEvent maps a tool end", () => {
   });
 });
 
+Deno.test("toFrontendEvent maps a tool update to its text blocks only", () => {
+  const out = toFrontendEvent({
+    type: "tool_execution_update",
+    toolCallId: "c1",
+    toolName: "run_subagent",
+    args: { agent: "scout" },
+    partialResult: {
+      content: [{ type: "text", text: 'ls {"path":"."}' }],
+      details: null,
+    },
+  });
+  assertEquals(out, {
+    kind: "tool_update",
+    id: "c1",
+    result: 'ls {"path":"."}',
+  });
+});
+
 Deno.test("toFrontendEvent stringifies non-string tool results", () => {
   const out = toFrontendEvent({
     type: "tool_execution_end",

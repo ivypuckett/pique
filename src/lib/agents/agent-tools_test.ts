@@ -1,7 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { subagentTools } from "./agent-tools.ts";
 import { parseAgentDef } from "./parse.ts";
-import { agentPath } from "./paths.ts";
+import { agentPath, agentsDir } from "./paths.ts";
 import { ROOT } from "../scope/paths.ts";
 
 // Tool.execute has extra pi-runtime params (signal/onUpdate/ctx) unused by these
@@ -106,6 +107,167 @@ Deno.test("define_subagent writes a definition run_subagent can immediately see"
       Error,
       "planner",
     );
+  });
+});
+
+// --- the progress the parent sees while a delegation is still running ---
+
+// One endpoint serving a scripted turn and then the reply that ends the run, so the
+// child can call tools before it answers. Same shape as service_test.ts's mock, kept
+// local the way the other integration tests here keep theirs.
+const REPLY = "done looking";
+
+function chunk(choice: unknown): string {
+  return `data: ${
+    JSON.stringify({
+      id: "mock-completion",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "mock-model",
+      choices: [choice],
+    })
+  }\n\n`;
+}
+
+// `count` ls calls in one assistant message, so a test can make the child busy without
+// scripting a turn per call.
+function toolTurn(count: number): string {
+  return chunk({
+    index: 0,
+    delta: {
+      role: "assistant",
+      tool_calls: Array.from({ length: count }, (_, i) => ({
+        index: i,
+        id: `call-${i}`,
+        type: "function",
+        function: { name: "ls", arguments: `{"path":".","n":${i}}` },
+      })),
+    },
+  }) + chunk({ index: 0, delta: {}, finish_reason: "tool_calls" }) +
+    "data: [DONE]\n\n";
+}
+
+const TEXT_TURN = chunk({
+  index: 0,
+  delta: { role: "assistant", content: REPLY },
+}) + chunk({ index: 0, delta: {}, finish_reason: "stop" }) +
+  "data: [DONE]\n\n";
+
+let scripted: string[] = [];
+const server = Deno.serve(
+  { port: 0, onListen: () => {} },
+  () =>
+    new Response(scripted.shift() ?? TEXT_TURN, {
+      headers: { "content-type": "text/event-stream" },
+    }),
+);
+server.unref();
+const baseUrl = `http://localhost:${(server.addr as Deno.NetAddr).port}/v1`;
+
+// Everything both progress tests need: a mock provider, a definition, and the tools
+// bound to root. Returns run_subagent's execute, already curried with the scout.
+async function withScout(
+  fn: (
+    // deno-lint-ignore no-explicit-any
+    delegate: (onUpdate?: (partial: any) => void) => Promise<any>,
+  ) => Promise<void>,
+): Promise<void> {
+  await withTempHome(async () => {
+    const home = Deno.env.get("HOME")!;
+    await Deno.mkdir(`${home}/.pi/agent`, { recursive: true });
+    await Deno.writeTextFile(
+      `${home}/.pi/agent/models.json`,
+      JSON.stringify({
+        providers: {
+          mock: {
+            baseUrl,
+            api: "openai-completions",
+            apiKey: "mock",
+            models: [{
+              id: "mock-model",
+              contextWindow: 128000,
+              input: ["text"],
+            }],
+          },
+        },
+      }),
+    );
+    await Deno.mkdir(agentsDir(ROOT), { recursive: true });
+    await Deno.writeTextFile(
+      agentPath(ROOT, "scout"),
+      "---\ndescription: recon\ntools: ls\n---\nYou are a scout.\n",
+    );
+
+    const runtime = await ModelRuntime.create();
+    const tools = subagentTools(
+      ROOT,
+      home,
+      runtime,
+      runtime.getModel("mock", "mock-model"),
+      [scout],
+    );
+    await fn((onUpdate) =>
+      // deno-lint-ignore no-explicit-any
+      (byName(tools, "run_subagent") as any).execute(
+        "call-parent",
+        { agent: "scout", task: "look around" },
+        undefined,
+        onUpdate,
+        undefined,
+      )
+    );
+  });
+}
+
+Deno.test("run_subagent streams the child's tool calls back through onUpdate", async () => {
+  await withScout(async (delegate) => {
+    scripted = [toolTurn(1)];
+    // deno-lint-ignore no-explicit-any
+    const updates: any[] = [];
+    const res = await delegate((partial) => updates.push(partial));
+
+    assertEquals(
+      updates.map((u) => u.content[0].text),
+      ['ls {"path":".","n":0}'],
+      "the child's tool call reaches the parent before the run returns",
+    );
+    assertEquals(res.content[0].text, REPLY, "the final result still wins");
+  });
+});
+
+// The block is re-sent whole on every line and rendered through a projection that
+// truncates from the END, so an unbounded one would pin the display to the child's
+// first calls and never show the one running now.
+Deno.test("run_subagent's progress block stays bounded for a busy child", async () => {
+  await withScout(async (delegate) => {
+    scripted = [toolTurn(20)];
+    // deno-lint-ignore no-explicit-any
+    const updates: any[] = [];
+    await delegate((partial) => updates.push(partial));
+
+    assertEquals(
+      updates.length,
+      20,
+      "one update per tool call, all 20 of them",
+    );
+    // Each update ends with the line it just added, whatever order the child's calls
+    // happened to start in — so the final block must be the newest eight of those.
+    const added = updates.map((u) =>
+      u.content[0].text.split("\n").at(-1) as string
+    );
+    assertEquals(
+      updates.at(-1).content[0].text.split("\n"),
+      added.slice(-8),
+      "the block keeps the most recent calls and drops the oldest",
+    );
+  });
+});
+
+Deno.test("a run with no onUpdate still returns its result", async () => {
+  await withScout(async (delegate) => {
+    scripted = [toolTurn(1)];
+    const res = await delegate(undefined);
+    assertEquals(res.content[0].text, REPLY);
   });
 });
 

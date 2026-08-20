@@ -90,6 +90,19 @@ function finalText(messages: any[]): string {
   return parts.join("\n\n").trim();
 }
 
+// One progress line for a child event the parent should see while the run is still
+// going, or null for the rest. Only the child's TOOL CALLS are projected: its assistant
+// text is what the call returns at the end, so streaming that too would print the
+// answer twice. Pure, and the shape the parent renders, so it is tested directly.
+// deno-lint-ignore no-explicit-any
+export function progressLine(event: any): string | null {
+  if (event?.type !== "tool_execution_start") return null;
+  const args = JSON.stringify(event.args ?? null);
+  return `${event.toolName} ${
+    args.length > 200 ? args.slice(0, 200) + "…" : args
+  }`;
+}
+
 export type RunSubagentOptions = {
   def: AgentDef;
   task: string;
@@ -101,6 +114,9 @@ export type RunSubagentOptions = {
   // The parent tool call's abort signal, so aborting the parent kills the nested run
   // rather than orphaning it.
   signal?: AbortSignal;
+  // Called with one progressLine per tool call the child makes, as it starts. Without
+  // it the run is silent until it returns, and a long delegation looks like a hang.
+  onProgress?: (line: string) => void;
 };
 
 // Runs one subagent definition against one task, to completion, and returns its final
@@ -109,7 +125,8 @@ export type RunSubagentOptions = {
 // pique customTools, no recursive subagent spawning) and an in-memory session (nothing
 // persisted to disk).
 export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
-  const { def, task, cwd, modelRuntime, fallbackModel, signal } = opts;
+  const { def, task, cwd, modelRuntime, fallbackModel, signal, onProgress } =
+    opts;
   const model = await resolveModel(modelRuntime, def.model, fallbackModel);
   const agentDir = await Deno.makeTempDir();
   try {
@@ -131,6 +148,12 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
       sessionManager: SessionManager.inMemory(cwd),
       resourceLoader,
     });
+    const unsubscribe = onProgress
+      ? session.subscribe((event: unknown) => {
+        const line = progressLine(event);
+        if (line) onProgress(line);
+      })
+      : undefined;
     const onAbort = () => {
       session.abort();
     };
@@ -139,6 +162,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
       await session.prompt(task);
     } finally {
       signal?.removeEventListener("abort", onAbort);
+      unsubscribe?.();
     }
     const error = session.agent?.state?.errorMessage;
     if (error) throw new Error(`subagent ${def.name} failed: ${error}`);

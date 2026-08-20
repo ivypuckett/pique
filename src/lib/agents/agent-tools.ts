@@ -21,6 +21,11 @@ function text(
   return { content: [{ type: "text", text: value }], details: null };
 }
 
+// How many of a subagent run's most recent tool calls the parent shows while it waits.
+// Chosen against chat/agent.ts's 2000-char preview cap and progressLine's 200-char
+// lines, so a full block cannot be the thing that gets truncated.
+const PROGRESS_LINES = 8;
+
 // Bound to the scope its chat agent runs in: a subagent defined here is written into
 // that scope, so it is available to run_subagent calls from that scope and (if it is
 // root) every workspace beneath it.
@@ -64,7 +69,7 @@ export function subagentTools(
             "subagent sees nothing of this conversation beyond what is written here.",
         }),
       }),
-      async execute(_id, p, signal) {
+      async execute(_id, p, signal, onUpdate) {
         const agents = await listVisibleAgents(scope);
         const def = agents.find((a) => a.name === p.agent);
         if (!def) {
@@ -74,6 +79,16 @@ export function subagentTools(
             }`,
           );
         }
+        // pi hands every tool an onUpdate for partial results; here it is what turns a
+        // silent delegation into a visible one. Each of the child's tool calls appends a
+        // line and re-sends the block, because a partial result REPLACES the last rather
+        // than appending to it. The final result overwrites it in turn, so the progress
+        // is live only — it is not part of what the parent model reads back.
+        //
+        // Only the most recent lines go out: the projection that renders them truncates
+        // from the END (chat/agent.ts's preview), so an unbounded block would freeze on
+        // the child's first few calls and hide the one it is running now.
+        const lines: string[] = [];
         const result = await runSubagent({
           def,
           task: p.task,
@@ -81,6 +96,10 @@ export function subagentTools(
           modelRuntime,
           fallbackModel,
           signal,
+          onProgress: onUpdate && ((line) => {
+            lines.push(line);
+            onUpdate(text(lines.slice(-PROGRESS_LINES).join("\n")));
+          }),
         });
         return text(result);
       },
