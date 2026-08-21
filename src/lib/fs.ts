@@ -41,7 +41,7 @@ export function parseEntryName(name: string): { rel: string; isDir: boolean } {
   if (trimmed.startsWith("/")) throw new Error("name must be relative");
   const isDir = trimmed.endsWith("/");
   const rel = isDir ? trimmed.slice(0, -1) : trimmed;
-  for (const seg of rel.split("/")) {
+  for (const seg of rel.split(/[/\\]/)) {
     if (seg === "") throw new Error(`invalid name: ${trimmed}`);
     if (seg === "." || seg === "..") {
       throw new Error("name must not contain . or ..");

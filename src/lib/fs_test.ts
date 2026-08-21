@@ -44,6 +44,8 @@ Deno.test("parseEntryName refuses names that could escape the parent", () => {
   assertThrows(() => parseEntryName("../sibling.ts"));
   assertThrows(() => parseEntryName("a/../../b.ts"));
   assertThrows(() => parseEntryName("a//b.ts"));
+  assertThrows(() => parseEntryName("..\\sibling.ts"));
+  assertThrows(() => parseEntryName("a\\..\\..\\b.ts"));
 });
 
 Deno.test("createEntry makes files, directories, and missing parents", async () => {
