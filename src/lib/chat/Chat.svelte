@@ -31,7 +31,7 @@
   // the agent is ready; session.prompt() expands/runs them, so this is pure compose UI.
   let menuIndex = $state(0);
   let dismissed = $state(false);
-  let inputEl = $state<HTMLInputElement>();
+  let inputEl = $state<HTMLTextAreaElement>();
   // The token after `/`, or undefined once a space is typed (which closes the menu).
   const query = $derived(/^\/(\S*)$/.exec($input)?.[1]);
   const menu = $derived.by(() => {
@@ -48,12 +48,38 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (menu.length === 0) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); menuIndex = (menuIndex + 1) % menu.length; }
-    else if (e.key === "ArrowUp") { e.preventDefault(); menuIndex = (menuIndex - 1 + menu.length) % menu.length; }
-    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); selectCommand(menu[menuIndex]); }
-    else if (e.key === "Escape") { e.preventDefault(); dismissed = true; }
+    if (menu.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); menuIndex = (menuIndex + 1) % menu.length; }
+      else if (e.key === "ArrowUp") { e.preventDefault(); menuIndex = (menuIndex - 1 + menu.length) % menu.length; }
+      else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); selectCommand(menu[menuIndex]); }
+      else if (e.key === "Escape") { e.preventDefault(); dismissed = true; }
+      return;
+    }
+    // A textarea has no implicit submit, so Enter is sent by hand — and Shift+Enter is
+    // now the way to type the newline the box can finally show. isComposing guards an
+    // IME: mid-composition Enter picks a candidate, and must not send the message.
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if ($ready && !$streaming) session.send();
+    }
   }
+
+  // Grow the box to fit what is in it rather than scrolling a one-line slot. Height is
+  // cleared before it is read: scrollHeight only ever reports the content's full height
+  // when the element is not already sized to something taller. The border is added back
+  // because the height set here is a border-box one while scrollHeight is not, and being
+  // short by that much is exactly enough to raise a scrollbar on a single line.
+  //
+  // An $effect keyed on $input so it also follows text the app puts there (a picked `/`
+  // command, a cleared box after send), not only typing. max-h in the markup is what
+  // stops a pasted file from pushing the transcript off screen — past it, it scrolls.
+  $effect(() => {
+    const el = inputEl;
+    if (!el) return;
+    void $input;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  });
 
   // Terminal-style transcript: new output pushes older lines up rather than landing
   // below the fold. The pane stays pinned to the bottom until the reader scrolls away
@@ -116,7 +142,11 @@
       {#each $items as item}
         {#if item.role === "user" || item.role === "assistant"}
           <div class="chat {item.role === 'user' ? 'chat-end' : 'chat-start'}">
-            <div class="chat-bubble whitespace-pre-wrap">{item.text}</div>
+            <!-- pre-wrap keeps the newlines a message was written with; break-words is
+                 what handles the run of text that HAS no break in it — a URL, a path, a
+                 stack frame — which otherwise widens the bubble past the pane and puts a
+                 horizontal scrollbar under the whole transcript. -->
+            <div class="chat-bubble break-words whitespace-pre-wrap">{item.text}</div>
           </div>
         {:else if item.role === "thinking"}
           <div class="whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
@@ -154,17 +184,21 @@
         {/each}
       </ul>
     {/if}
-    <form class="flex gap-2 border-t border-base-300 p-2" onsubmit={(e) => { e.preventDefault(); session.send(); }}>
-      <input
-        class="input input-bordered flex-1"
-        placeholder="Message… (/ for commands)"
+    <form class="flex items-end gap-2 border-t border-base-300 p-2" onsubmit={(e) => { e.preventDefault(); session.send(); }}>
+      <!-- min-h-0 undoes daisyUI's own 80px floor on .textarea, which would otherwise hold
+           an empty composer four lines tall and make growing invisible until the fifth.
+           max-h-48 is the ceiling past which it scrolls instead of growing further. -->
+      <textarea
+        class="textarea textarea-bordered max-h-48 min-h-0 flex-1 resize-none overflow-y-auto"
+        rows="1"
+        placeholder="Message… (/ for commands, shift+enter for a newline)"
         aria-label="Chat message"
         bind:value={$input}
         bind:this={inputEl}
         oninput={() => { dismissed = false; }}
         onkeydown={onKeydown}
         disabled={!$ready || $streaming}
-      />
+      ></textarea>
       <button class="btn btn-primary" type="submit" disabled={!$ready || $streaming}>Send</button>
     </form>
   </div>

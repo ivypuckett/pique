@@ -85,7 +85,10 @@
   // layout box. Chat is the center column of every view and has no hidden state, so
   // there is always exactly one.
   function visibleChatInput(): HTMLElement | null {
-    const inputs = document.querySelectorAll<HTMLElement>('input[aria-label="Chat message"]');
+    // Matched on the label alone, not on a tag: the box is a textarea so it can grow
+    // with what you type, and pinning the selector to one element name is what would
+    // silently break this the next time that changes.
+    const inputs = document.querySelectorAll<HTMLElement>('[aria-label="Chat message"]');
     for (const input of inputs) {
       if (input.offsetParent !== null) return input;
     }
