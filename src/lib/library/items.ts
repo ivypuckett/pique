@@ -6,8 +6,9 @@ import type { ScopeId } from "../scope/paths.ts";
 import type { Extension } from "../extensions/bindings.ts";
 import type { PromptInfo } from "../prompts/bindings.ts";
 import type { SkillInfo } from "../skills/bindings.ts";
+import type { AgentDef } from "../agents/bindings.ts";
 
-export type LibraryKind = "extension" | "prompt" | "skill";
+export type LibraryKind = "extension" | "prompt" | "skill" | "subagent";
 
 // What the row is waiting for, NOT what kind of thing it is. `pending` is the review
 // gate; `inherited` came from an ancestor scope and is read-only here, because it is
@@ -42,12 +43,14 @@ type Common = {
 export type LibraryItem =
   | (Common & { kind: "extension"; ext: Extension })
   | (Common & { kind: "prompt"; prompt: PromptInfo })
-  | (Common & { kind: "skill"; skill: SkillInfo });
+  | (Common & { kind: "skill"; skill: SkillInfo })
+  | (Common & { kind: "subagent"; agent: AgentDef });
 
 const KIND_ORDER: Record<LibraryKind, number> = {
   extension: 0,
   prompt: 1,
   skill: 2,
+  subagent: 3,
 };
 
 export type LibraryGroups = {

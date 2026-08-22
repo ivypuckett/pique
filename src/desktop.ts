@@ -32,6 +32,7 @@ let prompts: typeof import("./lib/prompts/service.ts");
 let automatons: typeof import("./lib/automatons/run.ts");
 let automatonService: typeof import("./lib/automatons/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
+let agents: typeof import("./lib/agents/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
@@ -708,6 +709,40 @@ win.bind("skillsVisible", async (arg) => {
   return await skills.listVisibleSkills(scope);
 });
 
+// Subagents — named system prompts a chat agent delegates to (docs/subagents.md). Both
+// halves write to the same live dir: there is no quarantine here, so unlike prompts*
+// these handlers have no approve/reject pair, and an agent's define_subagent writes
+// exactly what the Library does. agentsList is the scope's own definitions — the ones it
+// can edit or delete; what run_subagent can reach is resolved per call, in the tool.
+win.bind("agentsList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await agents.listAgents(scope);
+});
+
+win.bind("agentsSave", async (arg) => {
+  const { scope, name, description, tools, model, systemPrompt } = arg as {
+    scope: string;
+    name: string;
+    description: string;
+    tools?: string[];
+    model?: string;
+    systemPrompt: string;
+  };
+  await agents.saveAgent(scope, name, {
+    description,
+    tools,
+    model,
+    systemPrompt,
+  });
+  return true;
+});
+
+win.bind("agentsDelete", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await agents.deleteAgent(scope, name);
+  return true;
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -728,6 +763,7 @@ prompts = await import("./lib/prompts/service.ts");
 automatons = await import("./lib/automatons/run.ts");
 automatonService = await import("./lib/automatons/service.ts");
 skills = await import("./lib/skills/service.ts");
+agents = await import("./lib/agents/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.

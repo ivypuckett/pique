@@ -50,8 +50,8 @@ Both are compiled into pique and bound to the scope the chat agent runs in
 
 **`define_subagent`** — writes the file. Takes `name`, `description`,
 `system_prompt`, and optionally `tools` and `model`. Re-defining a name
-overwrites it. There is no review step and no Library UI; ask the agent for one
-in prose and it exists:
+overwrites it. There is no review step; ask the agent for one in prose and it
+exists:
 
 > define a subagent called reviewer that reads code and flags bugs, give it read
 > grep and ls, and use a cheap model
@@ -85,6 +85,24 @@ for your threat model.
 The dir sits inside the scope's `agent/` dir next to `prompts/` and
 `extensions/`, though unlike those two pi never discovers it — pique reads it
 itself.
+
+## In the Library
+
+The Library module lists this scope's definitions alongside its extensions,
+templates and skills, badged `subagent`. Expanding one shows its tool list, its
+model and its system prompt; **Edit** opens the same form **New subagent**
+opens, and **Delete** removes the file.
+
+There is no _Awaiting review_ queue for these — a saved definition is live, and
+`run_subagent` can reach it on the agent's very next tool call, since
+definitions are re-read from disk per call. The two halves write the same file
+through the same function (`saveAgent` in `agents/service.ts`), so a definition
+written by `define_subagent` is one the Library can edit, and the reverse.
+
+Root's definitions appear in a workspace under _Inherited from Root_, read-only
+there: they are edited where they live. One shadowed by a same-named local
+definition is badged `shadowed`, because it is listed but can never be the one
+that runs.
 
 ## Scope
 
@@ -146,8 +164,6 @@ returns, so showing it live would print the answer twice.
 
 - **No timeout or turn cap.** A child that will not converge runs until it is
   aborted.
-- **No UI.** Definitions are created by `define_subagent` or by hand; there is
-  no Library tab listing or editing them yet.
 - **Not a replacement for profiles.** pique's old profiles carried a `tools:`
   allowlist for _your_ conversation ([prompts.md](prompts.md)); a subagent
   applies one to a delegated session instead. It is the nearest thing that

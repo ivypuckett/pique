@@ -10,9 +10,7 @@ import {
   type ModelRuntime,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { listVisibleAgents, runSubagent } from "./service.ts";
-import { agentFile } from "./parse.ts";
-import { agentPath, assertAgentName, ensureAgentDirs } from "./paths.ts";
+import { listVisibleAgents, runSubagent, saveAgent } from "./service.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 function text(
@@ -140,17 +138,12 @@ export function subagentTools(
         })),
       }),
       async execute(_id, p) {
-        assertAgentName(p.name);
-        await ensureAgentDirs(scope);
-        await Deno.writeTextFile(
-          agentPath(scope, p.name),
-          agentFile({
-            description: p.description,
-            tools: p.tools,
-            model: p.model,
-            systemPrompt: p.system_prompt,
-          }),
-        );
+        await saveAgent(scope, p.name, {
+          description: p.description,
+          tools: p.tools,
+          model: p.model,
+          systemPrompt: p.system_prompt,
+        });
         return text(`Defined subagent ${p.name}. ${reach}`);
       },
     }),

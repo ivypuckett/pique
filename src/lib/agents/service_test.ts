@@ -1,10 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
+  deleteAgent,
   listAgents,
   listVisibleAgents,
   progressLine,
   runSubagent,
+  saveAgent,
 } from "./service.ts";
 import { parseAgentDef } from "./parse.ts";
 import { agentsDir } from "./paths.ts";
@@ -49,6 +51,52 @@ Deno.test("listAgents reads and parses every definition in the scope's dir", asy
 Deno.test("a scope with no agents dir yet lists none, not an error", async () => {
   await withTempHome(async () => {
     assertEquals(await listAgents("ws-9"), []);
+  });
+});
+
+// The human write path. It creates the dir, so the Library can save the first definition
+// into a scope that has never had one.
+Deno.test("saveAgent writes a definition listAgents reads back", async () => {
+  await withTempHome(async () => {
+    await saveAgent("ws-9", "scout", {
+      description: "recon",
+      tools: ["read", "grep"],
+      model: "claude-haiku-4-5",
+      systemPrompt: "Be fast.",
+    });
+    const [def] = await listAgents("ws-9");
+    assertEquals(def.description, "recon");
+    assertEquals(def.tools, ["read", "grep"]);
+    assertEquals(def.model, "claude-haiku-4-5");
+    assertEquals(def.systemPrompt, "Be fast.");
+  });
+});
+
+Deno.test("saving an existing name replaces it rather than adding a second", async () => {
+  await withTempHome(async () => {
+    await saveAgent(ROOT, "scout", { description: "old", systemPrompt: "A." });
+    await saveAgent(ROOT, "scout", { description: "new", systemPrompt: "B." });
+    const defs = await listAgents(ROOT);
+    assertEquals(defs.length, 1);
+    assertEquals(defs[0].description, "new");
+  });
+});
+
+// The same guard define_subagent is held to: a name is a filename, so one carrying a
+// separator would write outside the scope's dir.
+Deno.test("saveAgent refuses a name that is not a legal filename stem", async () => {
+  await withTempHome(async () => {
+    await assertRejects(() =>
+      saveAgent(ROOT, "../escape", { description: "", systemPrompt: "x" })
+    );
+  });
+});
+
+Deno.test("deleteAgent removes the definition", async () => {
+  await withTempHome(async () => {
+    await writeAgent(ROOT, "scout", "---\ndescription: recon\n---\nBe fast.\n");
+    await deleteAgent(ROOT, "scout");
+    assertEquals(await listAgents(ROOT), []);
   });
 });
 

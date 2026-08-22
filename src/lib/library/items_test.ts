@@ -53,6 +53,17 @@ function skill(title: string, state: LibraryState): LibraryItem {
   };
 }
 
+function subagent(title: string, state: LibraryState): LibraryItem {
+  return {
+    kind: "subagent",
+    key: `subagent/root/${title}`,
+    scope: "root",
+    state,
+    title,
+    agent: { name: title, description: "", systemPrompt: "" },
+  };
+}
+
 const titles = (items: LibraryItem[]): string[] => items.map((i) => i.title);
 
 // The whole point of unifying: a pending prompt and a pending extension are one queue,
@@ -71,13 +82,14 @@ Deno.test("groups by state, mixing kinds within a group", () => {
 
 // Kind-first ordering keeps a row's neighbours stable as items come and go, which a
 // pure alphabetical sort would not.
-Deno.test("within a group, extensions come before prompts before skills", () => {
+Deno.test("within a group, extensions come before prompts before skills before subagents", () => {
   const groups = groupItems([
-    skill("aaa", "active"),
-    prompt("bbb", "active"),
-    ext("ccc", "active"),
+    subagent("aaa", "active"),
+    skill("bbb", "active"),
+    prompt("ccc", "active"),
+    ext("ddd", "active"),
   ]);
-  assertEquals(titles(groups.active), ["ccc", "bbb", "aaa"]);
+  assertEquals(titles(groups.active), ["ddd", "ccc", "bbb", "aaa"]);
 });
 
 Deno.test("ties within a kind break by title", () => {

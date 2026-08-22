@@ -62,8 +62,14 @@ runs a subset of the definer's tools, chosen by the definer, in a nested session
 (`agents/service.ts:runSubagent`) whose temp `agentDir` gives it none of pique's
 own tools and no `run_subagent` of its own. The definer already holds `write`
 and `bash`. Anything it could phrase as a subagent instruction it can simply do,
-so there is no escalation for a gate to stand in front of, and a quarantine with
-no approval UI behind it would imply a review that nobody is performing.
+so there is no escalation for a gate to stand in front of.
+
+The Library now lists and edits these definitions
+([subagents.md](subagents.md)), so the second leg this decision used to rest on
+— that a quarantine would have had no approval UI behind it, and would imply a
+review nobody performs — no longer holds. The capability argument above is what
+carries it: revisiting the decision means arguing against that, not against a
+missing screen.
 
 What the decision accepts, stated plainly because it is the part that is easy to
 miss: a definition written into **root** is inherited by every workspace

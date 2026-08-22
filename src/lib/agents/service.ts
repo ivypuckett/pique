@@ -8,8 +8,13 @@ import {
   type ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { type AgentDef, parseAgentDef } from "./parse.ts";
-import { agentsDir } from "./paths.ts";
+import { type AgentDef, agentFile, parseAgentDef } from "./parse.ts";
+import {
+  agentPath,
+  agentsDir,
+  assertAgentName,
+  ensureAgentDirs,
+} from "./paths.ts";
 import { chain, type ScopeId } from "../scope/paths.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -52,6 +57,32 @@ export async function listVisibleAgents(scope: ScopeId): Promise<AgentDef[]> {
     for (const def of await listAgents(s)) byName.set(def.name, def);
   }
   return [...byName.values()];
+}
+
+// Write a definition into the scope's live dir, creating or replacing it. Both halves
+// write through here — the Library (agents* win.bind handlers, desktop.ts) and the agent
+// itself (define_subagent) — because there is no quarantine for the two to differ over,
+// unlike prompts where only the human path may write live.
+export async function saveAgent(
+  scope: ScopeId,
+  name: string,
+  a: {
+    description: string;
+    tools?: string[];
+    model?: string;
+    systemPrompt: string;
+  },
+): Promise<void> {
+  assertAgentName(name);
+  await ensureAgentDirs(scope);
+  await Deno.writeTextFile(agentPath(scope, name), agentFile(a));
+}
+
+export async function deleteAgent(
+  scope: ScopeId,
+  name: string,
+): Promise<void> {
+  await Deno.remove(agentPath(scope, name));
 }
 
 // The model an agent definition asks for: `provider/id`, or a bare id searched across
