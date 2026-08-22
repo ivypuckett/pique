@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "nodeModulesDir": "auto",
   "tasks": {
-    "dev": "unset LD_LIBRARY_PATH LD_PRELOAD GTK_PATH GTK_EXE_PREFIX GTK_IM_MODULE_FILE GDK_PIXBUF_MODULE_FILE GDK_PIXBUF_MODULEDIR GIO_MODULE_DIR GSETTINGS_SCHEMA_DIR GCONV_PATH LOCPATH GTK_RC_FILES GTK2_RC_FILES && export WEBKIT_DISABLE_DMABUF_RENDERER=1 && deno run -A npm:vite build && deno desktop -A --include dist --output pique src/desktop.ts && ./pique/pique",
+    "dev": "deno run -A src/dev.ts",
     "web": "deno run -A npm:vite",
     "build": "deno run -A npm:vite build",
     "test": "deno test -A src/"

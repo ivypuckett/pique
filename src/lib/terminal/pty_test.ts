@@ -9,9 +9,15 @@ import {
   killSession,
   readSession,
   resizeSession,
+  resolveCommand,
   startSession,
   writeSession,
 } from "./pty.ts";
+
+// A stand-in for Deno.env holding only what resolveCommand reads.
+const envOf = (vars: Record<string, string>) => ({
+  get: (name: string) => vars[name],
+});
 
 // Non-blocking read is single-shot; drain polls it for up to `ms`.
 async function drain(id: string, ms: number): Promise<string> {
@@ -26,6 +32,60 @@ async function drain(id: string, ms: number): Promise<string> {
   }
   return out;
 }
+
+Deno.test("resolveCommand uses $SHELL interactively when it is set", () => {
+  assertEquals(
+    resolveCommand(undefined, "linux", envOf({ SHELL: "/usr/bin/fish" })),
+    { cmd: "/usr/bin/fish", args: ["-i"] },
+  );
+});
+
+Deno.test("resolveCommand falls back to /bin/sh, not bash, on POSIX", () => {
+  assertEquals(resolveCommand(undefined, "darwin", envOf({})), {
+    cmd: "/bin/sh",
+    args: ["-i"],
+  });
+});
+
+Deno.test("resolveCommand ignores $SHELL and drops -i on Windows", () => {
+  // A POSIX-shaped $SHELL can survive in a Git Bash environment; ComSpec is the one
+  // Windows itself sets, and cmd would take -i as a filename.
+  assertEquals(
+    resolveCommand(
+      undefined,
+      "windows",
+      envOf({ SHELL: "/bin/bash", ComSpec: "C:\\Windows\\system32\\cmd.exe" }),
+    ),
+    { cmd: "C:\\Windows\\system32\\cmd.exe", args: [] },
+  );
+  assertEquals(resolveCommand(undefined, "windows", envOf({})), {
+    cmd: "powershell.exe",
+    args: [],
+  });
+});
+
+Deno.test("resolveCommand resolves the $EDITOR sentinel, per platform", () => {
+  assertEquals(
+    resolveCommand(["$EDITOR", "f.txt"], "linux", envOf({ EDITOR: "nvim" })),
+    { cmd: "nvim", args: ["f.txt"] },
+  );
+  assertEquals(resolveCommand(["$EDITOR", "f.txt"], "linux", envOf({})), {
+    cmd: "vi",
+    args: ["f.txt"],
+  });
+  // vi is not on a stock Windows install, so the POSIX fallback would just fail to spawn.
+  assertEquals(resolveCommand(["$EDITOR", "f.txt"], "windows", envOf({})), {
+    cmd: "notepad.exe",
+    args: ["f.txt"],
+  });
+});
+
+Deno.test("resolveCommand passes a non-sentinel argv through untouched", () => {
+  assertEquals(
+    resolveCommand(["git", "log"], "windows", envOf({ EDITOR: "nvim" })),
+    { cmd: "git", args: ["log"] },
+  );
+});
 
 Deno.test("startSession returns a string id", () => {
   const id = startSession({ cols: 80, rows: 24 });

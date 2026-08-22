@@ -1,0 +1,112 @@
+// The `deno task dev` pipeline: build the frontend, package the desktop app, run it.
+//
+// This was a one-line POSIX shell pipeline (`unset … && export … && … && ./pique/pique`),
+// which parses in neither cmd nor PowerShell, and which applied WebKitGTK workarounds on
+// every platform because a shell has no way to ask which one it is on. Both platform
+// decisions are pure functions here so they can be tested from the one machine that only
+// ever takes the Linux branch.
+import { join } from "@std/path";
+
+// What `--output` below names the packaged app, and therefore the launcher's basename.
+const APP = "pique";
+const OUT = APP;
+
+// Set by a host toolchain, a distro-packaged Deno, or a Nix/Flatpak wrapper, and
+// inherited by the child. WebKitGTK then loads the host's GTK modules and pixbuf loaders
+// instead of its own and dies on startup, so the packaged app has to be run without them.
+const GTK_LEAKS = [
+  "LD_LIBRARY_PATH",
+  "LD_PRELOAD",
+  "GTK_PATH",
+  "GTK_EXE_PREFIX",
+  "GTK_IM_MODULE_FILE",
+  "GDK_PIXBUF_MODULE_FILE",
+  "GDK_PIXBUF_MODULEDIR",
+  "GIO_MODULE_DIR",
+  "GSETTINGS_SCHEMA_DIR",
+  "GCONV_PATH",
+  "LOCPATH",
+  "GTK_RC_FILES",
+  "GTK2_RC_FILES",
+];
+
+// The environment the pipeline runs under. Every adjustment is WebKitGTK's, so only Linux
+// takes any: macOS renders through WKWebView and Windows through WebView2, neither of
+// which has ever heard of GBM or a pixbuf loader.
+export function devEnv(
+  os: typeof Deno.build.os,
+  base: Record<string, string>,
+): Record<string, string> {
+  if (os !== "linux") return { ...base };
+  const env = { ...base };
+  for (const name of GTK_LEAKS) delete env[name];
+  // WebKitGTK's DMA-BUF renderer aborts with "Could not create GBM EGL display" under
+  // the NVIDIA driver, taking the whole app with it.
+  env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
+  return env;
+}
+
+// How to start what `deno desktop` just packaged, given the names it left in `dir`.
+// Asked of the directory rather than assumed, because the shape of the output is exactly
+// what differs per platform: a bare executable on Linux, an `.exe` on Windows, and on
+// macOS possibly an `.app` bundle — which is a directory, and is opened rather than run.
+export function launchCommand(
+  os: typeof Deno.build.os,
+  dir: string,
+  entries: string[],
+): { cmd: string; args: string[] } {
+  const bundle = entries.find((e) => e.endsWith(".app"));
+  // -W waits for the app to quit, so `deno task dev` stays in the foreground and ^C
+  // still ends the session the way it does on the other two platforms.
+  if (os === "darwin" && bundle) return { cmd: "open", args: ["-W", join(dir, bundle)] };
+  const exe = os === "windows" ? `${APP}.exe` : APP;
+  if (!entries.includes(exe)) {
+    throw new Error(
+      `deno desktop left no ${exe} in ${dir}/ — found: ${entries.join(", ") || "nothing"}`,
+    );
+  }
+  return { cmd: join(dir, exe), args: [] };
+}
+
+// Inherited stdio throughout: vite's build output, the packager's progress and the app's
+// own logs are the point of running this task. A failing step ends the pipeline with its
+// own exit code rather than falling through to the next.
+async function run(
+  cmd: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<void> {
+  const { code } = await new Deno.Command(cmd, {
+    args,
+    env,
+    // The env above is the whole environment, GTK_LEAKS already removed — inheriting on
+    // top of it would put them straight back.
+    clearEnv: true,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  }).spawn().status;
+  if (code !== 0) Deno.exit(code);
+}
+
+async function main(): Promise<void> {
+  const os = Deno.build.os;
+  const env = devEnv(os, Deno.env.toObject());
+  // Deno.execPath() rather than "deno": this task must run under the same Deno that
+  // launched it, not whichever one happens to be first on PATH.
+  const deno = Deno.execPath();
+
+  await run(deno, ["run", "-A", "npm:vite", "build"], env);
+  await run(
+    deno,
+    ["desktop", "-A", "--include", "dist", "--output", OUT, "src/desktop.ts"],
+    env,
+  );
+
+  const entries: string[] = [];
+  for await (const e of Deno.readDir(OUT)) entries.push(e.name);
+  const { cmd, args } = launchCommand(os, OUT, entries);
+  await run(cmd, args, env);
+}
+
+if (import.meta.main) await main();

@@ -93,6 +93,26 @@ Deno.test("renameEntry moves within the same directory", async () => {
   }
 });
 
+// The case-only rename this guards (Foo.ts -> foo.ts on APFS/NTFS) cannot be staged on
+// a case-sensitive filesystem, because there the destination simply does not exist. A
+// hard link reaches the same branch by the same route — an existing destination that
+// (dev, ino) says IS the source — so this pins the behaviour on Linux CI too.
+Deno.test("renameEntry allows a destination that is the source itself", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/a.txt`, "a");
+    await Deno.link(`${dir}/a.txt`, `${dir}/same.txt`);
+
+    assertEquals(
+      await renameEntry(`${dir}/a.txt`, "same.txt"),
+      `${dir}/same.txt`,
+    );
+    assertEquals(await Deno.readTextFile(`${dir}/same.txt`), "a");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("renameEntry refuses to clobber an existing entry", async () => {
   const dir = await Deno.makeTempDir();
   try {

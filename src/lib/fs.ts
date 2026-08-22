@@ -76,9 +76,25 @@ export async function renameEntry(path: string, name: string): Promise<string> {
   // is native, so comparing them raw would miss a rename to the name it already has
   // and then refuse it as occupied by itself.
   if (web === toWebPath(path)) return web;
-  if (await exists(dest)) throw new Error(`already exists: ${rel}`);
+  if (await exists(dest) && !await isSameEntry(path, dest)) {
+    throw new Error(`already exists: ${rel}`);
+  }
   await Deno.rename(path, dest);
   return web;
+}
+
+// Whether two paths name the one entry on disk. Asked only after `dest` is found to
+// exist, to tell a real collision from a file colliding with itself: on a
+// case-insensitive filesystem (APFS, NTFS) `Foo.ts` and `foo.ts` ARE the same entry, so
+// without this a case-only rename is impossible from the tree.
+//
+// (dev, ino) is the real answer, and both are null on Windows — there the paths are
+// compared case-insensitively instead, which is exactly the case that matters since a
+// Windows collision that is not case-only has different letters, not different case.
+async function isSameEntry(a: string, b: string): Promise<boolean> {
+  const [x, y] = await Promise.all([Deno.lstat(a), Deno.lstat(b)]);
+  if (x.dev !== null && x.ino !== null) return x.dev === y.dev && x.ino === y.ino;
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 // Delete an entry, recursively for a directory. Permanent — the confirmation the tree

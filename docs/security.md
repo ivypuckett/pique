@@ -161,7 +161,7 @@ bound port first, and the collision is a nuisance rather than the finding.
 Verified by running the call in isolation — loopback answers 200, the host's LAN
 address refuses.
 
-### 3. Credentials are written with default file permissions — MEDIUM — FIXED
+### 3. Credentials are written with default file permissions — MEDIUM — FIXED ON POSIX
 
 `providers.ts:writeModelsJson` writes `~/.pi/agent/models.json` — which holds
 `apiKey` for a custom provider, via `buildCustomEntry` — with
@@ -170,11 +170,24 @@ stock machine: any other user on the host can read the key.
 `settings/file.ts:writeJson` has the same shape for `~/.pique/*.json`, and the
 `Deno.mkdir` calls beside both leave their directories 0755.
 
-**Fixed.** `{ mode: 0o600 }` on both writes, `{ mode: 0o700 }` on both mkdirs.
-Deno applies `mode` on every write rather than only at creation — verified — so
-an install that already wrote `models.json` at 0644 is narrowed on the next
-save, and no migration step is needed. `auth.json` is written by pi itself and
-is upstream of pique; still worth confirming what it does rather than assuming.
+**Fixed on Linux and macOS.** `{ mode: 0o600 }` on both writes, `{ mode: 0o700 }`
+on both mkdirs. Deno applies `mode` on every write rather than only at creation —
+verified — so an install that already wrote `models.json` at 0644 is narrowed on
+the next save, and no migration step is needed. `auth.json` is written by pi
+itself and is upstream of pique; still worth confirming what it does rather than
+assuming.
+
+**Not fixed on Windows, and the mode bits do not report that.** Deno accepts
+`mode` there and silently ignores it — no error, no warning — so
+`writeModelsJson` and `writeJson` appear to succeed while leaving the files at
+whatever the inherited ACL grants, which on a shared machine can include other
+local users. The bits are still correct to pass (they cost nothing and are right
+on the other two platforms), but the protection is POSIX-only and this entry
+should not be read as saying otherwise. Closing it needs an ACL equivalent —
+`icacls <file> /inheritance:r /grant:r %USERNAME%:F`, or the same via the Win32
+API — plus a Windows machine to verify it on, which is why it is recorded as
+open rather than guessed at. Decision 3 in the README names Windows a supported
+target, so this is a gap to close, not a platform to write off.
 
 Not fixable by a mode bit, and worth stating plainly next to the decision to
 share those files with the `pi` CLI: the chat agent has `read` and its cwd is
