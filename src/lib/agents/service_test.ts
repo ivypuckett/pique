@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
   deleteAgent,
@@ -7,6 +7,7 @@ import {
   progressLine,
   runSubagent,
   saveAgent,
+  truncatedResult,
 } from "./service.ts";
 import { parseAgentDef } from "./parse.ts";
 import { agentsDir } from "./paths.ts";
@@ -177,15 +178,31 @@ function sseToolCall(name: string, args: unknown): string {
 }
 
 let lastRequest = "";
-// Responses to serve before falling back to the plain reply, oldest first. A child that
-// makes a tool call needs two turns, and both come from this one endpoint.
+// Responses to serve before falling back, oldest first. A child that makes a tool call
+// needs two turns, and both come from this one endpoint.
 let scripted: string[] = [];
+// What to serve once `scripted` runs dry. A plain reply ends the run; a test that needs
+// a child which never converges swaps in one that answers with another tool call.
+let fallback: () => string = sse;
+// Stalls the endpoint, so a run can be stopped while a request is still in flight.
+let delayMs = 0;
 
 const server = Deno.serve(
   { port: 0, onListen: () => {} },
   async (req) => {
     lastRequest = await req.text();
-    return new Response(scripted.shift() ?? sse(), {
+    if (delayMs > 0) {
+      // Released early when the client goes away, so an aborted run leaves no timer
+      // holding the test process open.
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, delayMs);
+        req.signal.addEventListener("abort", () => {
+          clearTimeout(t);
+          resolve();
+        });
+      });
+    }
+    return new Response(scripted.shift() ?? fallback(), {
       headers: { "content-type": "text/event-stream" },
     });
   },
@@ -199,6 +216,8 @@ async function withMockRuntime(
   await withTempHome(async (home) => {
     const cwd = await Deno.makeTempDir();
     scripted = [];
+    fallback = sse;
+    delayMs = 0;
     try {
       await Deno.mkdir(`${home}/.pi/agent`, { recursive: true });
       await Deno.writeTextFile(
@@ -297,6 +316,69 @@ Deno.test("runSubagent reports each tool call the child makes, as it makes it", 
       seen,
       ['ls {"path":"."}'],
       "the parent has to see the child working, or a long run looks like a hang",
+    );
+  });
+});
+
+Deno.test("truncatedResult hands back the partial answer, marked as partial", () => {
+  assertEquals(
+    truncatedResult("scout", "hit its 3-turn limit", "  found two files  "),
+    "found two files\n\n[subagent scout was stopped early: it hit its 3-turn limit. " +
+      "The text above is what it produced before then, and may be incomplete.]",
+  );
+  // Nothing to qualify, so it does not claim there is text above.
+  assertEquals(
+    truncatedResult("scout", "hit its 60s time limit", "   "),
+    "[subagent scout was stopped early: it hit its 60s time limit, and produced no output.]",
+  );
+});
+
+Deno.test("a child that will not converge is stopped at its turn cap", async () => {
+  await withMockRuntime(async (runtime, cwd) => {
+    // Every response is another tool call, so the child never answers on its own — the
+    // exact shape the card describes, a delegation that runs until something stops it.
+    fallback = () => sseToolCall("ls", { path: "." });
+    const def = parseAgentDef(
+      "scout",
+      "---\ndescription: recon\ntools: ls\n---\nLoop.\n",
+    );
+    const seen: string[] = [];
+    const result = await runSubagent({
+      def,
+      task: "go",
+      cwd,
+      modelRuntime: runtime,
+      fallbackModel: runtime.getModel("mock", "mock-model"),
+      maxTurns: 3,
+      onProgress: (line) => seen.push(line),
+    });
+    assertStringIncludes(result, "hit its 3-turn limit");
+    assertEquals(
+      seen.length,
+      3,
+      "stopped AT the cap — one tool call per turn, and no fourth turn started",
+    );
+  });
+});
+
+Deno.test("a child that hangs is stopped at its time limit rather than waiting", async () => {
+  await withMockRuntime(async (runtime, cwd) => {
+    delayMs = 30_000;
+    const def = parseAgentDef("scout", "---\ndescription: recon\n---\nHang.\n");
+    const started = Date.now();
+    const result = await runSubagent({
+      def,
+      task: "go",
+      cwd,
+      modelRuntime: runtime,
+      fallbackModel: runtime.getModel("mock", "mock-model"),
+      timeoutMs: 300,
+    });
+    assertStringIncludes(result, "produced no output");
+    assertEquals(
+      Date.now() - started < 15_000,
+      true,
+      "the run must end on its own deadline, not on the hung request's",
     );
   });
 });

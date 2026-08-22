@@ -137,6 +137,34 @@ The result is every assistant text block the run produced, joined. A child that
 ends in an error state raises, so the parent sees a failed tool call rather than
 an empty answer.
 
+## Limits
+
+A run is bounded twice, because the two failures look nothing alike: a child
+stuck in a tool loop burns turns fast and would sit well inside any wall-clock
+budget, while a child waiting on one hung call burns no turns at all.
+
+| Limit     | Default                       |
+| --------- | ----------------------------- |
+| Wall time | 10 minutes                    |
+| Turns     | 40 (one per model response)   |
+
+Both are backstops against a run that will never converge, not budgets a working
+delegation should ever feel.
+
+Hitting one **does not fail the call**. The child is aborted and the parent gets
+back whatever text it had produced, with a line saying it was cut short:
+
+```
+Found three call sites in src/lib/kanban/.
+
+[subagent scout was stopped early: it hit its 40-turn limit. The text above is
+what it produced before then, and may be incomplete.]
+```
+
+A partial answer is usually still worth something to the parent, and an error
+would throw it away — but the parent must know it is looking at one, which is
+why the notice travels with the text rather than only in the logs.
+
 ## Progress
 
 While the run is going, each tool call the child makes is reported under the
@@ -162,8 +190,9 @@ returns, so showing it live would print the answer twice.
 
 ## Known limits
 
-- **No timeout or turn cap.** A child that will not converge runs until it is
-  aborted.
+- **The limits above are not per-definition.** They are the same for every
+  subagent; a definition cannot ask for a longer leash, and there is no way to
+  raise one for a single call from chat.
 - **Not a replacement for profiles.** pique's old profiles carried a `tools:`
   allowlist for _your_ conversation ([prompts.md](prompts.md)); a subagent
   applies one to a delegated session instead. It is the nearest thing that

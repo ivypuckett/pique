@@ -134,6 +134,29 @@ export function progressLine(event: any): string | null {
   }`;
 }
 
+// Two limits rather than one, because they catch different failures. A child stuck in a
+// tool loop burns turns quickly and would sit well inside any wall-clock budget; a child
+// waiting on one hung call burns no turns at all. Both are generous — they are a backstop
+// against a run that will never converge, not a budget a working delegation should feel.
+export const DEFAULT_TIMEOUT_MS = 10 * 60_000;
+export const DEFAULT_MAX_TURNS = 40;
+
+// What the parent gets back when a limit stopped the run. The child's own text comes
+// first and the notice qualifies it, rather than an error that throws the work away:
+// the parent can usually still act on a partial answer, and always needs to know it is
+// looking at one. Pure, so the wording is pinned by a test.
+export function truncatedResult(
+  name: string,
+  limit: string,
+  text: string,
+): string {
+  const trimmed = text.trim();
+  const why = `subagent ${name} was stopped early: it ${limit}`;
+  return trimmed === ""
+    ? `[${why}, and produced no output.]`
+    : `${trimmed}\n\n[${why}. The text above is what it produced before then, and may be incomplete.]`;
+}
+
 export type RunSubagentOptions = {
   def: AgentDef;
   task: string;
@@ -148,16 +171,28 @@ export type RunSubagentOptions = {
   // Called with one progressLine per tool call the child makes, as it starts. Without
   // it the run is silent until it returns, and a long delegation looks like a hang.
   onProgress?: (line: string) => void;
+  // Both default as above; a caller overrides them to bound one particular run.
+  timeoutMs?: number;
+  maxTurns?: number;
 };
 
-// Runs one subagent definition against one task, to completion, and returns its final
-// text. The child is isolated from everything the parent conversation carries: a fresh
-// temp agentDir (so DefaultResourceLoader finds no extensions/prompts/skills — no
-// pique customTools, no recursive subagent spawning) and an in-memory session (nothing
-// persisted to disk).
+// Runs one subagent definition against one task and returns its final text — to
+// completion, or to whichever limit it hits first. The child is isolated from everything
+// the parent conversation carries: a fresh temp agentDir (so DefaultResourceLoader finds
+// no extensions/prompts/skills — no pique customTools, no recursive subagent spawning)
+// and an in-memory session (nothing persisted to disk).
 export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
-  const { def, task, cwd, modelRuntime, fallbackModel, signal, onProgress } =
-    opts;
+  const {
+    def,
+    task,
+    cwd,
+    modelRuntime,
+    fallbackModel,
+    signal,
+    onProgress,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxTurns = DEFAULT_MAX_TURNS,
+  } = opts;
   const model = await resolveModel(modelRuntime, def.model, fallbackModel);
   const agentDir = await Deno.makeTempDir();
   try {
@@ -179,12 +214,32 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
       sessionManager: SessionManager.inMemory(cwd),
       resourceLoader,
     });
-    const unsubscribe = onProgress
-      ? session.subscribe((event: unknown) => {
-        const line = progressLine(event);
-        if (line) onProgress(line);
-      })
-      : undefined;
+    // Which limit ended the run, or null if it finished on its own. Recorded BEFORE the
+    // abort, so the error the abort leaves behind is recognised as ours rather than
+    // reported as a failure of the child's.
+    let stoppedBy: string | null = null;
+    let turns = 0;
+    const stop = (limit: string) => {
+      if (stoppedBy !== null) return;
+      stoppedBy = limit;
+      void session.abort();
+    };
+
+    const timer = setTimeout(
+      () => stop(`hit its ${Math.round(timeoutMs / 1000)}s time limit`),
+      timeoutMs,
+    );
+    // Subscribed unconditionally now, not only for onProgress: turn_end is how the turn
+    // cap is counted, and pi fires it once per model response with its tool results.
+    const unsubscribe = session.subscribe((event: unknown) => {
+      const e = event as { type?: string };
+      if (e?.type === "turn_end" && ++turns >= maxTurns) {
+        stop(`hit its ${maxTurns}-turn limit`);
+      }
+      const line = progressLine(event);
+      if (line) onProgress?.(line);
+    });
+
     const onAbort = () => {
       session.abort();
     };
@@ -192,12 +247,18 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
     try {
       await session.prompt(task);
     } finally {
+      clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
-      unsubscribe?.();
+      unsubscribe();
     }
+    const text = finalText(session.messages);
+    // Ahead of the error check on purpose: aborting is how a limit is enforced, and pi
+    // records that as an error on the session. Throwing here would discard the partial
+    // answer this whole path exists to preserve.
+    if (stoppedBy !== null) return truncatedResult(def.name, stoppedBy, text);
     const error = session.agent?.state?.errorMessage;
     if (error) throw new Error(`subagent ${def.name} failed: ${error}`);
-    return finalText(session.messages);
+    return text;
   } finally {
     await Deno.remove(agentDir, { recursive: true }).catch(() => {});
   }
