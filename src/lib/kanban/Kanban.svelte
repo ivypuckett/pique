@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { type Board, type CardRow, type KanbanBindings, kanbanBindings } from "./bindings.ts";
+  import { type HistoryEntry, historyEntries } from "./history.ts";
   import { ROOT } from "../scope/paths.ts";
   import ConfirmDialog from "../ConfirmDialog.svelte";
 
@@ -334,6 +335,48 @@
   let selectedId = $state<string | null>(null);
   const selected = $derived(board.cards.find((c) => c.id === selectedId) ?? null);
   let titleInput = $state<HTMLInputElement | null>(null);
+
+  // Card history. A move demands a reason and every mutation is logged, but until now
+  // nothing read any of it back — so the reasons were write-only. Collapsed by default
+  // and fetched on demand: a card's log is a separate query from the board, and most
+  // visits to the drawer are to edit the card, not to audit it.
+  let historyOpen = $state(false);
+  let history = $state<HistoryEntry[]>([]);
+  let historyError = $state("");
+
+  // Reads `board` so it re-runs after any mutation — every one of them refreshes the
+  // board, and every one of them appended the row we would otherwise be missing.
+  $effect(() => {
+    void board;
+    const cardId = selectedId;
+    if (!historyOpen || cardId === null) return;
+    loadHistory(cardId);
+  });
+
+  async function loadHistory(cardId: string): Promise<void> {
+    if (!b || !scope) return;
+    const forCard = cardId;
+    const forScope = scope;
+    try {
+      const logs = await b.kanbanGetLogs({ scope: forScope, cardId: forCard });
+      // A switch that lands mid-flight must not paint one card's history under another's
+      // title — the same rule refresh() follows for the board itself.
+      if (forCard !== selectedId || forScope !== scope) return;
+      history = historyEntries(logs, {
+        // Resolved at render time, so a column renamed or a card retitled since the
+        // move reads under the name it goes by now. Ids outlive both, hence the
+        // fallbacks: the log keeps pointing at things the board no longer has.
+        status: (id) => statusName.get(id) ?? "(deleted column)",
+        card: (id) => cardTitle.get(id) ?? id,
+      });
+      historyError = "";
+    } catch (e) {
+      if (forCard !== selectedId || forScope !== scope) return;
+      historyError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  const when = (ts: number) => new Date(ts).toLocaleString();
 
   // "+ Add card" puts a card on the board before there is anything to say about it, so
   // letting go of one that stayed empty takes it back off again — an abandoned add
@@ -795,6 +838,42 @@
             </div>
           {:else}
             <div class="mt-1.5 text-xs opacity-40">None</div>
+          {/if}
+        </div>
+
+        <!-- History. Last in the drawer because it is the one section you read rather
+             than edit, and the only one that grows without bound. -->
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs opacity-70">History</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              aria-expanded={historyOpen}
+              onclick={() => (historyOpen = !historyOpen)}
+            >{historyOpen ? "Hide" : "Show"}</button>
+          </div>
+          {#if historyOpen}
+            {#if historyError}
+              <div class="break-all text-xs text-error">{historyError}</div>
+            {:else if history.length === 0}
+              <div class="text-xs opacity-40">Nothing recorded yet.</div>
+            {:else}
+              <ol class="flex flex-col gap-1.5">
+                {#each history as h (h.id)}
+                  <li class="rounded border border-base-300 px-2 py-1.5">
+                    <div class="flex items-baseline justify-between gap-2">
+                      <span class="min-w-0 break-words text-xs">{h.headline}</span>
+                      <span class="shrink-0 text-[0.65rem] opacity-50">{h.actor}</span>
+                    </div>
+                    <div class="text-[0.65rem] opacity-50">{when(h.ts)}</div>
+                    {#each h.details as d}
+                      <div class="mt-0.5 break-words text-[0.65rem] opacity-70">{d}</div>
+                    {/each}
+                  </li>
+                {/each}
+              </ol>
+            {/if}
           {/if}
         </div>
 
