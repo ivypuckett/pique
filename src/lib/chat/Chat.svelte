@@ -142,16 +142,20 @@
       {#each $items as item}
         {#if item.role === "user" || item.role === "assistant"}
           <div class="chat {item.role === 'user' ? 'chat-end' : 'chat-start'}">
-            <!-- pre-wrap keeps the newlines a message was written with; break-words is
+            <!-- pre-wrap keeps the newlines a message was written with; wrap-anywhere is
                  what handles the run of text that HAS no break in it — a URL, a path, a
                  stack frame — which otherwise widens the bubble past the pane and puts a
-                 horizontal scrollbar under the whole transcript. -->
-            <div class="chat-bubble break-words whitespace-pre-wrap">{item.text}</div>
+                 horizontal scrollbar under the whole transcript. It has to be `anywhere`
+                 rather than `break-words`: only `anywhere` shrinks the min-content width
+                 the bubble is SIZED from, and the bubble is a fit-content grid item, so
+                 under WebKit (what the desktop app runs) break-words wraps the text but
+                 still lays the bubble out at the unbroken path's full width. -->
+            <div class="chat-bubble wrap-anywhere whitespace-pre-wrap">{item.text}</div>
           </div>
         {:else if item.role === "thinking"}
-          <div class="whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
+          <div class="wrap-anywhere whitespace-pre-wrap rounded bg-base-200 p-2 text-xs italic opacity-70">{item.text}</div>
         {:else if item.role === "notice"}
-          <div class="rounded border border-base-300 px-2 py-1 font-mono text-xs opacity-70">{item.text}</div>
+          <div class="wrap-anywhere rounded border border-base-300 px-2 py-1 font-mono text-xs opacity-70">{item.text}</div>
         {:else}
           <details class="rounded border border-base-300 p-2 text-xs">
             <summary class="cursor-pointer font-mono">
