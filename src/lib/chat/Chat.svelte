@@ -73,12 +73,25 @@
   // An $effect keyed on $input so it also follows text the app puts there (a picked `/`
   // command, a cleared box after send), not only typing. max-h in the markup is what
   // stops a pasted file from pushing the transcript off screen — past it, it scrolls.
+  //
+  // Measuring only when the box is actually laid out is what keeps it from sticking at
+  // 0px. An inactive tab is display:none rather than unmounted (Column.svelte), and
+  // everything in one reports every metric as 0 — so a run while hidden writes
+  // height:0px, which is still there when the tab comes back: a collapsed box with its
+  // own placeholder spilling out from under it. getClientRects is empty exactly when
+  // nothing is laid out, and unlike testing clientHeight it still lets an
+  // already-collapsed box measure itself and recover.
+  function fit(el: HTMLTextAreaElement): void {
+    if (el.getClientRects().length === 0) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }
+
   $effect(() => {
     const el = inputEl;
     if (!el) return;
     void $input;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+    fit(el);
   });
 
   // Terminal-style transcript: new output pushes older lines up rather than landing
@@ -121,6 +134,10 @@
     if (!scroller || !content) return;
     const el = scroller;
     const ro = new ResizeObserver(() => {
+      // Also where a tab coming back into view is noticed: the transcript resizing from
+      // nothing is the same event as the composer becoming measurable again, and a fit
+      // skipped while hidden has to be made up here or the box stays collapsed.
+      if (inputEl) fit(inputEl);
       if (pinned) el.scrollTop = el.scrollHeight;
     });
     ro.observe(el);
