@@ -36,10 +36,11 @@ export type ReloadSummary = {
   added: string[];
   removed: string[];
   failed: Array<{ name: string; error: string }>;
-  // Whether the scope's SYSTEM.md changed under this conversation and was applied. The
-  // comparison is against the text the session last resolved rather than across the
-  // reload, because the edit happened before `/reload` was ever typed; and it is the
-  // BASE prompt rather than the assembled one, which also moves when the tool set does.
+  // Whether the scope's SYSTEM.md or APPEND_SYSTEM.md changed under this conversation
+  // and was applied. The comparison is against the text the session last resolved rather
+  // than across the reload, because the edit happened before `/reload` was ever typed;
+  // and it is those files rather than the assembled prompt, which also moves when the
+  // tool set does.
   promptChanged?: boolean;
   // The scope's default model, when this conversation is not running it and a new chat
   // here would be. Reload reports it and does not apply it: a conversation does not get
@@ -148,7 +149,7 @@ import { inheritedPromptDirs } from "../prompts/service.ts";
 import { subagentTools } from "../agents/agent-tools.ts";
 import { listVisibleAgents } from "../agents/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
-import { resolveBasePrompt } from "../scope/prompt.ts";
+import { resolveAppendPrompts, resolveBasePrompt } from "../scope/prompt.ts";
 import {
   ensureScopeDirs,
   ROOT,
@@ -204,6 +205,10 @@ interface Agent {
   // The base prompt this conversation is currently running, so a reload can tell whether
   // the scope's SYSTEM.md moved under it. Updated by every reload that re-resolves it.
   basePrompt: string | undefined;
+  // The same, for the chain's APPEND_SYSTEM.md files. Tracked separately rather than
+  // folded into basePrompt because they resolve by different rules and either can move
+  // on its own; `/reload` reports the pair as one "the prompt changed".
+  appendPrompts: string[];
 }
 const agents = new Map<string, Agent>();
 let nextId = 1;
@@ -280,6 +285,15 @@ export async function startAgent(
     // base it is handed — the loader's own agentDir discovery — is discarded: it sees one
     // dir and would miss the inheritance this resolves.
     systemPromptOverride: () => resolveBasePrompt(scope),
+    // The chain's APPEND_SYSTEM.md files, root's first, added on top of whatever the
+    // base turned out to be — pi's own preamble included, which is what lets a
+    // workspace archetype apply without anyone having to replace pi's preamble first.
+    // A callback for the same reason as above: it re-runs inside every reload().
+    //
+    // The base it is handed is discarded on the same grounds, and here it is not merely
+    // incomplete but a duplicate: pi discovers this scope's OWN APPEND_SYSTEM.md, which
+    // resolveAppendPrompts already includes as the last entry.
+    appendSystemPromptOverride: () => resolveAppendPrompts(scope),
   });
   // createAgentSession only reloads a loader it creates itself, so ours must be
   // reloaded by hand or it yields no extensions at all.
@@ -320,6 +334,7 @@ export async function startAgent(
     resourceLoader,
     scope,
     basePrompt: resolveBasePrompt(scope),
+    appendPrompts: resolveAppendPrompts(scope),
   });
   return id;
 }
@@ -506,12 +521,14 @@ export async function reloadAgent(id: string): Promise<ReloadSummary> {
   if (!agent) return { added: [], removed: [], failed: [] };
   const before = new Set<string>(agent.session.getActiveToolNames());
   const promptBefore = agent.basePrompt;
+  const appendBefore = agent.appendPrompts;
   await agent.session.reload();
   const after: string[] = agent.session.getActiveToolNames();
   const afterSet = new Set(after);
-  // Resolved again by the same rule the session's loader just used, so the record tracks
-  // what the conversation now actually runs.
+  // Resolved again by the same rules the session's loader just used, so the record
+  // tracks what the conversation now actually runs.
   agent.basePrompt = resolveBasePrompt(agent.scope);
+  agent.appendPrompts = resolveAppendPrompts(agent.scope);
   // The same loader instance the session holds, so this reads the errors from the
   // reload that just happened rather than a stale scan.
   const errors: Array<{ path: string; error: string }> =
@@ -523,7 +540,11 @@ export async function reloadAgent(id: string): Promise<ReloadSummary> {
       name: e.path.split("/").pop()?.replace(/\.[jt]s$/, "") ?? e.path,
       error: e.error,
     })),
-    promptChanged: agent.basePrompt !== promptBefore,
+    // Either file moving counts. Joined rather than compared element-wise because the
+    // list can change LENGTH — a new root APPEND_SYSTEM.md, or a deleted one — and the
+    // separator is the same blank line pi joins them with anyway.
+    promptChanged: agent.basePrompt !== promptBefore ||
+      agent.appendPrompts.join("\n\n") !== appendBefore.join("\n\n"),
     modelDefault: await pendingModelDefault(agent),
   };
 }

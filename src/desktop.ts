@@ -34,6 +34,7 @@ let automatonService: typeof import("./lib/automatons/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
 let agents: typeof import("./lib/agents/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
+let scopePrompt: typeof import("./lib/scope/prompt.ts");
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
 // layout tree — so working-directory resolution reads "layout", not "settings".
@@ -743,6 +744,38 @@ win.bind("agentsDelete", async (arg) => {
   return true;
 });
 
+// The scope's two prompt files, SYSTEM.md and APPEND_SYSTEM.md (docs/scopes.md). Unlike
+// every other Library kind these are singletons addressed by KIND, not by name — there
+// is one of each per scope — and the human half is the only half: no agent tool writes
+// them, so there is no quarantine and no approve/reject pair. systemPromptsList returns
+// the scope's OWN two, present or not; what an agent there actually runs with is
+// resolved per session by scope/prompt.ts.
+win.bind("systemPromptsList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  return await scopePrompt.listPromptFiles(scope);
+});
+
+// An empty body deletes rather than writes — scope/prompt.ts records why, and the
+// Library's Save button relabels itself to say so.
+win.bind("systemPromptsSave", async (arg) => {
+  const { scope, kind, body } = arg as {
+    scope: string;
+    kind: "system" | "appendix";
+    body: string;
+  };
+  await scopePrompt.savePromptFile(scope, kind, body);
+  return true;
+});
+
+win.bind("systemPromptsDelete", async (arg) => {
+  const { scope, kind } = arg as {
+    scope: string;
+    kind: "system" | "appendix";
+  };
+  await scopePrompt.deletePromptFile(scope, kind);
+  return true;
+});
+
 win.addEventListener("close", () => {
   term?.killAllSessions();
   kanban?.closeAllBoards();
@@ -765,6 +798,7 @@ automatonService = await import("./lib/automatons/service.ts");
 skills = await import("./lib/skills/service.ts");
 agents = await import("./lib/agents/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
+scopePrompt = await import("./lib/scope/prompt.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.
 await (await import("./lib/scope/migrate.ts")).migrateToScopes();

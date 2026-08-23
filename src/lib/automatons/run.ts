@@ -34,7 +34,7 @@ import {
 import { ensureAutomatonDirs, runPath, runsDir, sessionsDir } from "./paths.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
-import { resolveBasePrompt } from "../scope/prompt.ts";
+import { resolveAppendPrompts, resolveBasePrompt } from "../scope/prompt.ts";
 import {
   assertScopeId,
   ensureScopeDirs,
@@ -351,6 +351,15 @@ export async function launchAutomaton(
       additionalSkillPaths: skillPaths,
       additionalPromptTemplatePaths: inheritedPromptDirs(scope),
       systemPrompt: resolveBasePrompt(scope),
+      // The chain's APPEND_SYSTEM.md files. An unattended run gets the same steering a
+      // chat in this scope does, or the workspace archetype would apply to the human's
+      // conversations and silently not to the automatons working the same board.
+      //
+      // Resolved text, not paths, matching the line above. Passing the array is also
+      // what SUPPRESSES pi's own discovery: given nothing it reads this scope's own
+      // APPEND_SYSTEM.md, which resolveAppendPrompts already includes — and an empty
+      // array (no file anywhere) is still an array, so the suppression holds there too.
+      appendSystemPrompt: resolveAppendPrompts(scope),
     });
     // createAgentSession only reloads a loader it creates itself, so ours must be
     // reloaded by hand or it yields no extensions at all.

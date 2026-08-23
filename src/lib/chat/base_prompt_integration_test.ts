@@ -12,7 +12,7 @@ import {
   stopAgent,
   systemPromptOf,
 } from "./agent.ts";
-import { basePromptPath } from "../scope/prompt.ts";
+import { appendPromptPath, basePromptPath } from "../scope/prompt.ts";
 import { ROOT, scopeAgentDir, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
@@ -30,6 +30,11 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
 async function writeBasePrompt(scope: ScopeId, text: string): Promise<void> {
   await Deno.mkdir(scopeAgentDir(scope), { recursive: true });
   await Deno.writeTextFile(basePromptPath(scope), text);
+}
+
+async function writeAppendPrompt(scope: ScopeId, text: string): Promise<void> {
+  await Deno.mkdir(scopeAgentDir(scope), { recursive: true });
+  await Deno.writeTextFile(appendPromptPath(scope), text);
 }
 
 // Start an agent, read something off it, and always tear it down.
@@ -187,6 +192,107 @@ Deno.test("a deleted SYSTEM.md falls back on reload rather than sticking", async
         systemPromptOf(id),
         "coding assistant operating inside pi",
       );
+    } finally {
+      stopAgent(id);
+    }
+  });
+});
+
+// APPEND_SYSTEM.md, which merges by the OPPOSITE rule: every one on the chain applies,
+// root's first. pi has the file and the override callback natively; what it does not have
+// is the inheritance, for the same one-agentDir reason SYSTEM.md needs help.
+Deno.test("the appendix lands on top of pi's own preamble", async () => {
+  await withTempHome(async () => {
+    await writeAppendPrompt(ROOT, "APPENDIX-ONLY");
+
+    const prompt = await withAgent({ scope: ROOT }, systemPromptOf);
+    // Both, and this is the case the whole design rests on: house rules can apply
+    // WITHOUT anyone having to replace pi's preamble first.
+    assertStringIncludes(prompt, "coding assistant operating inside pi");
+    assertStringIncludes(prompt, "APPENDIX-ONLY");
+  });
+});
+
+Deno.test("the appendix lands on top of a SYSTEM.md too", async () => {
+  await withTempHome(async () => {
+    await writeBasePrompt(ROOT, "SPIKE-BASE-PROMPT");
+    await writeAppendPrompt(ROOT, "SPIKE-APPENDIX");
+
+    const prompt = await withAgent({ scope: ROOT }, systemPromptOf);
+    assertStringIncludes(prompt, "SPIKE-BASE-PROMPT");
+    assertStringIncludes(prompt, "SPIKE-APPENDIX");
+    assertEquals(
+      prompt.indexOf("SPIKE-BASE-PROMPT") < prompt.indexOf("SPIKE-APPENDIX"),
+      true,
+      "the appendix comes after the base it is appended to",
+    );
+  });
+});
+
+// The motivating case on card 795e0c9a: root holds house rules, each workspace adds its
+// archetype, and the two workspaces never see each other's. Nearest-wins would pass the
+// first two assertions and fail the third.
+Deno.test("a workspace appendix is added to root's, not swapped for it", async () => {
+  await withTempHome(async () => {
+    await writeAppendPrompt(ROOT, "HOUSE-RULES");
+    await writeAppendPrompt("ws-1", "SWIFT-ARCHETYPE");
+    await writeAppendPrompt("ws-2", "GO-ARCHETYPE");
+
+    const swift = await withAgent({ scope: "ws-1" }, systemPromptOf);
+    assertStringIncludes(swift, "HOUSE-RULES");
+    assertStringIncludes(swift, "SWIFT-ARCHETYPE");
+    assertEquals(swift.includes("GO-ARCHETYPE"), false, "the two never mix");
+    assertEquals(
+      swift.indexOf("HOUSE-RULES") < swift.indexOf("SWIFT-ARCHETYPE"),
+      true,
+      "root's first",
+    );
+
+    const go = await withAgent({ scope: "ws-2" }, systemPromptOf);
+    assertStringIncludes(go, "HOUSE-RULES");
+    assertStringIncludes(go, "GO-ARCHETYPE");
+    assertEquals(go.includes("SWIFT-ARCHETYPE"), false);
+  });
+});
+
+Deno.test("an edited appendix reaches a running conversation on reload", async () => {
+  await withTempHome(async () => {
+    await writeAppendPrompt(ROOT, "APPENDIX-BEFORE");
+    const id = await startAgent({ scope: ROOT });
+    try {
+      assertStringIncludes(systemPromptOf(id), "APPENDIX-BEFORE");
+
+      await writeAppendPrompt(ROOT, "APPENDIX-AFTER");
+      assertEquals((await reloadAgent(id)).promptChanged, true);
+
+      assertStringIncludes(systemPromptOf(id), "APPENDIX-AFTER");
+      assertEquals(systemPromptOf(id).includes("APPENDIX-BEFORE"), false);
+    } finally {
+      stopAgent(id);
+    }
+  });
+});
+
+// A workspace appendix appearing where there was none changes the LENGTH of the resolved
+// list, not just its contents — the case an element-wise comparison would miss.
+Deno.test("an appendix added later is reported and applied on reload", async () => {
+  await withTempHome(async () => {
+    await writeAppendPrompt(ROOT, "HOUSE-RULES");
+    const id = await startAgent({ scope: "ws-1" });
+    try {
+      assertEquals(systemPromptOf(id).includes("SWIFT-ARCHETYPE"), false);
+
+      await writeAppendPrompt("ws-1", "SWIFT-ARCHETYPE");
+      assertEquals((await reloadAgent(id)).promptChanged, true);
+
+      assertStringIncludes(systemPromptOf(id), "HOUSE-RULES");
+      assertStringIncludes(systemPromptOf(id), "SWIFT-ARCHETYPE");
+
+      // …and removing it again falls back rather than sticking.
+      await Deno.remove(appendPromptPath("ws-1"));
+      assertEquals((await reloadAgent(id)).promptChanged, true);
+      assertEquals(systemPromptOf(id).includes("SWIFT-ARCHETYPE"), false);
+      assertStringIncludes(systemPromptOf(id), "HOUSE-RULES");
     } finally {
       stopAgent(id);
     }

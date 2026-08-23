@@ -90,6 +90,7 @@ because the old paths were the only copy of the user's boards.
 | -------------------- | -------------------------------------------- | ----------------------------------------------------- |
 | **Tools**            | `agentDir` + `additionalExtensionPaths`      | union — root's tools plus its own                     |
 | **Base prompt**      | `scope/prompt.ts:resolveBasePrompt`          | nearest `SYSTEM.md` wins, whole file                  |
+| **Prompt appendix**  | `scope/prompt.ts:resolveAppendPrompts`       | every `APPEND_SYSTEM.md` concatenates, root's first   |
 | **Prompt templates** | `agentDir` + `additionalPromptTemplatePaths` | union, nearest name wins                              |
 | **Skills**           | `skills/service.ts:listVisibleSkills`        | union, nearest name wins                              |
 | **Automatons**       | `automatons/service.ts:resolveAutomaton`     | union, nearest name wins                              |
@@ -133,9 +134,65 @@ nearest-first and passes the winner to pi explicitly, which is what makes it
 inherit at all. No `SYSTEM.md` anywhere on the chain resolves to `undefined`,
 not `""`, because that is what leaves pi's preamble in place.
 
-It is also the only per-scope steering there is: nothing is selectable per
-conversation. See [prompts.md](prompts.md) for why steering a single task is a
-template instead.
+See [prompts.md](prompts.md) for why steering a single task is a template
+instead: nothing here is selectable per conversation.
+
+### The prompt appendix
+
+A scope's optional `agent/APPEND_SYSTEM.md` is added **on top of** whatever the
+base turned out to be — pi's own preamble included. Also pi's own filename, also
+invisible across scopes for the same one-`agentDir` reason, so
+`scope/prompt.ts:resolveAppendPrompts` walks the chain and `chat/agent.ts` hands
+pi the whole list through `appendSystemPromptOverride`.
+
+It merges by the **opposite rule to `SYSTEM.md`**, and that is the whole reason
+it is a second file rather than a second way of writing the first:
+
+- `SYSTEM.md` is **nearest-wins**. Two of them cannot both be "the" preamble, so
+  a workspace's shadows root's and only one ever applies.
+- `APPEND_SYSTEM.md` **concatenates, root's first**. Root holds house rules,
+  each workspace adds its archetype, and both apply.
+
+That is what lets one workspace hold Swift guidance and another hold Go guidance
+without either seeing the other's, while a single set of house rules covers
+both. Neither workspace has to restate the house rules, and neither can leak its
+archetype sideways — `chain()` gives a workspace root and itself, never a
+sibling.
+
+The appendix is also the one that works with **no `SYSTEM.md` anywhere**: pi
+applies the append section in both branches of `buildSystemPrompt`, so house
+rules land on top of pi's preamble rather than requiring you to replace it
+first. That matters given decision 2 — pique specifies no system prompt of its
+own, and the appendix lets a user steer without giving that up.
+
+Two things to know about handing this to pi:
+
+1. **The array is always passed, empty included.** Given nothing, pi falls back
+   to discovering the single `agentDir`'s own `APPEND_SYSTEM.md` — which
+   `resolveAppendPrompts` already includes as its last entry, so omitting it
+   would duplicate the workspace's own file.
+2. **pi joins the entries with a blank line**, so a whitespace-only file would
+   contribute blank lines rather than nothing. `resolveAppendPrompts` drops
+   those, and `savePromptFile` deletes rather than writing one.
+
+`chat/base_prompt_integration_test.ts` drives the real `startAgent` for both
+files: the two-workspace case, the ordering, and both reaching a running
+conversation on `/reload`.
+
+### Editing either of them
+
+Both appear in the **Library** as their own row kinds, `system` and `appendix`
+(`scope/prompt-items.ts`), listed in every scope whether or not the file exists
+— they are singletons with fixed names, so there is nothing to enumerate and a
+row is the only place the UI can say the file *could* exist here. Root's are
+listed as inherited only when they do exist.
+
+Saving an empty body **deletes** the file. Absence is what falls back down the
+chain; an empty workspace `SYSTEM.md` would shadow root's and then resolve to
+`""`, which no row could truthfully describe.
+
+Unlike prompt templates, there is no quarantine and no approve/reject pair: no
+agent tool writes these, so the human half is the only half.
 
 ### Prompt templates
 

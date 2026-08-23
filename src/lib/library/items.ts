@@ -7,8 +7,19 @@ import type { Extension } from "../extensions/bindings.ts";
 import type { PromptInfo } from "../prompts/bindings.ts";
 import type { SkillInfo } from "../skills/bindings.ts";
 import type { AgentDef } from "../agents/bindings.ts";
+import type { PromptFileInfo } from "../scope/prompt-bindings.ts";
 
-export type LibraryKind = "extension" | "prompt" | "skill" | "subagent";
+// `system` and `appendix` are two kinds rather than one with a mode because they merge
+// by OPPOSITE rules — nearest-wins against concatenate-down-the-chain (scope/prompt.ts)
+// — and that difference is the thing a user will get wrong. A shared row would have to
+// explain both on every line.
+export type LibraryKind =
+  | "extension"
+  | "prompt"
+  | "skill"
+  | "subagent"
+  | "system"
+  | "appendix";
 
 // What the row is waiting for, NOT what kind of thing it is. `pending` is the review
 // gate; `inherited` came from an ancestor scope and is read-only here, because it is
@@ -44,13 +55,22 @@ export type LibraryItem =
   | (Common & { kind: "extension"; ext: Extension })
   | (Common & { kind: "prompt"; prompt: PromptInfo })
   | (Common & { kind: "skill"; skill: SkillInfo })
-  | (Common & { kind: "subagent"; agent: AgentDef });
+  | (Common & { kind: "subagent"; agent: AgentDef })
+  // Same payload for both, because the file is the same shape either way — what differs
+  // is the merge rule, which the kind itself names.
+  | (Common & { kind: "system"; file: PromptFileInfo })
+  | (Common & { kind: "appendix"; file: PromptFileInfo });
 
+// The two prompt files sort FIRST: they steer everything below them, there are at most
+// four of them, and unlike the rest they are always present as rows even when unset —
+// so burying them under a long extension list would hide the fixed part of the page.
 const KIND_ORDER: Record<LibraryKind, number> = {
-  extension: 0,
-  prompt: 1,
-  skill: 2,
-  subagent: 3,
+  system: 0,
+  appendix: 1,
+  extension: 2,
+  prompt: 3,
+  skill: 4,
+  subagent: 5,
 };
 
 export type LibraryGroups = {

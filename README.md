@@ -42,11 +42,15 @@ Notes:
 - Provider: LM Studio, Anthropic, etc.
 - Thinking Level: Sets how much the agent deliberates before speaking.
 
-- System Prompt: A markdown file which gets injected into every context window
-  before the conversation starts. There is a default system prompt at
-  ~/.pique/SYSTEM.md. Absence of this file removes the system prompt entirely.
-  There is also a system prompt available per workspace in
-  ~/.pique/workspace/SYSTEM.md
+- System Prompt: A markdown file, `agent/SYSTEM.md` in a scope's directory, which
+  replaces pi's own preamble for every agent that runs there. The nearest one on
+  the chain wins, so a workspace's shadows the root one it inherits. pique ships
+  none (decision 2) — with no `SYSTEM.md` anywhere, pi's preamble is what runs.
+- System Prompt Appendix: `agent/APPEND_SYSTEM.md`, added on top of whatever the
+  base turned out to be rather than replacing it. Merges the other way: every
+  one on the chain applies, root's first — so root holds house rules and each
+  workspace adds its own archetype. Both are edited in the Library; see
+  [docs/scopes.md](docs/scopes.md).
 - Prompt Template: A markdown file you send as a message by typing `/name` in a
   chat, with `$1`/`$@` arguments substituted in. Plain
   [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates), per
@@ -68,8 +72,8 @@ Notes:
 - Editor: File tree which opens files into an $EDITOR terminal window.
 - Terminal: Terminal which opens with current $SHELL.
 - Diff: Git diff of highlighted item (or current workspace folder).
-- Library: Extensions, prompt templates and skills for the current scope —
-  review, enable, edit.
+- Library: The current scope's system prompt and appendix, extensions, prompt
+  templates, skills and subagents — review, enable, edit.
 - Automatons: Named agents — one prompt template plus the extensions and skills
   they may load — launched by a button, or unattended by a schedule or a card
   arriving in a column, which first need a human to approve the definition.
