@@ -4,6 +4,7 @@ import {
   inheritedExtensionFiles,
   listLocal,
   listVisibleLocal,
+  promoteLocal,
   readLocalSource,
   removeLocal,
   revokeLocal,
@@ -229,5 +230,52 @@ Deno.test("service refuses names and scopes that would escape the extension dirs
       "invalid extension name",
     );
     await assertRejects(() => listLocal("../evil"), Error, "invalid scope id");
+  });
+});
+
+// Promote lands in root's QUARANTINE whatever state it held here: an approval made for
+// one workspace is not an approval to run in all of them.
+Deno.test("promoteLocal moves an enabled module into root's quarantine, not its loading set", async () => {
+  await withTempHome(async () => {
+    await ensureExtensionDirs("ws-1");
+    await Deno.writeTextFile(livePath("ws-1", "tool"), "// code");
+
+    assertEquals(await promoteLocal("ws-1", "tool", "enabled", false), {
+      ok: true,
+    });
+    assertEquals(await listLocal("ws-1"), []);
+    assertEquals(await listLocal(ROOT), [{
+      name: "tool",
+      state: "pending",
+      scope: ROOT,
+    }]);
+    assertEquals(await readLocalSource(ROOT, "tool", "pending"), "// code");
+  });
+});
+
+// A same-named module ALREADY RUNNING in root is the case that matters: landing beside
+// it silently would leave the old one running while the promoted copy waited in
+// quarantine, which reads as "nothing happened".
+Deno.test("promoteLocal reports a conflict against root's live module, until told to replace", async () => {
+  await withTempHome(async () => {
+    await ensureExtensionDirs("ws-1");
+    await ensureExtensionDirs(ROOT);
+    await Deno.writeTextFile(pendingPath("ws-1", "tool"), "// new");
+    await Deno.writeTextFile(livePath(ROOT, "tool"), "// old");
+
+    assertEquals(await promoteLocal("ws-1", "tool", "pending", false), {
+      conflict: true,
+    });
+    assertEquals(await readLocalSource(ROOT, "tool", "enabled"), "// old");
+
+    assertEquals(await promoteLocal("ws-1", "tool", "pending", true), {
+      ok: true,
+    });
+    assertEquals(await listLocal(ROOT), [{
+      name: "tool",
+      state: "pending",
+      scope: ROOT,
+    }]);
+    assertEquals(await readLocalSource(ROOT, "tool", "pending"), "// new");
   });
 });

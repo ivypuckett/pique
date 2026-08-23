@@ -1,7 +1,12 @@
-import { assertEquals } from "@std/assert";
-import { listSkills, listVisibleSkills, resolveSkillPath } from "./service.ts";
+import { assertEquals, assertRejects } from "@std/assert";
+import {
+  listSkills,
+  listVisibleSkills,
+  promoteSkill,
+  resolveSkillPath,
+} from "./service.ts";
 import { skillsDir } from "./paths.ts";
-import type { ScopeId } from "../scope/paths.ts";
+import { ROOT, type ScopeId } from "../scope/paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const prev = Deno.env.get("HOME");
@@ -146,5 +151,62 @@ Deno.test("malformed frontmatter still lists the skill, with its name, and carri
     const [skill] = await listSkills("ws-1");
     assertEquals(skill.name, "broken");
     assertEquals(skill.error?.startsWith("frontmatter:"), true);
+  });
+});
+
+// The one write in this module. A skill is not enabled or reviewed anywhere, so
+// promoting it is the whole operation: after it, every workspace can name it.
+Deno.test("promoteSkill moves the directory form up to root, contents and all", async () => {
+  await withTempHome(async () => {
+    await writeDirSkill("ws-1", "digest", "---\ndescription: d\n---\nbody");
+    await Deno.writeTextFile(`${skillsDir("ws-1")}/digest/extra.md`, "extra");
+
+    assertEquals(await promoteSkill("ws-1", "digest"), { ok: true });
+    assertEquals(await listSkills("ws-1"), []);
+    assertEquals((await listSkills(ROOT)).map((s) => s.name), ["digest"]);
+    assertEquals(
+      await Deno.readTextFile(`${skillsDir(ROOT)}/digest/extra.md`),
+      "extra",
+    );
+  });
+});
+
+Deno.test("promoteSkill moves the loose-file form as a file", async () => {
+  await withTempHome(async () => {
+    await writeFileSkill("ws-1", "digest", "---\ndescription: d\n---\nbody");
+
+    assertEquals(await promoteSkill("ws-1", "digest"), { ok: true });
+    assertEquals(
+      (await listSkills(ROOT))[0].path,
+      `${skillsDir(ROOT)}/digest.md`,
+    );
+  });
+});
+
+// The clash is by NAME, not by path: the two shapes share one namespace, so root's
+// `digest.md` blocks a promoted `digest/SKILL.md` even though nothing would collide
+// on disk. Overwriting removes root's copy in whichever shape it had.
+Deno.test("promoteSkill reports a conflict across the two shapes, until told to replace", async () => {
+  await withTempHome(async () => {
+    await writeDirSkill("ws-1", "digest", "---\ndescription: new\n---\nb");
+    await writeFileSkill(ROOT, "digest", "---\ndescription: old\n---\nb");
+
+    assertEquals(await promoteSkill("ws-1", "digest"), { conflict: true });
+    assertEquals((await listSkills(ROOT))[0].description, "old");
+
+    assertEquals(await promoteSkill("ws-1", "digest", true), { ok: true });
+    const root = await listSkills(ROOT);
+    assertEquals(root.length, 1);
+    assertEquals(root[0].description, "new");
+    assertEquals(root[0].path, `${skillsDir(ROOT)}/digest`);
+    assertEquals(await listSkills("ws-1"), []);
+  });
+});
+
+Deno.test("promoteSkill refuses to promote out of root, or a name that scope does not have", async () => {
+  await withTempHome(async () => {
+    await writeDirSkill(ROOT, "digest", "---\ndescription: d\n---\nb");
+    await assertRejects(() => promoteSkill(ROOT, "digest"));
+    await assertRejects(() => promoteSkill("ws-1", "digest"));
   });
 });

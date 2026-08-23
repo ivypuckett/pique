@@ -5,6 +5,7 @@ import {
   inheritedPromptDirs,
   listPrompts,
   listVisiblePrompts,
+  promotePrompt,
   rejectPrompt,
   savePrompt,
 } from "./service.ts";
@@ -203,5 +204,60 @@ Deno.test("only ancestors' dirs are passed to pi as extra paths", async () => {
       e,
     ) => e.name).sort();
     assertEquals(names, ["pending", "shared.md"]);
+  });
+});
+
+Deno.test("promotePrompt moves a live template into root, where every workspace sees it", async () => {
+  await withTempHome(async () => {
+    await savePrompt("ws-1", "standup", { description: "d", body: "b" });
+
+    assertEquals(await promotePrompt("ws-1", "standup", "live"), { ok: true });
+    assertEquals(await listPrompts("ws-1"), []);
+    assertEquals((await listPrompts(ROOT)).map((p) => p.name), ["standup"]);
+    assertEquals(
+      (await listVisiblePrompts("ws-1")).map((p) => p.name),
+      ["standup"],
+    );
+  });
+});
+
+// Promoting is not a second way to approve: a template still in quarantine lands in
+// root's quarantine, not in root's live dir.
+Deno.test("promotePrompt keeps a pending template pending", async () => {
+  await withTempHome(async () => {
+    await ensurePromptDirs("ws-1");
+    await Deno.writeTextFile(
+      pendingPromptPath("ws-1", "draft"),
+      "---\ndescription: d\n---\nb",
+    );
+
+    assertEquals(await promotePrompt("ws-1", "draft", "pending"), { ok: true });
+    const [p] = await listPrompts(ROOT);
+    assertEquals([p.name, p.state], ["draft", "pending"]);
+  });
+});
+
+Deno.test("promotePrompt reports a conflict rather than replacing root's, until told to", async () => {
+  await withTempHome(async () => {
+    await savePrompt("ws-1", "standup", { description: "new", body: "b" });
+    await savePrompt(ROOT, "standup", { description: "old", body: "b" });
+
+    assertEquals(await promotePrompt("ws-1", "standup", "live"), {
+      conflict: true,
+    });
+    assertEquals((await listPrompts(ROOT))[0].description, "old");
+
+    assertEquals(await promotePrompt("ws-1", "standup", "live", true), {
+      ok: true,
+    });
+    assertEquals((await listPrompts(ROOT))[0].description, "new");
+    assertEquals(await listPrompts("ws-1"), []);
+  });
+});
+
+Deno.test("promotePrompt refuses to promote out of root", async () => {
+  await withTempHome(async () => {
+    await savePrompt(ROOT, "standup", { description: "d", body: "b" });
+    await assertRejects(() => promotePrompt(ROOT, "standup", "live"));
   });
 });

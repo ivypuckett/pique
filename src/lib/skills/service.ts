@@ -1,9 +1,16 @@
 // Backend service for skills: what a scope has, and where a named one lives.
-// Read-only by design (docs/automatons.md) — the Library sub-tab shows this list and
-// the automaton editor picks from it. Runs Deno-side only.
+// Read-only apart from promoteSkill (docs/automatons.md) — the Library sub-tab shows
+// this list and the automaton editor picks from it, and neither installs or edits a
+// skill; moving one up to root is the single write. Runs Deno-side only.
 import { extract } from "@std/front-matter/yaml";
+import { basename } from "@std/path";
 import { assertSkillName, skillsDir } from "./paths.ts";
-import { chain, type ScopeId } from "../scope/paths.ts";
+import { chain, ROOT, type ScopeId } from "../scope/paths.ts";
+import {
+  assertPromotable,
+  movePath,
+  type PromoteResult,
+} from "../scope/promote.ts";
 
 // A type alias, not an interface, so it keeps TypeScript's implicit index signature
 // and can cross the win.bind boundary as a JSON value.
@@ -147,4 +154,31 @@ export async function resolveSkillPath(
     if (hit) return hit.path;
   }
   return undefined;
+}
+
+// Move this skill up to root, where every workspace can name it. Addressed by NAME
+// rather than by path, because the two on-disk shapes share a namespace: root may hold
+// `foo.md` where the workspace holds `foo/SKILL.md`, and that is a clash even though
+// the paths differ. The shape itself travels unchanged — whichever one the workspace
+// had is the one root gets.
+export async function promoteSkill(
+  scope: ScopeId,
+  name: string,
+  overwrite = false,
+): Promise<PromoteResult> {
+  assertPromotable(scope);
+  assertSkillName(name);
+  const own = (await listSkills(scope)).find((s) => s.name === name);
+  if (!own) throw new Error(`no skill named ${name} in ${scope}`);
+  const clash = (await listSkills(ROOT)).find((s) => s.name === name);
+  if (clash) {
+    if (!overwrite) return { conflict: true };
+    await Deno.remove(clash.path, { recursive: true });
+  }
+  await Deno.mkdir(skillsDir(ROOT), { recursive: true });
+  return await movePath(
+    own.path,
+    `${skillsDir(ROOT)}/${basename(own.path)}`,
+    overwrite,
+  );
 }

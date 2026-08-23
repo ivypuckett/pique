@@ -15,7 +15,12 @@ import {
   assertAgentName,
   ensureAgentDirs,
 } from "./paths.ts";
-import { chain, type ScopeId } from "../scope/paths.ts";
+import { chain, ROOT, type ScopeId } from "../scope/paths.ts";
+import {
+  assertPromotable,
+  movePath,
+  type PromoteResult,
+} from "../scope/promote.ts";
 
 // deno-lint-ignore no-explicit-any
 type Model = any;
@@ -262,4 +267,22 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<string> {
   } finally {
     await Deno.remove(agentDir, { recursive: true }).catch(() => {});
   }
+}
+
+// Move this definition up to root, where run_subagent reaches it from every workspace.
+// Nothing here is enabled or disabled — a definition is invocable wherever it is
+// visible — so promoting is the whole operation.
+export async function promoteAgent(
+  scope: ScopeId,
+  name: string,
+  overwrite = false,
+): Promise<PromoteResult> {
+  assertPromotable(scope);
+  assertAgentName(name);
+  await ensureAgentDirs(ROOT);
+  return await movePath(
+    agentPath(scope, name),
+    agentPath(ROOT, name),
+    overwrite,
+  );
 }

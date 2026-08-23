@@ -5,6 +5,7 @@ import {
   listAgents,
   listVisibleAgents,
   progressLine,
+  promoteAgent,
   runSubagent,
   saveAgent,
   truncatedResult,
@@ -396,5 +397,42 @@ Deno.test("runSubagent falls back to the parent's model when the definition name
       fallbackModel,
     });
     assertEquals(JSON.parse(lastRequest).model, "mock-model");
+  });
+});
+
+// Promote — the whole point of a workspace-scoped definition being movable: run_subagent
+// can only reach its own scope's and root's, so promoting is how one workspace's subagent
+// becomes every workspace's.
+Deno.test("promoteAgent moves the definition into root and leaves nothing behind", async () => {
+  await withTempHome(async () => {
+    await writeAgent("ws-1", "scribe", "---\ndescription: d\n---\nbody");
+
+    assertEquals(await promoteAgent("ws-1", "scribe"), { ok: true });
+    assertEquals(await listAgents("ws-1"), []);
+    assertEquals((await listAgents(ROOT)).map((a) => a.name), ["scribe"]);
+  });
+});
+
+// The conflict is a RETURN, not a throw: root's copy is a question for the user, and
+// the caller answers it by asking again with overwrite.
+Deno.test("promoteAgent reports a conflict rather than replacing root's, until told to", async () => {
+  await withTempHome(async () => {
+    await writeAgent("ws-1", "scribe", "---\ndescription: new\n---\nnew body");
+    await writeAgent(ROOT, "scribe", "---\ndescription: old\n---\nold body");
+
+    assertEquals(await promoteAgent("ws-1", "scribe"), { conflict: true });
+    assertEquals((await listAgents(ROOT))[0].description, "old");
+    assertEquals((await listAgents("ws-1")).length, 1);
+
+    assertEquals(await promoteAgent("ws-1", "scribe", true), { ok: true });
+    assertEquals((await listAgents(ROOT))[0].description, "new");
+    assertEquals(await listAgents("ws-1"), []);
+  });
+});
+
+Deno.test("promoteAgent refuses to promote out of root", async () => {
+  await withTempHome(async () => {
+    await writeAgent(ROOT, "scribe", "---\ndescription: d\n---\nbody");
+    await assertRejects(() => promoteAgent(ROOT, "scribe"));
   });
 });

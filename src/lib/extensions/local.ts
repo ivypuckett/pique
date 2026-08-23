@@ -10,7 +10,8 @@ import {
   pendingDir,
   pendingPath,
 } from "./paths.ts";
-import { chain, type ScopeId } from "../scope/paths.ts";
+import { chain, ROOT, type ScopeId } from "../scope/paths.ts";
+import { movePath, pathExists, type PromoteResult } from "../scope/promote.ts";
 
 export type LocalState = "pending" | "enabled";
 export type LocalExtension = {
@@ -121,5 +122,31 @@ export async function removeLocal(
 ): Promise<void> {
   await Deno.remove(
     state === "pending" ? pendingPath(scope, name) : livePath(scope, name),
+  );
+}
+
+// Promote = move the module into ROOT's QUARANTINE, whatever state it held in the
+// workspace. It does not arrive enabled: enabling in root is what lets code run in
+// every workspace, and that decision belongs to a fresh review against the bytes, not
+// to a review someone did once for one workspace.
+//
+// The clash is tested against BOTH of root's dirs. A same-named module already live in
+// root is exactly the case where silently landing beside it would matter — the promoted
+// copy would sit unenabled in quarantine while the old one kept running.
+export async function promoteLocal(
+  scope: ScopeId,
+  name: string,
+  state: LocalState,
+  overwrite: boolean,
+): Promise<PromoteResult> {
+  await ensureExtensionDirs(ROOT);
+  if (await pathExists(livePath(ROOT, name))) {
+    if (!overwrite) return { conflict: true };
+    await Deno.remove(livePath(ROOT, name));
+  }
+  return await movePath(
+    state === "pending" ? pendingPath(scope, name) : livePath(scope, name),
+    pendingPath(ROOT, name),
+    overwrite,
   );
 }

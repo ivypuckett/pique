@@ -184,7 +184,7 @@ conversation on `/reload`.
 Both appear in the **Library** as their own row kinds, `system` and `appendix`
 (`scope/prompt-items.ts`), listed in every scope whether or not the file exists
 — they are singletons with fixed names, so there is nothing to enumerate and a
-row is the only place the UI can say the file *could* exist here. Root's are
+row is the only place the UI can say the file _could_ exist here. Root's are
 listed as inherited only when they do exist.
 
 Saving an empty body **deletes** the file. Absence is what falls back down the
@@ -302,10 +302,27 @@ from a sibling, would need it to walk a real parent pointer — and
 Model providers (`auth.json`, `models.json`) are still machine-wide and shared
 with the user's `pi` CLI. Only which _model_ is picked by default is per-scope.
 
-### 5. Moving a tool between scopes
+### 5. Moving a tool between scopes — built
 
-There is no "promote to root" action. Sharing a tool a workspace defined means
-re-defining it in root, or moving the file by hand.
+Every workspace-owned Library row now carries **Promote**, which moves it into
+root: extensions, prompt templates, skills and subagents. Not the two prompt
+files — `SYSTEM.md` and `APPEND_SYSTEM.md` are singletons whose scopes merge by
+opposite rules, so moving one would be a rewrite of root's rather than a move.
+
+Three decisions worth keeping:
+
+- It **moves**, it does not copy. Every kind here resolves nearest-first, so a
+  copy left in the workspace would go on shadowing the root one while the two
+  drifted — the opposite of what promoting is for.
+- An extension lands in root's **quarantine**, whatever state it held in the
+  workspace. Enabling in root is what lets code run in every workspace, and that
+  is a decision for a fresh review, not one inherited from a review someone did
+  once for one workspace. A prompt template, which is inert until invoked, keeps
+  the state it had.
+- A name root already holds **stops the promote and asks**, rather than
+  clobbering: replacing root's copy changes what every workspace inherits,
+  including the ones not open. The backend answers `{ conflict: true }` and the
+  Library confirms before calling again with `overwrite`.
 
 ### 6. Showing inherited values in place
 

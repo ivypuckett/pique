@@ -30,9 +30,11 @@ import { type PackageType, packageTypes, TYPE_KEYWORDS } from "./catalog.ts";
 import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
 import {
   ensureScopeDirs,
+  ROOT,
   scopeAgentDir,
   type ScopeId,
 } from "../scope/paths.ts";
+import type { PromoteResult } from "../scope/promote.ts";
 import {
   ensureExtensionDirs,
   packageSource,
@@ -341,4 +343,31 @@ export async function searchExtensions(
     throw (settled[0] as PromiseRejectedResult).reason;
   }
   return mergeSearchResults(ok);
+}
+
+// Promote = install the package into root and take it out of the workspace, landing it
+// in root's quarantine for the same reason promoteLocal does. There is no file to move:
+// a package's bytes are an install tree pi manages per scope, so this is a fetch into
+// root followed by a remove here — done in that order, because the workspace's record
+// is where the source string comes from.
+//
+// A package in root is NOT inherited by workspaces the way a local module is
+// (docs/extensions.md), so promoting one moves where it is managed rather than widening
+// what loads it. Enabling it in root is still the step that makes it run there.
+export async function promotePackage(
+  scope: ScopeId,
+  source: string,
+  overwrite: boolean,
+): Promise<PromoteResult> {
+  const inRoot = [
+    ...(await listEnabledPackages(ROOT)).map((e) => e.source),
+    ...(await listPendingPackages(ROOT)).map((p) => p.source),
+  ];
+  if (inRoot.includes(source)) {
+    if (!overwrite) return { conflict: true };
+    await removePackage(ROOT, source);
+  }
+  await fetchPackage(ROOT, source);
+  await removePackage(scope, source);
+  return { ok: true };
 }

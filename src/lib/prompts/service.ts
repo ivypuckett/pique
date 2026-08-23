@@ -15,7 +15,12 @@ import {
   promptPath,
   promptsDir,
 } from "./paths.ts";
-import { chain, type ScopeId } from "../scope/paths.ts";
+import { chain, ROOT, type ScopeId } from "../scope/paths.ts";
+import {
+  assertPromotable,
+  movePath,
+  type PromoteResult,
+} from "../scope/promote.ts";
 
 export type PromptState = "live" | "pending";
 // An alias, not an interface, for the same reason Prompt is one (parse.ts).
@@ -132,4 +137,21 @@ export async function deletePrompt(
   await Deno.remove(
     state === "live" ? promptPath(scope, name) : pendingPromptPath(scope, name),
   );
+}
+
+// Move this template up to root, where every workspace can invoke it. The state it was
+// in comes with it: a live template stays live, and one still in quarantine lands in
+// root's quarantine — promoting is not a second way to approve something.
+export async function promotePrompt(
+  scope: ScopeId,
+  name: string,
+  state: PromptState,
+  overwrite = false,
+): Promise<PromoteResult> {
+  assertPromotable(scope);
+  assertPromptName(name);
+  await ensurePromptDirs(ROOT);
+  const at = (s: ScopeId) =>
+    state === "live" ? promptPath(s, name) : pendingPromptPath(s, name);
+  return await movePath(at(scope), at(ROOT), overwrite);
 }

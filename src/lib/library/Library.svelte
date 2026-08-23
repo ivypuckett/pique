@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ROOT } from "../scope/paths.ts";
+  import type { PromoteResult } from "../scope/promote.ts";
   import {
     extensionBindings,
     type ExtensionSource,
@@ -87,6 +88,10 @@
   let source = $state("");
   let sourceOpen = $state(false);
   let confirming = $state(false);
+
+  // The row whose promote hit a name root already holds, waiting on the user's answer.
+  // Held by item rather than by key so the confirm can name what it is replacing.
+  let promoting = $state<LibraryItem | null>(null);
 
   // Two independent drafts rather than one union: the two forms share no field, and
   // opening either closes the other, so the shell never has to ask which one is showing.
@@ -283,6 +288,63 @@
     }
   }
 
+  // Which backend call moves this kind, or null for the kinds that cannot be promoted:
+  // SYSTEM.md and APPEND_SYSTEM.md are singletons whose merge rules differ per scope
+  // (nearest-wins vs concatenate), so moving one is a rewrite of root's, not a move.
+  function promoteCall(
+    item: LibraryItem,
+  ): ((overwrite: boolean) => Promise<PromoteResult>) | null {
+    if (item.kind === "extension" && ext) {
+      const { id, state } = item.ext;
+      return (overwrite) => ext.extensionsPromote({ scope, id, state, overwrite });
+    }
+    if (item.kind === "prompt" && prompts) {
+      const { name, state } = item.prompt;
+      return (overwrite) => prompts.promptsPromote({ scope, name, state, overwrite });
+    }
+    if (item.kind === "skill" && skills) {
+      const { name } = item.skill;
+      return (overwrite) => skills.skillsPromote({ scope, name, overwrite });
+    }
+    if (item.kind === "subagent" && agents) {
+      const { name } = item.agent;
+      return (overwrite) => agents.agentsPromote({ scope, name, overwrite });
+    }
+    return null;
+  }
+
+  // Promote = move this item up to Root, where every workspace inherits it. A move
+  // rather than a copy, because a copy left here would shadow the one up there
+  // (scope/promote.ts). Not act(): the backend can answer with a question — root
+  // already has this name — and that answer is neither a success nor an error.
+  async function promote(item: LibraryItem, overwrite = false): Promise<void> {
+    const call = promoteCall(item);
+    if (!call) return;
+    const forScope = scope;
+    busy = true;
+    error = "";
+    notice = "";
+    try {
+      const result = await call(overwrite);
+      if ("conflict" in result) {
+        if (forScope === scope) promoting = item;
+      } else {
+        promoting = null;
+        openKey = null;
+        await refresh();
+        if (item.kind === "prompt") refreshChatCommands();
+        if (forScope === scope) {
+          notice = item.kind === "extension"
+            ? `Promoted ${item.title} to Root, where it is awaiting review — promoting never carries an approval across.`
+            : `Promoted ${item.title} to Root. Every workspace inherits it now.`;
+        }
+      }
+    } catch (e) {
+      if (forScope === scope) error = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
+  }
+
   function edit(item: LibraryItem): void {
     if (item.kind === "system" || item.kind === "appendix") {
       // An absent file opens the same empty form a present one opens after clearing it,
@@ -437,6 +499,7 @@
       error = "";
       notice = "";
       confirming = false;
+      promoting = null;
       openKey = null;
       refresh();
     }
@@ -516,8 +579,46 @@
             onclick={() => remove(item)}
           >Delete</button>
         {/if}
+        <!-- Only from a workspace's own list: root has nowhere to promote to, and an
+             inherited row is already up there. The two prompt files are excluded
+             because they merge per scope rather than resolve to one file (promoteCall). -->
+        {#if !scopeIsRoot && item.state !== "inherited" && item.kind !== "system" && item.kind !== "appendix"}
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            disabled={busy}
+            title="Move this to the Root workspace, where every workspace inherits it"
+            onclick={() => promote(item)}
+          >Promote</button>
+        {/if}
       </div>
     </div>
+
+    {#if promoting?.key === item.key}
+      <div class="mt-2 rounded border border-warning/50 bg-warning/10 p-2">
+        <div class="text-xs font-medium text-warning">
+          Root already has a {KIND_LABEL[item.kind]} called {item.title}.
+        </div>
+        <div class="mt-1 text-xs opacity-80">
+          Replacing it changes what every workspace inherits, including the ones not open
+          here. Root's copy is deleted, not kept.
+        </div>
+        <div class="mt-2 flex gap-2">
+          <button
+            type="button"
+            class="btn btn-warning btn-xs"
+            disabled={busy}
+            onclick={() => promote(item, true)}
+          >Replace Root's</button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            disabled={busy}
+            onclick={() => (promoting = null)}
+          >Cancel</button>
+        </div>
+      </div>
+    {/if}
 
     {#if openKey === item.key}
       {#if item.state === "pending"}
@@ -811,7 +912,9 @@
         <code>run_subagent</code>, and is reachable as soon as it is saved — no
         <code>/reload</code>. Skills are read-only here — add one by putting a
         <code>&lt;name&gt;/SKILL.md</code> directory or a <code>&lt;name&gt;.md</code>
-        file in this scope's <code>agent/skills/</code>.
+        file in this scope's <code>agent/skills/</code>. <b>Promote</b> moves a row into
+        Root, where every workspace inherits it — the workspace keeps no copy, and an
+        extension arrives there awaiting review rather than enabled.
       </div>
 
       {#if notice}<div class="mt-2 text-xs text-success">{notice}</div>{/if}

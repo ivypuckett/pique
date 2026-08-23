@@ -2,7 +2,8 @@
 // win.bind handlers in src/desktop.ts (delegating to agents/service.ts) — keep
 // arg/return shapes in sync by hand (separate module graphs).
 import type { AgentDef } from "./parse.ts";
-export type { AgentDef };
+import type { PromoteResult } from "../scope/promote.ts";
+export type { AgentDef, PromoteResult };
 
 // Every call names the scope it acts on: a definition belongs to one scope, and saving
 // it in root is what makes it runnable from every workspace. `agentsList` is a scope's
@@ -24,6 +25,12 @@ export interface AgentBindings {
     },
   ): Promise<unknown>;
   agentsDelete(arg: { scope: string; name: string }): Promise<unknown>;
+  // Moves the definition into root, where every workspace inherits it. Returns
+  // `{ conflict: true }` instead of acting when root already has that name; the caller
+  // asks the user, then calls again with `overwrite`.
+  agentsPromote(
+    arg: { scope: string; name: string; overwrite?: boolean },
+  ): Promise<PromoteResult>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — the Library then

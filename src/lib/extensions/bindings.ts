@@ -4,12 +4,14 @@
 import type { Extension, ExtensionSource, ExtState } from "./service.ts";
 import type { ExtSearchResult } from "./packages.ts";
 import type { PackageType } from "./catalog.ts";
+import type { PromoteResult } from "../scope/promote.ts";
 export type {
   Extension,
   ExtensionSource,
   ExtSearchResult,
   ExtState,
   PackageType,
+  PromoteResult,
 };
 // A VALUE, so it must not come from packages.ts: that module imports pi's
 // DefaultPackageManager, which does not survive being bundled for the browser.
@@ -40,6 +42,17 @@ export interface ExtensionBindings {
   extensionsRemove(
     arg: { scope: string; id: string; state: ExtState },
   ): Promise<unknown>;
+  // Moves the extension into ROOT's quarantine — promoting never carries an approval
+  // across, so root reviews it itself. `{ conflict: true }` when root already has that
+  // name, which the caller resolves by calling again with `overwrite`.
+  extensionsPromote(
+    arg: {
+      scope: string;
+      id: string;
+      state: ExtState;
+      overwrite?: boolean;
+    },
+  ): Promise<PromoteResult>;
   // Fetches the bytes and quarantines them; it does NOT enable the package.
   extensionsFetch(arg: { scope: string; source: string }): Promise<unknown>;
   // `type` narrows the catalog to packages carrying that kind, the way

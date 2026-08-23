@@ -516,6 +516,25 @@ win.bind("extensionsRemove", async (arg) => {
   return true;
 });
 
+// Promote — move an item out of a workspace and into root, where every workspace
+// inherits it. A move, not a copy (scope/promote.ts). Each of these answers
+// `{ conflict: true }` rather than clobbering when root already holds the name; the
+// Library asks, then calls again with overwrite.
+win.bind("extensionsPromote", async (arg) => {
+  const { scope, id, state, overwrite } = arg as {
+    scope: string;
+    id: string;
+    state: "pending" | "enabled";
+    overwrite?: boolean;
+  };
+  return await extensions.promoteExtension(
+    scope,
+    id,
+    state,
+    overwrite === true,
+  );
+});
+
 // Fetches the bytes into quarantine. Deliberately does NOT reach the loading set —
 // the user reviews the resolved entry files first, same as for a local module.
 win.bind("extensionsFetch", async (arg) => {
@@ -574,6 +593,16 @@ win.bind("promptsDelete", async (arg) => {
   };
   await prompts.deletePrompt(scope, name, state);
   return true;
+});
+
+win.bind("promptsPromote", async (arg) => {
+  const { scope, name, state, overwrite } = arg as {
+    scope: string;
+    name: string;
+    state: "live" | "pending";
+    overwrite?: boolean;
+  };
+  return await prompts.promotePrompt(scope, name, state, overwrite === true);
 });
 
 // Automatons — named agents that run unattended, each naming exactly the extensions
@@ -710,6 +739,15 @@ win.bind("skillsVisible", async (arg) => {
   return await skills.listVisibleSkills(scope);
 });
 
+win.bind("skillsPromote", async (arg) => {
+  const { scope, name, overwrite } = arg as {
+    scope: string;
+    name: string;
+    overwrite?: boolean;
+  };
+  return await skills.promoteSkill(scope, name, overwrite === true);
+});
+
 // Subagents — named system prompts a chat agent delegates to (docs/subagents.md). Both
 // halves write to the same live dir: there is no quarantine here, so unlike prompts*
 // these handlers have no approve/reject pair, and an agent's define_subagent writes
@@ -742,6 +780,15 @@ win.bind("agentsDelete", async (arg) => {
   const { scope, name } = arg as { scope: string; name: string };
   await agents.deleteAgent(scope, name);
   return true;
+});
+
+win.bind("agentsPromote", async (arg) => {
+  const { scope, name, overwrite } = arg as {
+    scope: string;
+    name: string;
+    overwrite?: boolean;
+  };
+  return await agents.promoteAgent(scope, name, overwrite === true);
 });
 
 // The scope's two prompt files, SYSTEM.md and APPEND_SYSTEM.md (docs/scopes.md). Unlike
