@@ -193,8 +193,56 @@
     return modelsOf(provider).filter((m) => isEnabled($settings.models.enabled, provider, m.id)).length;
   }
 
+  // Adding a provider. The list below shows only what is already connected — with two
+  // dozen built-ins, laying them all out buried the handful you actually use — so a new
+  // one is picked from the + dropdown, which then opens one card here: a built-in's
+  // credential form, or the custom-endpoint form under the id "custom".
+  const CUSTOM = "custom";
+  let adding = $state<string | null>(null);
+  let addOpen = $state(false);
+  let addFilter = $state("");
+  let addRoot = $state<HTMLElement | null>(null);
+
+  // Focus a field the moment it appears. The `autofocus` attribute would not do:
+  // WebKit — what the desktop app renders in — honours it only at parse time, so an
+  // input revealed by an {#if} never takes focus there.
+  function focusOnMount(node: HTMLElement): void {
+    node.focus();
+  }
+
+  // Close the + dropdown on a press anywhere outside it. Pointerdown, not click, so the
+  // press that dismisses it does not also actuate whatever is underneath; a press on
+  // the + itself lands inside and lets the button's own click do the toggling.
+  function onWindowPointerDown(e: PointerEvent): void {
+    if (!addRoot?.contains(e.target as Node | null)) addOpen = false;
+  }
+
+  // Connected, plus custom entries however they resolve — an unconfigured custom
+  // provider still needs its Remove button reachable.
+  const connected = $derived(providers.filter((p) => p.configured || p.isCustom));
+  // Offerable in the dropdown: not already listed, and connectable from here at all
+  // (a provider with no API-key login is credentialed through its own environment).
+  const addable = $derived(
+    providers.filter((p) => !p.configured && !p.isCustom && p.canApiKey),
+  );
+  const addChoices = $derived(
+    addable.filter((p) => p.name.toLowerCase().includes(addFilter.trim().toLowerCase())),
+  );
+  const addingProvider = $derived(providers.find((p) => p.id === adding) ?? null);
+
+  function startAdd(id: string): void {
+    adding = id;
+    addOpen = false;
+    addFilter = "";
+    provError = "";
+  }
+
+  function cancelAdd(): void {
+    adding = null;
+    provError = "";
+  }
+
   // Custom-endpoint form.
-  let showCustom = $state(false);
   let cId = $state("");
   let cBaseUrl = $state("");
   let cKey = $state("");
@@ -217,7 +265,10 @@
     const value = (keyInputs[id] ?? "").trim();
     if (value === "") return;
     const ok = await connect(id, value, id === BEDROCK ? "bearer-token" : undefined);
-    if (ok) keyInputs[id] = "";
+    if (ok) {
+      keyInputs[id] = "";
+      adding = null;
+    }
   }
 
   // Connect Bedrock as an AWS profile: stored as AWS_PROFILE, so the AWS SDK's own
@@ -229,6 +280,7 @@
     provError = "";
     try {
       await prov.providerConnectAwsProfile({ name: profile.name, region: profile.region });
+      adding = null;
       await refreshProviders();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
@@ -283,7 +335,7 @@
         models,
       });
       cId = cBaseUrl = cKey = cModels = "";
-      showCustom = false;
+      adding = null;
       await refreshProviders();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
@@ -308,7 +360,9 @@
   $effect(() => {
     if ($settingsOpen && prov) {
       provError = "";
-      showCustom = false;
+      adding = null;
+      addOpen = false;
+      addFilter = "";
       openModels = null;
       refreshProviders();
     }
@@ -327,7 +381,14 @@
   }
 
   function onWindowKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape") close();
+    if (e.key !== "Escape") return;
+    // The + dropdown is the innermost thing Escape can dismiss; only once it is shut
+    // does Escape close the modal itself.
+    if (addOpen) {
+      addOpen = false;
+      return;
+    }
+    close();
   }
 
   // Side-pane navigation: one entry per settings header.
@@ -339,7 +400,10 @@
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 </script>
 
-<svelte:window onkeydown={$settingsOpen ? onWindowKeydown : undefined} />
+<svelte:window
+  onkeydown={$settingsOpen ? onWindowKeydown : undefined}
+  onpointerdown={addOpen ? onWindowPointerDown : undefined}
+/>
 
 <div class="modal" class:modal-open={$settingsOpen} role="dialog" aria-modal="true" aria-label="Settings">
   <!-- One height for every section, rather than one per section's content. The sections
@@ -566,19 +630,67 @@
       {/if}
 
       {#if section === "providers"}
-      <div class="mb-3 text-xs uppercase tracking-wide text-primary">Providers</div>
       {#if !prov}
+        <div class="mb-3 text-xs uppercase tracking-wide text-primary">Providers</div>
         <div class="text-xs opacity-70">Available in the desktop app only.</div>
       {:else}
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <span class="text-xs uppercase tracking-wide text-primary">Providers</span>
+          <div class="dropdown dropdown-end" bind:this={addRoot}>
+            <button
+              type="button"
+              class="btn btn-square btn-sm"
+              aria-label="Add provider"
+              aria-expanded={addOpen}
+              disabled={provBusy}
+              onclick={() => { addOpen = !addOpen; addFilter = ""; }}
+            >+</button>
+            {#if addOpen}
+              <div class="dropdown-content z-10 mt-1 w-64 rounded border border-base-300 bg-base-100 p-2 shadow">
+                <input
+                  class="input input-bordered input-xs w-full"
+                  placeholder="Search providers…"
+                  aria-label="Search providers"
+                  use:focusOnMount
+                  bind:value={addFilter}
+                  onkeydown={(e) => {
+                    if (e.key !== "Enter" || addChoices.length === 0) return;
+                    startAdd(addChoices[0].id);
+                  }}
+                />
+                <ul class="mt-1 max-h-56 overflow-y-auto">
+                  {#each addChoices as p (p.id)}
+                    <li>
+                      <button
+                        type="button"
+                        class="w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-base-200"
+                        onclick={() => startAdd(p.id)}
+                      >{p.name}</button>
+                    </li>
+                  {:else}
+                    <li class="px-2 py-1 text-xs opacity-50">
+                      {addable.length === 0 ? "Everything is connected." : "No match."}
+                    </li>
+                  {/each}
+                </ul>
+                <button
+                  type="button"
+                  class="mt-1 w-full rounded border-t border-base-300 px-2 pt-1.5 pb-1 text-left text-xs hover:bg-base-200"
+                  onclick={() => startAdd(CUSTOM)}
+                >Custom endpoint…</button>
+              </div>
+            {/if}
+          </div>
+        </div>
         <div class="mt-0.5 text-xs opacity-70">
           Connect any model provider. API keys unlock the built-in providers; add a custom
           endpoint for an OpenAI-compatible server (LM Studio, Ollama, …). Shared with your
           <code>pi</code> CLI. Reopen Chat modules to pick newly available models.
         </div>
 
-        {#if providers.length > 0}
+        {#if connected.length > 0}
           <ul class="mt-3 max-h-72 divide-y divide-base-300 overflow-y-auto rounded border border-base-300">
-            {#each providers as p (p.id)}
+            {#each connected as p (p.id)}
               <li class="px-3 py-2">
                 <div class="flex items-center justify-between gap-2">
                   <div class="min-w-0">
@@ -640,51 +752,16 @@
                     </div>
                   {/if}
                 {/if}
-                {#if !p.configured && p.id === BEDROCK && awsProfiles.length > 0}
-                  <div class="mt-2">
-                    <div class="text-xs opacity-70">
-                      AWS profiles found in <code>~/.aws</code>:
-                    </div>
-                    <div class="mt-1 flex flex-wrap gap-1.5">
-                      {#each awsProfiles as profile (profile.name)}
-                        <button
-                          type="button"
-                          class="btn btn-outline btn-xs font-mono"
-                          disabled={provBusy}
-                          onclick={() => connectAwsProfile(profile)}
-                        >
-                          {profile.name}
-                          {#if profile.region}<span class="opacity-60">· {profile.region}</span>{/if}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-                {#if !p.configured && p.canApiKey}
-                  <div class="mt-2 flex gap-2">
-                    <input
-                      class="input input-bordered input-xs flex-1 font-mono"
-                      type="password"
-                      placeholder={p.id === BEDROCK ? "Bearer token" : "API key"}
-                      aria-label={`${p.name} ${p.id === BEDROCK ? "bearer token" : "API key"}`}
-                      bind:value={keyInputs[p.id]}
-                      disabled={provBusy}
-                      onkeydown={(e) => e.key === "Enter" && connectProvider(p.id)}
-                    />
-                    <button
-                      type="button"
-                      class="btn btn-xs"
-                      disabled={provBusy || (keyInputs[p.id] ?? "").trim() === ""}
-                      onclick={() => connectProvider(p.id)}
-                    >Connect</button>
-                  </div>
-                {/if}
               </li>
             {/each}
           </ul>
+        {:else}
+          <div class="mt-3 rounded border border-dashed border-base-300 px-3 py-4 text-center text-xs opacity-60">
+            No providers connected yet — use + to add one.
+          </div>
         {/if}
 
-        {#if showCustom}
+        {#if adding === CUSTOM}
           <div class="mt-3 rounded border border-base-300 p-3">
             <div class="text-sm font-medium">Custom endpoint</div>
             <div class="mt-2 grid gap-2">
@@ -726,13 +803,52 @@
                 disabled={provBusy || cId.trim() === "" || cBaseUrl.trim() === "" || cModels.trim() === ""}
                 onclick={addCustomProvider}
               >Add</button>
-              <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={() => (showCustom = false)}
+              <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={cancelAdd}
               >Cancel</button>
             </div>
           </div>
-        {:else}
-          <button type="button" class="btn btn-sm mt-3" disabled={provBusy} onclick={() => (showCustom = true)}
-          >Add custom endpoint…</button>
+        {:else if addingProvider}
+          <div class="mt-3 rounded border border-base-300 p-3">
+            <div class="text-sm font-medium">Connect {addingProvider.name}</div>
+            {#if addingProvider.id === BEDROCK && awsProfiles.length > 0}
+              <div class="mt-2 text-xs opacity-70">
+                AWS profiles found in <code>~/.aws</code>:
+              </div>
+              <div class="mt-1 flex flex-wrap gap-1.5">
+                {#each awsProfiles as profile (profile.name)}
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-xs font-mono"
+                    disabled={provBusy}
+                    onclick={() => connectAwsProfile(profile)}
+                  >
+                    {profile.name}
+                    {#if profile.region}<span class="opacity-60">· {profile.region}</span>{/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            <div class="mt-2 flex gap-2">
+              <input
+                class="input input-bordered input-sm flex-1 font-mono"
+                type="password"
+                placeholder={addingProvider.id === BEDROCK ? "Bearer token" : "API key"}
+                aria-label={`${addingProvider.name} ${addingProvider.id === BEDROCK ? "bearer token" : "API key"}`}
+                use:focusOnMount
+                bind:value={keyInputs[addingProvider.id]}
+                disabled={provBusy}
+                onkeydown={(e) => e.key === "Enter" && adding && connectProvider(adding)}
+              />
+              <button
+                type="button"
+                class="btn btn-sm"
+                disabled={provBusy || (keyInputs[addingProvider.id] ?? "").trim() === ""}
+                onclick={() => adding && connectProvider(adding)}
+              >Connect</button>
+              <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={cancelAdd}
+              >Cancel</button>
+            </div>
+          </div>
         {/if}
 
         {#if provError}<div class="mt-2 break-all text-xs text-error">{provError}</div>{/if}
