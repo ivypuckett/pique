@@ -154,6 +154,13 @@
   let provBusy = $state(false);
   // Per-provider API-key drafts, keyed by provider id (only the unconnected rows).
   let keyInputs = $state<Record<string, string>>({});
+  // Amazon Bedrock takes a bearer token OR an AWS profile, so its row offers the
+  // profiles found in ~/.aws alongside the token box. pi detects ambient AWS
+  // credentials on its own (the row just reads Connected); these are the ones only a
+  // credentials file knows about. Bedrock is the one provider with a branching login,
+  // so it is named here rather than generalised over a flow nothing else uses.
+  const BEDROCK = "amazon-bedrock";
+  let awsProfiles = $state<string[]>([]);
   // Custom-endpoint form.
   let showCustom = $state(false);
   let cId = $state("");
@@ -165,25 +172,46 @@
     if (!prov) return;
     try {
       providers = await prov.providerList();
+      awsProfiles = await prov.providerAwsProfiles();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
     }
   }
 
+  // The typed credential: an API key for most providers, a bearer token for Bedrock —
+  // whose login asks which method first, so that row answers the select.
   async function connectProvider(id: string): Promise<void> {
-    if (!prov) return;
-    const apiKey = (keyInputs[id] ?? "").trim();
-    if (apiKey === "") return;
+    const value = (keyInputs[id] ?? "").trim();
+    if (value === "") return;
+    const ok = await connect(id, value, id === BEDROCK ? "bearer-token" : undefined);
+    if (ok) keyInputs[id] = "";
+  }
+
+  // Connect Bedrock as an AWS profile: stored as AWS_PROFILE, so the AWS SDK's own
+  // credential chain resolves it at call time (SSO sessions included).
+  async function connectAwsProfile(profile: string): Promise<void> {
+    await connect(BEDROCK, profile, "aws-profile");
+  }
+
+  // Returns whether the credential took, so a failed connect keeps what was typed.
+  async function connect(
+    id: string,
+    value: string,
+    method?: string,
+  ): Promise<boolean> {
+    if (!prov) return false;
     provBusy = true;
     provError = "";
+    let ok = false;
     try {
-      await prov.providerConnect({ id, apiKey });
-      keyInputs[id] = "";
+      await prov.providerConnect({ id, value, method });
+      ok = true;
       await refreshProviders();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
     }
     provBusy = false;
+    return ok;
   }
 
   async function disconnectProvider(id: string): Promise<void> {
@@ -536,13 +564,30 @@
                     {/if}
                   </div>
                 </div>
+                {#if !p.configured && p.id === BEDROCK && awsProfiles.length > 0}
+                  <div class="mt-2">
+                    <div class="text-xs opacity-70">
+                      AWS profiles found in <code>~/.aws</code>:
+                    </div>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                      {#each awsProfiles as profile (profile)}
+                        <button
+                          type="button"
+                          class="btn btn-outline btn-xs font-mono"
+                          disabled={provBusy}
+                          onclick={() => connectAwsProfile(profile)}
+                        >{profile}</button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
                 {#if !p.configured && p.canApiKey}
                   <div class="mt-2 flex gap-2">
                     <input
                       class="input input-bordered input-xs flex-1 font-mono"
                       type="password"
-                      placeholder="API key"
-                      aria-label={`${p.name} API key`}
+                      placeholder={p.id === BEDROCK ? "Bearer token" : "API key"}
+                      aria-label={`${p.name} ${p.id === BEDROCK ? "bearer token" : "API key"}`}
                       bind:value={keyInputs[p.id]}
                       disabled={provBusy}
                       onkeydown={(e) => e.key === "Enter" && connectProvider(p.id)}

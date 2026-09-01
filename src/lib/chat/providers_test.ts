@@ -3,6 +3,7 @@ import {
   apiKeyInteraction,
   buildCustomEntry,
   customProviderIds,
+  parseAwsProfiles,
   removeProviderFromConfig,
   toProviderInfo,
   upsertCustomProvider,
@@ -135,4 +136,60 @@ Deno.test("apiKeyInteraction returns the key for secret/text prompts", async () 
     Error,
     "unsupported auth prompt",
   );
+});
+
+Deno.test("apiKeyInteraction answers a select with the chosen method", async () => {
+  // Bedrock's real flow: select the method, then the follow-up prompt takes the value.
+  const it = apiKeyInteraction("work-sso", "aws-profile");
+  const options = [
+    { id: "bearer-token" },
+    { id: "aws-profile" },
+    { id: "credential-chain" },
+  ];
+  assertEquals(await it.prompt({ type: "select", options }), "aws-profile");
+  assertEquals(await it.prompt({ type: "text" }), "work-sso");
+});
+
+Deno.test("apiKeyInteraction rejects a method the prompt does not offer", async () => {
+  const it = apiKeyInteraction("v", "aws-profile");
+  await assertRejects(
+    () => it.prompt({ type: "select", options: [{ id: "bearer-token" }] }),
+    Error,
+    'auth method "aws-profile" is not offered',
+  );
+  // A select with no options at all is the same failure, not a silent pass.
+  await assertRejects(
+    () => it.prompt({ type: "select" }),
+    Error,
+    "is not offered",
+  );
+});
+
+Deno.test("parseAwsProfiles reads both ~/.aws file styles and dedupes", () => {
+  const config = `[default]
+region = us-east-1
+
+[profile work-sso]
+sso_session = corp
+
+[sso-session corp]
+sso_start_url = https://example.awsapps.com/start
+
+[services my-services]
+bedrock =
+`;
+  assertEquals(parseAwsProfiles(config), ["default", "work-sso"]);
+  // credentials uses bare section names; merging is the caller's job, but a repeat
+  // inside one file collapses here.
+  assertEquals(
+    parseAwsProfiles("[default]\nak = x\n[default]\n[other]\n"),
+    ["default", "other"],
+  );
+});
+
+Deno.test("parseAwsProfiles tolerates whitespace, comments and junk", () => {
+  assertEquals(parseAwsProfiles(""), []);
+  assertEquals(parseAwsProfiles("# just a comment\nnot a section\n"), []);
+  assertEquals(parseAwsProfiles("  [  spaced  ]  \n"), ["spaced"]);
+  assertEquals(parseAwsProfiles("[profile   two words]\n"), ["two words"]);
 });

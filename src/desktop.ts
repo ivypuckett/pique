@@ -188,10 +188,19 @@ win.bind("providerList", async () => await providers.listProviders());
 win.bind("providerModels", async () => await providers.listModels());
 
 win.bind("providerConnect", async (arg) => {
-  const { id, apiKey } = arg as { id: string; apiKey: string };
-  await providers.connectProvider(id, apiKey);
+  const { id, value, method } = arg as {
+    id: string;
+    value: string;
+    method?: string;
+  };
+  await providers.connectProvider(id, value, method);
   return true;
 });
+
+win.bind(
+  "providerAwsProfiles",
+  async () => await providers.detectAwsProfiles(),
+);
 
 win.bind("providerDisconnect", async (arg) => {
   const { id } = arg as { id: string };
