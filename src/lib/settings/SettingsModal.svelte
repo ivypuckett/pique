@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings, settingsOpen, ZOOM_LEVELS } from "./store.ts";
-  import { providerBindings, type ProviderInfo } from "../chat/bindings.ts";
+  import { providerBindings, type AwsProfile, type ProviderInfo } from "../chat/bindings.ts";
   import { openExternal } from "./bindings.ts";
   import {
     deleteTheme,
@@ -160,7 +160,7 @@
   // credentials file knows about. Bedrock is the one provider with a branching login,
   // so it is named here rather than generalised over a flow nothing else uses.
   const BEDROCK = "amazon-bedrock";
-  let awsProfiles = $state<string[]>([]);
+  let awsProfiles = $state<AwsProfile[]>([]);
   // Custom-endpoint form.
   let showCustom = $state(false);
   let cId = $state("");
@@ -188,9 +188,19 @@
   }
 
   // Connect Bedrock as an AWS profile: stored as AWS_PROFILE, so the AWS SDK's own
-  // credential chain resolves it at call time (SSO sessions included).
-  async function connectAwsProfile(profile: string): Promise<void> {
-    await connect(BEDROCK, profile, "aws-profile");
+  // credential chain resolves it at call time (SSO sessions included). The profile's
+  // region goes with it — without one, calls fall back to the catalog's us-east-1.
+  async function connectAwsProfile(profile: AwsProfile): Promise<void> {
+    if (!prov) return;
+    provBusy = true;
+    provError = "";
+    try {
+      await prov.providerConnectAwsProfile({ name: profile.name, region: profile.region });
+      await refreshProviders();
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
   }
 
   // Returns whether the credential took, so a failed connect keeps what was typed.
@@ -570,13 +580,16 @@
                       AWS profiles found in <code>~/.aws</code>:
                     </div>
                     <div class="mt-1 flex flex-wrap gap-1.5">
-                      {#each awsProfiles as profile (profile)}
+                      {#each awsProfiles as profile (profile.name)}
                         <button
                           type="button"
                           class="btn btn-outline btn-xs font-mono"
                           disabled={provBusy}
                           onclick={() => connectAwsProfile(profile)}
-                        >{profile}</button>
+                        >
+                          {profile.name}
+                          {#if profile.region}<span class="opacity-60">· {profile.region}</span>{/if}
+                        </button>
                       {/each}
                     </div>
                   </div>

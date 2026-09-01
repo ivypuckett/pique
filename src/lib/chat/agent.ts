@@ -140,6 +140,7 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
 import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
@@ -456,12 +457,15 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
   const current = agent.session.model;
   // deno-lint-ignore no-explicit-any
   const available: any[] = await runtime.getAvailable();
-  return available.map((m) => ({
+  const models = available.map((m) => ({
     provider: m.provider,
     id: m.id,
     name: m.name ?? m.id,
     current: m.provider === current?.provider && m.id === current?.id,
   }));
+  // Same narrowing the automaton picker gets (providers.ts listModels): Bedrock's
+  // static catalog is mostly unusable in any one region. See bedrock.ts.
+  return filterBedrockModels(models, await resolveBedrockRegion());
 }
 
 export async function setModel(

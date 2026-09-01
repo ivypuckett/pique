@@ -9,8 +9,9 @@ import type {
   ReloadSummary,
   ThinkingLevel,
 } from "./agent.ts";
-import type { ModelOption, ProviderInfo } from "./providers.ts";
+import type { AwsProfile, ModelOption, ProviderInfo } from "./providers.ts";
 export type {
+  AwsProfile,
   ChatEvent,
   CommandInfo,
   Item,
@@ -69,7 +70,12 @@ export interface ProviderBindings {
   ): Promise<unknown>;
   // AWS profiles found in ~/.aws, offered as Bedrock connections. Empty when there are
   // none — including when Bedrock is already authenticated from the environment.
-  providerAwsProfiles(): Promise<string[]>;
+  providerAwsProfiles(): Promise<AwsProfile[]>;
+  // Connect Bedrock as one of them, storing its region so calls do not fall back to
+  // the catalog's us-east-1 (see connectAwsProfile in providers.ts).
+  providerConnectAwsProfile(
+    arg: { name: string; region?: string },
+  ): Promise<unknown>;
   providerDisconnect(arg: { id: string }): Promise<unknown>;
   providerAddCustom(
     arg: { id: string; baseUrl: string; apiKey?: string; models: string[] },

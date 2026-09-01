@@ -202,6 +202,12 @@ win.bind(
   async () => await providers.detectAwsProfiles(),
 );
 
+win.bind("providerConnectAwsProfile", async (arg) => {
+  const { name, region } = arg as { name: string; region?: string };
+  await providers.connectAwsProfile(name, region);
+  return true;
+});
+
 win.bind("providerDisconnect", async (arg) => {
   const { id } = arg as { id: string };
   await providers.disconnectProvider(id);

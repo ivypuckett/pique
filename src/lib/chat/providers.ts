@@ -17,6 +17,15 @@
 import { dirname } from "@std/path";
 import { ensureRuntime } from "./agent.ts";
 import { home } from "../home.ts";
+import {
+  BEDROCK,
+  detectAwsProfiles,
+  filterBedrockModels,
+  resolveBedrockRegion,
+} from "./bedrock.ts";
+
+export { detectAwsProfiles } from "./bedrock.ts";
+export type { AwsProfile } from "./bedrock.ts";
 
 // JSON-safe projection of a pi Provider for the Settings UI.
 export type ProviderInfo = {
@@ -129,23 +138,6 @@ export function customProviderIds(config: unknown): Set<string> {
   );
 }
 
-// Profile names out of an ~/.aws INI file. `~/.aws/config` writes sections as
-// `[profile work]` (but `[default]` bare) while `~/.aws/credentials` writes `[work]`,
-// so the `profile ` prefix is stripped when present. `[sso-session x]` and
-// `[services x]` are config blocks profiles REFER to, not profiles — offering one as
-// something to connect would store an AWS_PROFILE that resolves to nothing.
-export function parseAwsProfiles(text: string): string[] {
-  const found: string[] = [];
-  for (const line of text.split("\n")) {
-    const match = /^\s*\[\s*([^\]]+?)\s*\]/.exec(line);
-    if (!match) continue;
-    const name = match[1].replace(/^profile\s+/, "");
-    if (/^(sso-session|services)\s/.test(match[1])) continue;
-    if (name !== "" && !found.includes(name)) found.push(name);
-  }
-  return found;
-}
-
 export function validateCustomInput(input: CustomProviderInput): void {
   if (!PROVIDER_ID_RE.test(input.id)) {
     throw new Error(`invalid provider id: ${input.id}`);
@@ -216,32 +208,6 @@ async function writeModelsJson(data: ModelsJson): Promise<void> {
   });
 }
 
-// The AWS profiles configured on this machine, for the Bedrock row in Settings.
-//
-// pi's own Bedrock detection is environment-only (AWS_PROFILE, access keys, container
-// roles); a machine whose credentials live in ~/.aws with nothing exported reads as
-// unconfigured even though the SDK chain would authenticate. That is the common case
-// for a GUI-launched pique, which does not inherit a shell's exports at all. Listing
-// the profiles lets Settings OFFER one — connecting stores it as AWS_PROFILE, which
-// is the branch pi's resolve looks for. Detection alone never connects anything:
-// binding pique to an AWS account (and its billing) is a click, not a side effect of
-// having a credentials file.
-export async function detectAwsProfiles(): Promise<string[]> {
-  const found: string[] = [];
-  for (const file of ["config", "credentials"]) {
-    let text: string;
-    try {
-      text = await Deno.readTextFile(`${home()}/.aws/${file}`);
-    } catch {
-      continue; // absent or unreadable — that file simply contributes no profiles
-    }
-    for (const name of parseAwsProfiles(text)) {
-      if (!found.includes(name)) found.push(name);
-    }
-  }
-  return found;
-}
-
 export async function listProviders(): Promise<ProviderInfo[]> {
   const runtime = await ensureRuntime();
   const custom = customProviderIds(await readModelsJson());
@@ -260,11 +226,14 @@ export async function listModels(): Promise<ModelOption[]> {
   const runtime = await ensureRuntime();
   // deno-lint-ignore no-explicit-any
   const available: any[] = await runtime.getAvailable();
-  return available.map((m) => ({
+  const models = available.map((m) => ({
     provider: m.provider,
     id: m.id,
     name: m.name ?? m.id,
   }));
+  // Bedrock ships a static catalog that is mostly unusable in any one region; see
+  // bedrock.ts for why the picker is narrowed rather than showing all 114.
+  return filterBedrockModels(models, await resolveBedrockRegion());
 }
 
 // Persist a credential for a built-in provider via pi's login flow (→ auth.json).
@@ -278,6 +247,47 @@ export async function connectProvider(
   if (value.trim() === "") throw new Error("a credential is required");
   const runtime = await ensureRuntime();
   await runtime.login(id, "api_key", apiKeyInteraction(value.trim(), method));
+}
+
+// Connect Bedrock as an AWS profile, storing the profile's own region alongside it.
+//
+// The region is the part pi cannot work out for itself: it reads AWS_REGION and
+// AWS_DEFAULT_REGION only, never the `region =` line in ~/.aws/config. With neither
+// set it pins the catalog's baseUrl — us-east-1 for all but ten entries — so a profile
+// in any other region silently talks to the wrong one and every model reads as an
+// invalid identifier. Storing AWS_REGION in the credential's env fixes that, because
+// pi consults the credential env ahead of the process environment.
+export async function connectAwsProfile(
+  name: string,
+  region?: string,
+): Promise<void> {
+  await connectProvider(BEDROCK, name, "aws-profile");
+  if (region) await mergeCredentialEnv(BEDROCK, { AWS_REGION: region });
+}
+
+// Add env vars to a stored credential, leaving its type/key and every other provider's
+// entry alone. pi's login writes the credential and offers no way to amend it, and the
+// Bedrock flow stores only AWS_PROFILE — so the region goes in with a read-modify-write
+// of the same file, the way pique already edits models.json next door.
+async function mergeCredentialEnv(
+  id: string,
+  env: Record<string, string>,
+): Promise<void> {
+  const path = `${home()}/.pi/agent/auth.json`;
+  let auth: Record<string, { env?: Record<string, string> }>;
+  try {
+    auth = JSON.parse(await Deno.readTextFile(path));
+  } catch {
+    return; // login just wrote this; if it cannot be read back, leave it as it is
+  }
+  const entry = auth[id];
+  if (!entry || typeof entry !== "object") return;
+  auth[id] = { ...entry, env: { ...entry.env, ...env } };
+  // auth.json holds every provider's secrets — keep it to the owner, as pi does.
+  await Deno.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await Deno.writeTextFile(path, JSON.stringify(auth, null, 2) + "\n", {
+    mode: 0o600,
+  });
 }
 
 export async function disconnectProvider(id: string): Promise<void> {
