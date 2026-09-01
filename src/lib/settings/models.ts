@@ -8,6 +8,14 @@
 // A provider with NO entry has everything enabled — that is what a provider connected
 // after this setting was written looks like, and what every provider looked like before
 // it existed, so absent has to mean "all" rather than "none".
+//
+// Amazon Bedrock is the exception, because "all" there is actively unhelpful: its
+// catalog is a static list of 114 ids, most of which cannot be invoked by the account
+// looking at them (see chat/bedrock.ts). Only the `global.` inference profiles are
+// dependable — they route from any region, and every model offered as one is also
+// offered as a regional profile, so nothing is lost by starting there. So Bedrock
+// starts with those checked and the rest merely unchecked: visible in Settings, one
+// click away, and never hidden in a way the user cannot undo.
 
 // provider id → the model ids enabled for it. An absent key means all of them.
 export type ModelSelection = Record<string, string[]>;
@@ -16,18 +24,30 @@ export type ModelSelection = Record<string, string[]>;
 // ModelInfo (chat/agent.ts) satisfy it.
 type Model = { provider: string; id: string; name: string };
 
+// The provider whose default is a subset rather than everything. Spelled here rather
+// than imported from chat/bedrock.ts: this module is bundled into the webview, and
+// that one reaches for Deno APIs the frontend has no business loading.
+const BEDROCK = "amazon-bedrock";
+
+// Whether a model is on before anyone has touched its provider's checklist.
+export function isEnabledByDefault(provider: string, id: string): boolean {
+  return provider !== BEDROCK || id.startsWith("global.");
+}
+
 export function isEnabled(
   selection: ModelSelection,
   provider: string,
   id: string,
 ): boolean {
   const list = selection[provider];
-  return list === undefined || list.includes(id);
+  return list === undefined
+    ? isEnabledByDefault(provider, id)
+    : list.includes(id);
 }
 
-// Check or uncheck one model. The provider's list is materialised from `allIds` on the
-// first change, because up to that point "absent" was standing in for the whole
-// catalog — unchecking one entry has to leave the other entries checked.
+// Check or uncheck one model. The provider's list is materialised on the first change
+// from whatever was enabled by default, because up to that point "absent" was standing
+// in for that set — toggling one entry has to leave every other entry as it appeared.
 export function setEnabled(
   selection: ModelSelection,
   provider: string,
@@ -35,7 +55,8 @@ export function setEnabled(
   id: string,
   checked: boolean,
 ): ModelSelection {
-  const current = selection[provider] ?? allIds;
+  const current = selection[provider] ??
+    allIds.filter((x) => isEnabledByDefault(provider, x));
   const next = checked
     ? (current.includes(id) ? current : [...current, id])
     : current.filter((x) => x !== id);
