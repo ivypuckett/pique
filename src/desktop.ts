@@ -868,11 +868,17 @@ await automatons.reconcileRuns();
   });
 }
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
+const { fromFileUrl } = await import("@std/path");
+// Resolved off this module rather than the cwd: `--include dist` embeds the build one
+// level above src/ in the packaged app's virtual filesystem, and the app is started from
+// wherever the user happens to be — from Finder, that is `/`. A relative "dist" only ever
+// found the real one because `deno task dev` runs from the checkout root.
+const fsRoot = fromFileUrl(new URL("../dist", import.meta.url));
 // Loopback only: this serves the UI to our own webview, and the default hostname
 // (0.0.0.0) would publish it to the LAN for as long as the app is open. The port is
 // left alone — deno desktop auto-navigates the adopted window to the served address
 // (see the head comment), so it must stay predictable.
 Deno.serve(
   { hostname: "127.0.0.1" },
-  (req) => serveDir(req, { fsRoot: "dist", quiet: true }),
+  (req) => serveDir(req, { fsRoot, quiet: true }),
 );
