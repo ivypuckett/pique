@@ -4,23 +4,30 @@ A harness to get you curious.
 
 ## Installing
 
-macOS builds are attached to each
-[release](https://github.com/ivypuckett/pique/releases) as a `.dmg` —
-`Pique-aarch64.dmg` for Apple Silicon, `Pique-x86_64.dmg` for Intel. Linux and
-Windows are supported targets but are not published yet; build them from source
-with `deno task dev`.
+Build it from source. There are no published binaries: shipping a macOS app
+that opens on someone else's Mac means signing and notarizing it, which needs a
+paid Apple Developer account, and an unsigned download arrives quarantined and
+is refused. An app you build yourself was never downloaded and is never
+quarantined, so this is also the shorter path.
 
-Nightly builds are published to the rolling
-[`nightly`](https://github.com/ivypuckett/pique/releases/tag/nightly) prerelease
-each morning, on days something was committed.
-
-The `.dmg` is unsigned, so Gatekeeper refuses it on first launch and says the
-app is damaged. It is not. Clear the quarantine flag after dragging Pique to
-Applications:
+All you need is [Deno](https://deno.com) 2.9.5 or newer.
 
 ```
-xattr -dr com.apple.quarantine /Applications/Pique.app
+git clone https://github.com/ivypuckett/pique
+cd pique
+deno task dev
 ```
+
+`deno task dev` is the whole pipeline — it builds the frontend, packages the
+desktop app into `pique/`, and launches it. Run it again after pulling to
+rebuild and relaunch.
+
+To keep the app around rather than starting it from the checkout: on macOS drag
+`pique/Pique.app` to Applications; on Linux and Windows `pique/pique` and
+`pique\pique.exe` are the packaged app and can be moved anywhere. Launching one
+of those directly runs the same binary `deno task dev` does, minus the rebuild
+— but on Linux it also skips the environment `deno task dev` fixes up for
+WebKitGTK, so if the window never appears, start it from the task instead.
 
 ## Decisions
 
