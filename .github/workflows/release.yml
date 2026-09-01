@@ -86,7 +86,7 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: denoland/setup-deno@v2
         with:
@@ -99,20 +99,19 @@ jobs:
 
       # Mirrors the packaging step in src/dev.ts. Kept as flags here rather than shared with
       # that file because dev.ts also launches what it builds, which a release must not do.
-      # Packaged as plain Pique.dmg and renamed afterwards, because --output names the app
-      # itself and not just the file: building straight to Pique-aarch64.dmg puts a
-      # "Pique-aarch64.app" in the disk image, which is then what the dock and the menu bar
-      # call it. The architecture belongs in the download's name, not the installed app's.
+      # The .dmg carries the architecture but the bundle inside it is plain Pique.app —
+      # verified by unpacking a built artifact, and what the xattr line in the README
+      # depends on. (A directory --output on Linux does name the app after the output; the
+      # macOS disk-image path does not.)
       - name: Package app
         run: |
           deno desktop -A \
             --include dist \
             --icon assets/pique.png \
-            --output Pique.dmg \
+            --output "Pique-${{ matrix.arch }}.dmg" \
             src/desktop.ts
-          mv Pique.dmg "Pique-${{ matrix.arch }}.dmg"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Pique-${{ matrix.arch }}
           path: Pique-${{ matrix.arch }}.dmg
@@ -122,7 +121,7 @@ jobs:
     needs: [gate, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: dmgs
           merge-multiple: true
@@ -130,6 +129,10 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job deliberately has no checkout — it only moves release assets around.
+          # Without a git repo to inspect, `gh release` cannot guess which repo it is
+          # acting on and dies with "not a git repository", so name it outright.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.gate.outputs.tag }}
           NIGHTLY: ${{ needs.gate.outputs.nightly }}
           SHA: ${{ github.sha }}
