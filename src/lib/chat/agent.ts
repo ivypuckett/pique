@@ -213,8 +213,9 @@ interface Agent {
 }
 const agents = new Map<string, Agent>();
 let nextId = 1;
-// deno-lint-ignore no-explicit-any
-let runtime: any | undefined;
+// Typed, not `any`: this was `any` once, and a call to a reloadConfig() that pi does
+// not have type-checked cleanly and threw on every custom-endpoint save instead.
+let runtime: ModelRuntime | undefined;
 
 // The single shared ModelRuntime, created lazily. Exported so provider
 // management (providers.ts) mutates the same runtime the chat agents stream
@@ -456,7 +457,7 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
   if (!runtime || !agent) return [];
   const current = agent.session.model;
   // deno-lint-ignore no-explicit-any
-  const available: any[] = await runtime.getAvailable();
+  const available: readonly any[] = await runtime.getAvailable();
   const models = available.map((m) => ({
     provider: m.provider,
     id: m.id,

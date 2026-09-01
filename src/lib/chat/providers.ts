@@ -161,7 +161,7 @@ export function validateCustomInput(input: CustomProviderInput): void {
 export function apiKeyInteraction(value: string, method?: string) {
   return {
     prompt: (
-      p: { type: string; options?: Array<{ id: string }> },
+      p: { type: string; options?: readonly { id: string }[] },
     ): Promise<string> => {
       if (p.type === "secret" || p.type === "text") {
         return Promise.resolve(value);
@@ -225,7 +225,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 export async function listModels(): Promise<ModelOption[]> {
   const runtime = await ensureRuntime();
   // deno-lint-ignore no-explicit-any
-  const available: any[] = await runtime.getAvailable();
+  const available: readonly any[] = await runtime.getAvailable();
   const models = available.map((m) => ({
     provider: m.provider,
     id: m.id,
@@ -295,13 +295,21 @@ export async function disconnectProvider(id: string): Promise<void> {
   await runtime.logout(id);
 }
 
+// Re-read models.json into the live runtime, so a provider added or removed here is
+// served without a restart. `refresh` reloads the config and rebuilds the providers
+// before it does anything else, so allowNetwork:false gets that for free while
+// skipping the model-catalog fetches, which have nothing to do with this edit.
+async function reloadProviders(): Promise<void> {
+  await (await ensureRuntime()).refresh({ allowNetwork: false });
+}
+
 // Write the endpoint to models.json, then reload so the live runtime serves it.
 export async function addCustomProvider(
   input: CustomProviderInput,
 ): Promise<void> {
   validateCustomInput(input);
   await writeModelsJson(upsertCustomProvider(await readModelsJson(), input));
-  await (await ensureRuntime()).reloadConfig();
+  await reloadProviders();
 }
 
 export async function removeCustomProvider(id: string): Promise<void> {
@@ -310,5 +318,5 @@ export async function removeCustomProvider(id: string): Promise<void> {
     throw new Error(`not a custom provider: ${id}`);
   }
   await writeModelsJson(removeProviderFromConfig(config, id));
-  await (await ensureRuntime()).reloadConfig();
+  await reloadProviders();
 }
