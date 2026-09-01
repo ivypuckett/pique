@@ -44,8 +44,13 @@ Deno.test("launchCommand wants the .exe on Windows", () => {
 });
 
 Deno.test("launchCommand opens an .app bundle on macOS, and runs a bare binary when there is none", () => {
-  // Which of the two `deno desktop` emits is unverified — the card that prompted this
-  // says so — so both are handled and neither is assumed.
+  // What `deno desktop` actually emits on macOS: `pique.app` beside the checkout, since
+  // --output names the bundle rather than a directory to put it in. The directory form is
+  // kept because a bare binary is the other thing it has been seen to leave.
+  assertEquals(launchCommand("darwin", ".", ["pique.app", "src", "deno.json"]), {
+    cmd: "open",
+    args: ["-W", "pique.app"],
+  });
   assertEquals(launchCommand("darwin", "pique", ["pique.app"]), {
     cmd: "open",
     args: ["-W", "pique/pique.app"],

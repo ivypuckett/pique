@@ -68,6 +68,14 @@ export function launchCommand(
   return { cmd: join(dir, exe), args: [] };
 }
 
+async function isDir(path: string): Promise<boolean> {
+  try {
+    return (await Deno.stat(path)).isDirectory;
+  } catch {
+    return false;
+  }
+}
+
 // Inherited stdio throughout: vite's build output, the packager's progress and the app's
 // own logs are the point of running this task. A failing step ends the pipeline with its
 // own exit code rather than falling through to the next.
@@ -115,9 +123,13 @@ async function main(): Promise<void> {
     env,
   );
 
+  // macOS is the exception: `deno desktop` reads --output as the name of the artifact
+  // itself, leaving `pique.app` beside the checkout, where Linux and Windows get a
+  // `pique/` directory holding the executable. Scan whichever one the packager left.
+  const dir = await isDir(OUT) ? OUT : ".";
   const entries: string[] = [];
-  for await (const e of Deno.readDir(OUT)) entries.push(e.name);
-  const { cmd, args } = launchCommand(os, OUT, entries);
+  for await (const e of Deno.readDir(dir)) entries.push(e.name);
+  const { cmd, args } = launchCommand(os, dir, entries);
   await run(cmd, args, env);
 }
 

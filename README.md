@@ -19,11 +19,12 @@ deno task dev
 ```
 
 `deno task dev` is the whole pipeline — it builds the frontend, packages the
-desktop app into `pique/`, and launches it. Run it again after pulling to
+desktop app (into `pique/` on Linux and Windows, as `pique.app` on macOS), and
+launches it. Run it again after pulling to
 rebuild and relaunch.
 
 To keep the app around rather than starting it from the checkout: on macOS drag
-`pique/Pique.app` to Applications; on Linux and Windows `pique/pique` and
+`pique.app` to Applications; on Linux and Windows `pique/pique` and
 `pique\pique.exe` are the packaged app and can be moved anywhere. Launching one
 of those directly runs the same binary `deno task dev` does, minus the rebuild
 — but on Linux it also skips the environment `deno task dev` fixes up for

@@ -3,5 +3,6 @@ dist/
 .vite/
 .deno_desktop_entry-*.ts
 pique.so
-# deno desktop packaged app output
+# deno desktop packaged app output — a directory on Linux and Windows, a bundle on macOS
 /pique/
+/pique.app/
