@@ -1,0 +1,153 @@
+# Builds the macOS app and publishes it to a GitHub Release.
+#
+# Three ways in: a version tag cuts a real release, the daily schedule cuts a nightly if
+# anything landed since the last one, and workflow_dispatch forces a nightly by hand.
+#
+# Builds run on macOS runners rather than cross-compiling from Linux because it cannot be
+# done: `deno desktop` refuses a .dmg output off a macOS host (it shells out to hdiutil),
+# and a .app cross-build fails while unpacking the darwin webview backend. Each
+# architecture is therefore built natively on its own runner — no --target flag.
+#
+# The artifacts are UNSIGNED. Gatekeeper blocks them on first launch; README covers what a
+# user has to do about it. Signing needs an Apple Developer account and would slot into the
+# build job as a codesign + notarytool step before the upload.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  schedule:
+    # 07:00 UTC daily. GitHub runs scheduled workflows only on the default branch, may
+    # delay them under load, and disables them after 60 days with no repo activity.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Decides what is being published and whether to bother, so the expensive macOS runners
+  # only start when there is something new to build.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      tag: ${{ steps.decide.outputs.tag }}
+      nightly: ${{ steps.decide.outputs.nightly }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # A version tag is always a real release, and always builds.
+          if [ "${{ github.event_name }}" = push ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "nightly=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "tag=nightly" >> "$GITHUB_OUTPUT"
+          echo "nightly=true" >> "$GITHUB_OUTPUT"
+
+          # Asked for by hand: build regardless of what changed.
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Scheduled. Build only if HEAD has moved since the nightly tag was last placed.
+          # Comparing commits rather than counting the last 24h of history means a day the
+          # build was broken or the runner never fired is picked up by the next run instead
+          # of being skipped forever.
+          prev="$(gh api "repos/${REPO}/git/ref/tags/nightly" --jq .object.sha 2>/dev/null || true)"
+          if [ "$prev" = "$SHA" ]; then
+            echo "No new commits since ${prev}; skipping."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New commits since ${prev:-<no previous nightly>}; building ${SHA}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: aarch64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          # Pinned exactly: `deno desktop` is experimental, and a runner silently moving to
+          # a newer Deno is the kind of thing that changes the shape of the output.
+          deno-version: "2.9.5"
+
+      - name: Build frontend
+        run: deno run -A npm:vite build
+
+      # Mirrors the packaging step in src/dev.ts. Kept as flags here rather than shared with
+      # that file because dev.ts also launches what it builds, which a release must not do.
+      # Packaged as plain Pique.dmg and renamed afterwards, because --output names the app
+      # itself and not just the file: building straight to Pique-aarch64.dmg puts a
+      # "Pique-aarch64.app" in the disk image, which is then what the dock and the menu bar
+      # call it. The architecture belongs in the download's name, not the installed app's.
+      - name: Package app
+        run: |
+          deno desktop -A \
+            --include dist \
+            --icon assets/pique.png \
+            --output Pique.dmg \
+            src/desktop.ts
+          mv Pique.dmg "Pique-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pique-${{ matrix.arch }}
+          path: Pique-${{ matrix.arch }}.dmg
+
+  # One job owns the release so the two builds cannot race to create it.
+  publish:
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dmgs
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          NIGHTLY: ${{ needs.gate.outputs.nightly }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$NIGHTLY" = true ]; then
+            # Nightly is a rolling tag. Deleting the release along with its tag and
+            # remaking it against today's commit is what moves it, and leaves no assets
+            # behind from the build it replaces. --latest=false keeps the newest real
+            # version showing as Latest on the releases page.
+            gh release delete "$TAG" --yes --cleanup-tag || true
+            gh release create "$TAG" \
+              --target "$SHA" \
+              --title "nightly ($(date -u +%Y-%m-%d))" \
+              --notes "Unsigned automated build of ${SHA}. See the README for the Gatekeeper step." \
+              --prerelease \
+              --latest=false
+          else
+            gh release create "$TAG" --generate-notes --verify-tag || true
+          fi
+          gh release upload "$TAG" dmgs/*.dmg --clobber

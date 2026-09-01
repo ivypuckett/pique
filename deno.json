@@ -6,7 +6,8 @@
     "dev": "deno run -A src/dev.ts",
     "web": "deno run -A npm:vite",
     "build": "deno run -A npm:vite build",
-    "test": "deno test -A src/"
+    "test": "deno test -A src/",
+    "icon": "rsvg-convert -w 1024 -h 1024 assets/pique.svg -o assets/pique.png"
   },
   "imports": {
     "@std/path": "jsr:@std/path@^1.1.6",

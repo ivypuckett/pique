@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="48"
+   height="48"
+   viewBox="0 0 12.7 12.7"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   sodipodi:docname="pique.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#505050"
+     bordercolor="#ffffff"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="1"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="8.3893613"
+     inkscape:cx="20.084962"
+     inkscape:cy="17.70099"
+     inkscape:window-width="1444"
+     inkscape:window-height="1236"
+     inkscape:window-x="1934"
+     inkscape:window-y="152"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient3316">
+      <stop
+         style="stop-color:#7a7aff;stop-opacity:1;"
+         offset="0"
+         id="stop3312" />
+      <stop
+         style="stop-color:#9393ff;stop-opacity:0;"
+         offset="0.33691388"
+         id="stop3383" />
+      <stop
+         style="stop-color:#b7b7ff;stop-opacity:1;"
+         offset="1"
+         id="stop3314" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3316"
+       id="linearGradient3318"
+       x1="5.9785399"
+       y1="12.271165"
+       x2="5.3653274"
+       y2="0.27972576"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="scale(1,-1)" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <circle
+       style="opacity:1;fill:url(#linearGradient3318);fill-opacity:1;stroke-width:64.1902"
+       id="path1051"
+       cx="6.3499999"
+       cy="-6.3499999"
+       r="6.2218966"
+       transform="scale(1,-1)" />
+    <g
+       id="g997"
+       transform="translate(-0.11150295,0.79117025)">
+      <path
+         id="rect213"
+         style="opacity:1;fill:#2b2b2b;fill-opacity:1;stroke-width:50.545"
+         d="M 6.7946854,1.9832932 1.0306369,7.7473419 A 12.887218,13.339867 0 0 1 2.747141,7.621473 12.887218,13.339867 0 0 1 8.7073969,9.1343663 12.887218,13.339867 0 0 1 11.892369,7.0809778 Z" />
+      <path
+         id="rect431"
+         style="opacity:1;fill:#ffffff;fill-opacity:1;stroke-width:20.5381"
+         d="M 6.8566981,1.9833457 4.9287466,3.9112973 5.4371843,4.419735 6.3587903,3.498129 6.867228,4.0065666 7.6138391,3.2599555 8.5249153,4.1710318 8.7846497,3.9112974 Z" />
+    </g>
+  </g>
+</svg>

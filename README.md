@@ -2,6 +2,26 @@
 
 A harness to get you curious.
 
+## Installing
+
+macOS builds are attached to each
+[release](https://github.com/ivypuckett/pique/releases) as a `.dmg` —
+`Pique-aarch64.dmg` for Apple Silicon, `Pique-x86_64.dmg` for Intel. Linux and
+Windows are supported targets but are not published yet; build them from source
+with `deno task dev`.
+
+Nightly builds are published to the rolling
+[`nightly`](https://github.com/ivypuckett/pique/releases/tag/nightly) prerelease
+each morning, on days something was committed.
+
+The `.dmg` is unsigned, so Gatekeeper refuses it on first launch and says the
+app is damaged. It is not. Clear the quarantine flag after dragging Pique to
+Applications:
+
+```
+xattr -dr com.apple.quarantine /Applications/Pique.app
+```
+
 ## Decisions
 
 1. A view is one thread for one context: its own chat window, and the modules
@@ -42,10 +62,11 @@ Notes:
 - Provider: LM Studio, Anthropic, etc.
 - Thinking Level: Sets how much the agent deliberates before speaking.
 
-- System Prompt: A markdown file, `agent/SYSTEM.md` in a scope's directory, which
-  replaces pi's own preamble for every agent that runs there. The nearest one on
-  the chain wins, so a workspace's shadows the root one it inherits. pique ships
-  none (decision 2) — with no `SYSTEM.md` anywhere, pi's preamble is what runs.
+- System Prompt: A markdown file, `agent/SYSTEM.md` in a scope's directory,
+  which replaces pi's own preamble for every agent that runs there. The nearest
+  one on the chain wins, so a workspace's shadows the root one it inherits.
+  pique ships none (decision 2) — with no `SYSTEM.md` anywhere, pi's preamble is
+  what runs.
 - System Prompt Appendix: `agent/APPEND_SYSTEM.md`, added on top of whatever the
   base turned out to be rather than replacing it. Merges the other way: every
   one on the chain applies, root's first — so root holds house rules and each
