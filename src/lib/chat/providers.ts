@@ -77,6 +77,16 @@ export function toProviderInfo(
   };
 }
 
+// Stands in for the API key of an endpoint that does not use one. pi treats a custom
+// provider with no `apiKey` as unconfigured and drops its models from getAvailable(),
+// so a keyless local server — LM Studio, Ollama, the very examples this feature exists
+// for — would save fine and then offer nothing to pick. Those servers ignore the value,
+// so writing one costs nothing and makes the provider resolve.
+//
+// Deliberately a plain word: pi reads `${VAR}` in this field as an environment lookup
+// and a shell-shaped value as a command to run, and this must be neither.
+const NO_API_KEY = "not-required";
+
 // The models.json provider entry for a custom endpoint. `openai-completions` is
 // the broadly-compatible API (the same one LM Studio uses here); the per-model
 // fields are conservative defaults the user can refine by editing the file.
@@ -87,7 +97,7 @@ export function buildCustomEntry(
   return {
     baseUrl: input.baseUrl.trim(),
     api: "openai-completions",
-    ...(apiKey ? { apiKey } : {}),
+    apiKey: apiKey ? apiKey : NO_API_KEY,
     models: input.models.map((id) => ({
       id,
       reasoning: false,

@@ -43,6 +43,7 @@ Deno.test("buildCustomEntry uses openai-completions and maps model ids", () => {
     {
       baseUrl: "http://h/v1",
       api: "openai-completions",
+      apiKey: "not-required",
       models: [
         { id: "a", reasoning: false, contextWindow: 128000, input: ["text"] },
         { id: "b", reasoning: false, contextWindow: 128000, input: ["text"] },
@@ -51,17 +52,20 @@ Deno.test("buildCustomEntry uses openai-completions and maps model ids", () => {
   );
 });
 
-Deno.test("buildCustomEntry includes apiKey only when non-blank", () => {
-  assertEquals(
-    buildCustomEntry({ id: "x", baseUrl: "u", apiKey: "  ", models: ["a"] })
-      .apiKey,
-    undefined,
-  );
+Deno.test("buildCustomEntry trims the apiKey, and stands one in when blank", () => {
   assertEquals(
     buildCustomEntry({ id: "x", baseUrl: "u", apiKey: " k ", models: ["a"] })
       .apiKey,
     "k",
   );
+  // Blank or absent still writes a key: pi drops a provider with none from
+  // getAvailable(), so a keyless local endpoint would offer no models at all.
+  for (const apiKey of ["  ", undefined]) {
+    assertEquals(
+      buildCustomEntry({ id: "x", baseUrl: "u", apiKey, models: ["a"] }).apiKey,
+      "not-required",
+    );
+  }
 });
 
 Deno.test("upsertCustomProvider preserves other keys and providers", () => {
