@@ -34,6 +34,13 @@ export type ProviderInfo = {
   configured: boolean; // has usable auth (stored key, env var, or keyless local)
   canApiKey: boolean; // supports interactive API-key login
   isCustom: boolean; // defined by a models.json entry pique can remove
+  // Where that auth comes from, straight from pi's AuthStatus: "stored" is the
+  // credential in auth.json — the only one Disconnect can remove — while
+  // "environment" is an ambient variable (AWS_PROFILE, ANTHROPIC_API_KEY, …) that
+  // pique has no way to unset. Absent when unconfigured.
+  source?: string;
+  // What the environment offered, when that is the source: the variable's name.
+  sourceLabel?: string;
 };
 
 // One model the runtime can serve, addressed the way a stored `provider/model-id` ref
@@ -59,10 +66,11 @@ const PROVIDER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 // --- Pure helpers (unit-tested; no runtime/filesystem) -----------------------
 
+// `status` is pi's AuthStatus for this provider (see listProviders).
 // deno-lint-ignore no-explicit-any
 export function toProviderInfo(
   provider: any,
-  configured: boolean,
+  status: { configured: boolean; source?: string; label?: string },
   isCustom: boolean,
 ): ProviderInfo {
   const name = typeof provider?.name === "string" && provider.name
@@ -71,9 +79,11 @@ export function toProviderInfo(
   return {
     id: String(provider?.id),
     name,
-    configured,
+    configured: status.configured,
     canApiKey: Boolean(provider?.auth?.apiKey?.login),
     isCustom,
+    source: status.source,
+    sourceLabel: status.label,
   };
 }
 
@@ -222,11 +232,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   const runtime = await ensureRuntime();
   const custom = customProviderIds(await readModelsJson());
   return runtime.getProviders().map((p: { id: string }) =>
-    toProviderInfo(
-      p,
-      runtime.getProviderAuthStatus(p.id).configured,
-      custom.has(p.id),
-    )
+    toProviderInfo(p, runtime.getProviderAuthStatus(p.id), custom.has(p.id))
   );
 }
 

@@ -698,7 +698,12 @@
                     {#if p.isCustom}<span class="badge badge-ghost badge-xs ml-1.5 align-middle">custom</span>{/if}
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
-                    {#if p.configured}
+                    {#if p.configured && p.source === "environment"}
+                      <span
+                        class="text-xs text-success"
+                        title="Credentialed by {p.sourceLabel ?? 'the environment'} in pique's own environment — unset it there to disconnect."
+                      >Connected via {p.sourceLabel ?? "environment"}</span>
+                    {:else if p.configured}
                       <span class="text-xs text-success">Connected</span>
                     {:else}
                       <span class="text-xs opacity-50">Not connected</span>
@@ -710,7 +715,7 @@
                         disabled={provBusy}
                         onclick={() => removeCustomProvider(p.id)}
                       >Remove</button>
-                    {:else if p.configured && p.canApiKey}
+                    {:else if p.configured && p.canApiKey && p.source === "stored"}
                       <button
                         type="button"
                         class="btn btn-ghost btn-xs"

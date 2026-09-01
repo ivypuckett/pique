@@ -15,26 +15,47 @@ Deno.test("toProviderInfo projects id/name/flags", () => {
     name: "Anthropic",
     auth: { apiKey: { login: () => {} } },
   };
-  assertEquals(toProviderInfo(p, true, false), {
+  assertEquals(toProviderInfo(p, { configured: true, source: "stored" }, false), {
     id: "anthropic",
     name: "Anthropic",
     configured: true,
     canApiKey: true,
     isCustom: false,
+    source: "stored",
+    sourceLabel: undefined,
   });
 });
 
 Deno.test("toProviderInfo falls back to id when name is missing, and canApiKey false without login", () => {
   assertEquals(
-    toProviderInfo({ id: "lmstudio", auth: { apiKey: {} } }, true, true),
+    toProviderInfo(
+      { id: "lmstudio", auth: { apiKey: {} } },
+      { configured: true, source: "models_json_key" },
+      true,
+    ),
     {
       id: "lmstudio",
       name: "lmstudio",
       configured: true,
       canApiKey: false,
       isCustom: true,
+      source: "models_json_key",
+      sourceLabel: undefined,
     },
   );
+});
+
+// Bedrock reads as connected from an ambient AWS_PROFILE with nothing stored, and
+// logout cannot unset that — the UI needs the source to say so rather than offering a
+// Disconnect that does nothing visible.
+Deno.test("toProviderInfo carries the environment source and its variable name", () => {
+  const info = toProviderInfo(
+    { id: "amazon-bedrock", name: "Amazon Bedrock", auth: { apiKey: { login: () => {} } } },
+    { configured: true, source: "environment", label: "AWS_PROFILE" },
+    false,
+  );
+  assertEquals(info.source, "environment");
+  assertEquals(info.sourceLabel, "AWS_PROFILE");
 });
 
 Deno.test("buildCustomEntry uses openai-completions and maps model ids", () => {
