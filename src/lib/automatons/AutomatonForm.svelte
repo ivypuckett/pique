@@ -8,6 +8,8 @@
   import { extensionBindings } from "../extensions/bindings.ts";
   import { kanbanBindings, type StatusRow } from "../kanban/bindings.ts";
   import { type ModelOption, providerBindings } from "../chat/bindings.ts";
+  import { settings } from "../settings/store.ts";
+  import { visibleModels } from "../settings/models.ts";
   import { promptBindings, type PromptInfo } from "../prompts/bindings.ts";
   import PromptEditor from "../prompts/PromptEditor.svelte";
   import type { Draft } from "../prompts/items.ts";
@@ -201,6 +203,10 @@
   const modelMissing = $derived(
     model !== "" && !models.some((m) => `${m.provider}/${m.id}` === model),
   );
+  // Narrowed to the models checked in Settings → Providers, with the saved one kept
+  // listed whether or not it is checked (unchecking hides a model from the pickers; it
+  // does not make a definition that names it any less runnable).
+  const modelOptions = $derived(visibleModels(models, $settings.models.enabled, model));
 
   // Checked as it is typed, by the same function the backend parses with. A schedule
   // saved broken would be a definition that says it runs daily and never does — the
@@ -420,7 +426,7 @@
       {#if modelMissing}
         <option value={model}>{model} (not available here)</option>
       {/if}
-      {#each models as m (`${m.provider}/${m.id}`)}
+      {#each modelOptions as m (`${m.provider}/${m.id}`)}
         <option value={`${m.provider}/${m.id}`}>{m.provider} · {m.name}</option>
       {/each}
     </select>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settings, settingsOpen, ZOOM_LEVELS } from "./store.ts";
-  import { providerBindings, type AwsProfile, type ProviderInfo } from "../chat/bindings.ts";
+  import { providerBindings, type AwsProfile, type ModelOption, type ProviderInfo } from "../chat/bindings.ts";
+  import { isEnabled, orderModels, setEnabled } from "./models.ts";
   import { openExternal } from "./bindings.ts";
   import {
     deleteTheme,
@@ -161,6 +162,37 @@
   // so it is named here rather than generalised over a flow nothing else uses.
   const BEDROCK = "amazon-bedrock";
   let awsProfiles = $state<AwsProfile[]>([]);
+  // Every model the connected providers serve, for the per-provider checklists below:
+  // the pickers offer only what is checked here (see ./models.ts).
+  let allModels = $state<ModelOption[]>([]);
+  // The provider whose checklist is open, and that checklist in the order it opened
+  // with — enabled first. Snapshotted rather than derived so ticking a box does not
+  // re-sort the list out from under the pointer; reopening re-sorts.
+  let openModels = $state<string | null>(null);
+  let modelRows = $state<ModelOption[]>([]);
+
+  function modelsOf(provider: string): ModelOption[] {
+    return allModels.filter((m) => m.provider === provider);
+  }
+
+  function toggleModelList(provider: string): void {
+    openModels = openModels === provider ? null : provider;
+    modelRows = openModels === null ? [] : orderModels(modelsOf(provider), $settings.models.enabled);
+  }
+
+  function toggleModel(m: ModelOption, checked: boolean): void {
+    const allIds = modelsOf(m.provider).map((x) => x.id);
+    settings.update((s) => ({
+      ...s,
+      models: { enabled: setEnabled(s.models.enabled, m.provider, allIds, m.id, checked) },
+    }));
+  }
+
+  // "3 of 24" for the row's summary. A provider with no entry has all of them.
+  function enabledCount(provider: string): number {
+    return modelsOf(provider).filter((m) => isEnabled($settings.models.enabled, provider, m.id)).length;
+  }
+
   // Custom-endpoint form.
   let showCustom = $state(false);
   let cId = $state("");
@@ -173,6 +205,7 @@
     try {
       providers = await prov.providerList();
       awsProfiles = await prov.providerAwsProfiles();
+      allModels = await prov.providerModels();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
     }
@@ -276,6 +309,7 @@
     if ($settingsOpen && prov) {
       provError = "";
       showCustom = false;
+      openModels = null;
       refreshProviders();
     }
   });
@@ -574,6 +608,38 @@
                     {/if}
                   </div>
                 </div>
+                {#if modelsOf(p.id).length > 0}
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs mt-1 px-1"
+                    aria-expanded={openModels === p.id}
+                    onclick={() => toggleModelList(p.id)}
+                  >
+                    <span class="opacity-60">{openModels === p.id ? "▾" : "▸"}</span>
+                    Models
+                    <span class="opacity-60">{enabledCount(p.id)} of {modelsOf(p.id).length}</span>
+                  </button>
+                  {#if openModels === p.id}
+                    <ul class="mt-1 max-h-48 overflow-y-auto rounded border border-base-300 p-1">
+                      {#each modelRows as m (m.id)}
+                        <li>
+                          <label class="flex cursor-pointer items-center gap-2 px-1 py-0.5 text-xs">
+                            <input
+                              type="checkbox"
+                              class="checkbox checkbox-xs"
+                              checked={isEnabled($settings.models.enabled, m.provider, m.id)}
+                              onchange={(e) => toggleModel(m, (e.currentTarget as HTMLInputElement).checked)}
+                            />
+                            <span class="truncate font-mono">{m.name}</span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                    <div class="mt-1 text-[0.65rem] opacity-50">
+                      Only checked models appear in the chat and automaton model pickers.
+                    </div>
+                  {/if}
+                {/if}
                 {#if !p.configured && p.id === BEDROCK && awsProfiles.length > 0}
                   <div class="mt-2">
                     <div class="text-xs opacity-70">

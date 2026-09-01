@@ -23,6 +23,9 @@ export interface Settings {
   // confirmDelete: whether the file tree's `dd` asks before deleting. Read on the
   // frontend only — the backend deletes whatever it is told to.
   workspace: { gitScanDepth?: number; confirmDelete?: boolean };
+  // enabled: per-provider model ids the pickers offer, keyed by provider id. A provider
+  // with no entry has its whole catalog enabled (see settings/models.ts).
+  models: { enabled: Record<string, string[]> };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // gitScanDepth default mirrors resolveGitScanDepth's fallback in settings/file.ts
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3, confirmDelete: true },
+  models: { enabled: {} },
 };
 
 interface ConfigBindings {

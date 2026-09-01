@@ -2,6 +2,8 @@
   import { onMount, untrack } from "svelte";
   import type { CommandInfo, ThinkingLevel } from "./bindings.ts";
   import { chatSession } from "./store.ts";
+  import { settings } from "../settings/store.ts";
+  import { visibleModels } from "../settings/models.ts";
 
   let { title, cwd, workspaceId, viewId }: { title: string; cwd?: string; workspaceId?: string; viewId?: string } =
     $props();
@@ -16,6 +18,18 @@
   const commands = session.commands;
 
   const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
+
+  // Only the models checked in Settings → Providers, plus whichever one this
+  // conversation is actually running — a session already on a model that was since
+  // unchecked keeps naming it rather than showing someone else's name.
+  const current = $derived($models.find((m) => m.current));
+  const picks = $derived(
+    visibleModels(
+      $models,
+      $settings.models.enabled,
+      current && `${current.provider}/${current.id}`,
+    ),
+  );
 
   // A new chat leaves the current conversation behind, so it is held here until
   // confirmed. Held here rather than in the store: until it is confirmed, nothing about
@@ -234,7 +248,7 @@
 
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
     <select class="select select-bordered select-sm" onchange={(e) => session.pickModel((e.target as HTMLSelectElement).value)} disabled={!$ready}>
-      {#each $models as m}
+      {#each picks as m}
         <option value={`${m.provider}/${m.id}`} selected={m.current}>{m.name}</option>
       {/each}
     </select>
