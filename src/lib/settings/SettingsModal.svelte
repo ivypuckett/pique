@@ -636,7 +636,11 @@
       {:else}
         <div class="mb-3 flex items-center justify-between gap-2">
           <span class="text-xs uppercase tracking-wide text-primary">Providers</span>
-          <div class="dropdown dropdown-end" bind:this={addRoot}>
+          <!-- dropdown-open, rather than daisyUI's default of opening on :focus-within:
+               WebKitGTK does not focus a button on click, so a focus-driven menu never
+               shows in the desktop app — and it cannot recover, because the search
+               field's mount-time focus() is a no-op on a display:none element. -->
+          <div class="dropdown dropdown-end" class:dropdown-open={addOpen} bind:this={addRoot}>
             <button
               type="button"
               class="btn btn-square btn-sm"
