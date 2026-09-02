@@ -581,10 +581,14 @@ async function pendingModelDefault(
 export function listCommands(id: string): CommandInfo[] {
   const session = agents.get(id)?.session;
   if (!session) return [];
-  // pique's own, and the only entry here that pi does not expand: `session.prompt()`
+  // pique's own, and the only entries here that pi does not expand: `session.prompt()`
   // sends "/reload" to the model as literal user text (agent_test.ts), so the chat
-  // store intercepts it before it ever gets that far.
+  // store intercepts these before they ever get that far.
   const pique: CommandInfo[] = [{
+    name: "new",
+    description: "Start a new chat, leaving this conversation behind (also /clear)",
+    source: "pique",
+  }, {
     name: "reload",
     description: "Re-read extensions, prompts and skills from disk",
     source: "pique",

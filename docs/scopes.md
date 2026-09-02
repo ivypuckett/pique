@@ -63,7 +63,8 @@ the opposite reason — pi's discovery there is exactly what is wanted.
 `sessions/` sits beside `agent/` rather than inside it so pi does not also find
 these under its own default session path. A chat resumes the newest session
 recorded for its working directory, which is what makes a conversation survive
-closing pique; "New chat" starts another and leaves the old file in place.
+closing pique; `/new` (or `/clear`) in the chat starts another and leaves the
+old file in place.
 
 The conversation belongs to the **view**, not the workspace: two views side by
 side are two threads, and only the scope around them — tools, model defaults,

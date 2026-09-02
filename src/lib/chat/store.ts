@@ -251,11 +251,18 @@ function createSession(
       if (!b || !get(ready) || !id || get(streaming) || !text) return;
       items.update((xs) => [...xs, { role: "user", text }]);
       input.set("");
-      // pique's own command, handled here rather than sent: pi does not expand it, so
+      // pique's own commands, handled here rather than sent: pi does not expand them, so
       // `session.prompt("/reload")` would just ask the model about the word "/reload".
       // No model turn, so `streaming` stays false and the input is usable immediately.
       if (text === "/reload") {
         reload();
+        return;
+      }
+      // Typing it is deliberate enough to act on, so there is no confirm step; the old
+      // conversation is left on disk either way. restart() clears the transcript, so the
+      // command itself does not linger in it.
+      if (text === "/new" || text === "/clear") {
+        restart();
         return;
       }
       streaming.set(true);
@@ -292,7 +299,8 @@ function createSession(
       patchScopeChat(scope, { defaultThinkingLevel: value });
     },
     // Put the saved conversation behind us and begin another. The old session file stays
-    // on disk; it is simply no longer the most recent one.
+    // on disk; it is simply no longer the most recent one. Reached from the chat by
+    // typing `/new` (or `/clear`), which send() intercepts.
     newChat() {
       restart();
     },

@@ -31,16 +31,6 @@
     ),
   );
 
-  // A new chat leaves the current conversation behind, so it is held here until
-  // confirmed. Held here rather than in the store: until it is confirmed, nothing about
-  // the conversation has changed.
-  let pending = $state<{ kind: "new" } | null>(null);
-
-  function confirmPending() {
-    pending = null;
-    session.newChat();
-  }
-
   // `/` command menu (skills / prompt templates / extension commands). Loaded once
   // the agent is ready; session.prompt() expands/runs them, so this is pure compose UI.
   let menuIndex = $state(0);
@@ -238,14 +228,6 @@
     </form>
   </div>
 
-  {#if pending !== null}
-    <div class="flex items-center gap-2 border-t border-base-300 bg-base-200 p-2 text-sm">
-      <span class="flex-1">Starting a new chat leaves this conversation behind.</span>
-      <button class="btn btn-sm btn-primary" onclick={confirmPending}>New chat</button>
-      <button class="btn btn-sm btn-ghost" onclick={() => (pending = null)}>Cancel</button>
-    </div>
-  {/if}
-
   <div class="flex items-center gap-2 border-t border-base-300 p-2">
     <select class="select select-bordered select-sm" onchange={(e) => session.pickModel((e.target as HTMLSelectElement).value)} disabled={!$ready}>
       {#each picks as m}
@@ -255,13 +237,8 @@
     <select class="select select-bordered select-sm" value={$level} onchange={(e) => session.pickLevel((e.target as HTMLSelectElement).value as ThinkingLevel)} disabled={!$ready}>
       {#each levels as l}<option value={l}>think: {l}</option>{/each}
     </select>
-    <button
-      class="btn btn-sm btn-ghost ml-auto"
-      onclick={() => (pending = { kind: "new" })}
-      disabled={!$ready || $streaming}
-    >New chat</button>
     {#if $streaming}
-      <button class="btn btn-sm btn-error" onclick={session.stop}>Stop</button>
+      <button class="btn btn-sm btn-error ml-auto" onclick={session.stop}>Stop</button>
     {/if}
   </div>
 </div>

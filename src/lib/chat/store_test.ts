@@ -280,6 +280,35 @@ Deno.test("two views of one workspace hold separate conversations", async () => 
 });
 
 // ---------------------------------------------------------------------------
+// `/new` (and its `/clear` alias): pique's own command, the way a new chat is started
+// now that there is no button. Same reason as `/reload` for intercepting it — pi would
+// send the literal text to the model.
+// ---------------------------------------------------------------------------
+
+for (const cmd of ["/new", "/clear"]) {
+  Deno.test(`${cmd} starts a new chat instead of prompting the model`, async () => {
+    await withFakeBackend(async (f) => {
+      const s = chatSession(`ws-new-${cmd.slice(1)}`, "view-1");
+      s.retain();
+      await settle();
+      assertEquals(get(s.items), SAVED);
+
+      s.input.set(cmd);
+      s.send();
+      await settle();
+
+      assertEquals(f.prompted, [], `the model must not be asked about ${cmd}`);
+      assertEquals(get(s.items), [], "the new chat is an empty one");
+      assertEquals(f.stopped, ["agent-1"], "the old agent is stopped");
+      assertEquals(f.started.map((x) => x.fresh), [undefined, true]);
+      assertEquals(get(s.input), "", "the input is cleared like any other send");
+
+      s.release();
+    }, SAVED);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // `/reload`: pique's own command. The point of intercepting it in the store is that pi
 // does NOT expand it — session.prompt("/reload") sends the literal text to the model
 // (verified against a real session) — so "never reaches chatPrompt" is the claim.
