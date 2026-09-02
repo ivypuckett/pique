@@ -838,9 +838,18 @@ win.bind("systemPromptsDelete", async (arg) => {
   return true;
 });
 
+// The close button is a quit: pique is a single window, and by the time this returns
+// every pty and board it owned is gone. Exit rather than leaving that to the window —
+// on macOS the webview backend can decline to close, and a window that stays up after
+// this handler ran is an app whose terminals are all dead and cannot be revived. The
+// teardown is guarded for the same reason: a throw from either half must not skip it.
 win.addEventListener("close", () => {
-  term?.killAllSessions();
-  kanban?.closeAllBoards();
+  try {
+    term?.killAllSessions();
+    kanban?.closeAllBoards();
+  } finally {
+    Deno.exit(0);
+  }
 });
 
 // Bindings are attached; now load deps and serve the static Vite build.

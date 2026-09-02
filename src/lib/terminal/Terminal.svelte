@@ -32,7 +32,21 @@
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    fit.fit();
+
+    // A backgrounded pane (workspace, view or tab) is display:none, not unmounted, and a
+    // hidden element reports no layout box — but its *computed* height/width are still
+    // the literal "100%" this host is styled with, which is what FitAddon parses. It
+    // reads those as 100px and proposes 11x5 (measured, same in WebKitGTK and Chromium),
+    // so a fit while hidden resizes both xterm and the pty to that and the shell redraws
+    // its prompt wrapped at 11 columns. Fit only when there is a box to fit to; the
+    // ResizeObserver fires again with the real one when the pane comes back.
+    function fitToHost(): boolean {
+      if (!host.clientWidth || !host.clientHeight) return false;
+      fit.fit();
+      return true;
+    }
+
+    fitToHost();
 
     // Editor tabs open from the file tree and set autoFocus so keystrokes land in the
     // editor right away. Only grab focus when actually visible — a background/restored
@@ -66,7 +80,7 @@
       if (term.options.fontSize === size && term.options.fontFamily === family) return;
       term.options.fontSize = size;
       term.options.fontFamily = family;
-      fit.fit();
+      if (!fitToHost()) return;
       if (id) b?.termResize({ id, cols: term.cols, rows: term.rows }).catch(() => {});
     });
 
@@ -79,8 +93,7 @@
     }
 
     const ro = new ResizeObserver(() => {
-      if (!alive || !id) return;
-      fit.fit();
+      if (!alive || !id || !fitToHost()) return;
       b.termResize({ id, cols: term.cols, rows: term.rows }).catch(() => {});
     });
 
