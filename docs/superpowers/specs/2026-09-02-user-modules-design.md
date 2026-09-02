@@ -1,9 +1,10 @@
 # User Modules — Design
 
 **Date:** 2026-09-02 **Status:** Proposed. Nothing below is implemented. The
-frame spike ran on 2026-09-02 and its results are in
-[The frame, measured](#the-frame-measured); one question it opened is still
-unanswered and is called out there.
+frame spike ran on 2026-09-02; its results are in
+[The frame, measured](#the-frame-measured) and they changed three decisions.
+Implementation plan:
+[2026-09-02-user-modules.md](../plans/2026-09-02-user-modules.md).
 
 ## Purpose
 
