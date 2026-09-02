@@ -59,6 +59,7 @@ export interface ChatSession {
   send(): void;
   stop(): void;
   refreshCommands(): Promise<void>;
+  refreshModels(): Promise<void>;
   pickModel(value: string): Promise<void>;
   pickLevel(value: ThinkingLevel): void;
   newChat(): void;
@@ -279,6 +280,13 @@ function createSession(
       await b.chatReloadPrompts({ id });
       commands.set(await b.chatListCommands({ id }));
     },
+    // Re-lists what the runtime has available. The `models` store is otherwise only set
+    // at session start and after a pick, so a provider connected in Settings mid-session
+    // would not show up until the dropdown calls this itself, right before it opens.
+    async refreshModels() {
+      if (!b || !id) return;
+      models.set(await b.chatListModels({ id }));
+    },
     async pickModel(value: string) {
       const m = get(models).find((x) => `${x.provider}/${x.id}` === value);
       if (b && m && id) {
@@ -328,6 +336,14 @@ const sessions = new Map<string, ChatSession>();
 // so it calls this rather than reaching for a session and accidentally creating one.
 export function refreshChatCommands(): void {
   for (const s of sessions.values()) s.refreshCommands().catch(() => {});
+}
+
+// Re-list available models for every live conversation. Settings → Providers calls this
+// after a connect/disconnect so an open chat's model dropdown is already current when
+// clicked — the dropdown itself cannot refresh reliably on open, because a native
+// <select> renders its popup synchronously and would still show the stale list.
+export function refreshChatModels(): void {
+  for (const s of sessions.values()) s.refreshModels().catch(() => {});
 }
 
 // The session belonging to one view of one workspace. Both parts key it: the same view

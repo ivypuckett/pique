@@ -13,6 +13,7 @@
     themes,
   } from "./themes.ts";
   import { parseThemeCss } from "./theme_css.ts";
+  import { refreshChatModels } from "../chat/store.ts";
 
   // Same modifier glyph the status bar shows for the shortcuts it lists.
   const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
@@ -254,6 +255,10 @@
       providers = await prov.providerList();
       awsProfiles = await prov.providerAwsProfiles();
       allModels = await prov.providerModels();
+      // A provider connected/disconnected here goes straight to any open chat's model
+      // dropdown too — it can't reliably refresh itself on open (a native <select>
+      // renders its popup synchronously, before an async refetch could land).
+      refreshChatModels();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
     }
