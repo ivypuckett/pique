@@ -130,7 +130,10 @@ function nextRightId(tabs: ModuleRef[]): string {
 }
 
 // The selected group's tabs — what the strip shows, and what h/l and 1-9 walk.
-export function groupTabs(v: ViewState, group = v.right.activeGroup): ModuleRef[] {
+export function groupTabs(
+  v: ViewState,
+  group = v.right.activeGroup,
+): ModuleRef[] {
   return v.right.tabs.filter((t) => t.group === group);
 }
 
@@ -306,7 +309,9 @@ function isRightState(r: unknown): boolean {
   if (typeof right.activeGroup !== "string" || right.activeGroup === "") {
     return false;
   }
-  if (!Array.isArray(right.tabs) || !right.tabs.every(isModuleRef)) return false;
+  if (!Array.isArray(right.tabs) || !right.tabs.every(isModuleRef)) {
+    return false;
+  }
   const active = right.activeTabs;
   if (typeof active !== "object" || active === null) return false;
   // Every remembered tab must still exist and still be in the group that remembers it.
@@ -341,7 +346,9 @@ function renameEditorGroup(raw: unknown): unknown {
   // Moved, not copied: left behind, the old key rides along in a view the guard now
   // accepts and is written back to layout.json on every save, outliving the rename.
   if (typeof obj.explorerWidthCh === "number") {
-    if (typeof obj.editorWidthCh !== "number") obj.editorWidthCh = obj.explorerWidthCh;
+    if (typeof obj.editorWidthCh !== "number") {
+      obj.editorWidthCh = obj.explorerWidthCh;
+    }
     delete obj.explorerWidthCh;
   }
   if (typeof obj.right !== "object" || obj.right === null) return obj;
@@ -389,7 +396,9 @@ export function migrateView(rawIn: unknown): ViewState | null {
   if (!source || !source.every(isModuleRefish)) return null;
 
   const tabs: ModuleRef[] = [];
-  for (const row of source as (Omit<ModuleRef, "group"> & { group?: unknown })[]) {
+  for (
+    const row of source as (Omit<ModuleRef, "group"> & { group?: unknown })[]
+  ) {
     // Keep a group the tab already names. Failing that, a tab with props is that file, so
     // it joins the editor group beside the tree.
     const group = typeof row.group === "string" && row.group !== ""
@@ -398,7 +407,8 @@ export function migrateView(rawIn: unknown): ViewState | null {
       ? EDITOR
       : row.kind;
     // Singletons that were duplicated before the rule existed keep their first tab only.
-    if (group !== EDITOR && !isDuplicable(row.kind) &&
+    if (
+      group !== EDITOR && !isDuplicable(row.kind) &&
       tabs.some((t) => t.group === group)
     ) continue;
     tabs.push({ ...row, group });
@@ -406,9 +416,10 @@ export function migrateView(rawIn: unknown): ViewState | null {
 
   // What was on screen: a pre-groups pane names one tab for the whole strip, a grouped one
   // remembers a tab per group.
-  const remembered = (typeof old!.activeTabs === "object" && old!.activeTabs !== null
-    ? old!.activeTabs
-    : {}) as Record<string, unknown>;
+  const remembered =
+    (typeof old!.activeTabs === "object" && old!.activeTabs !== null
+      ? old!.activeTabs
+      : {}) as Record<string, unknown>;
   const shownId = typeof old!.activeTabId === "string"
     ? old!.activeTabId
     : remembered[String(old!.activeGroup)];
@@ -427,7 +438,9 @@ export function migrateView(rawIn: unknown): ViewState | null {
   }
   if (wasActive) activeTabs[wasActive.group] = wasActive.id;
 
-  const base = createInitialView(typeof obj.id === "string" ? obj.id : "view-1");
+  const base = createInitialView(
+    typeof obj.id === "string" ? obj.id : "view-1",
+  );
   const savedWidth = typeof obj.editorWidthCh === "number"
     ? obj.editorWidthCh
     : (obj.explorer as Record<string, unknown> | undefined)?.widthCh;
@@ -444,15 +457,39 @@ export function migrateView(rawIn: unknown): ViewState | null {
     right: {
       // The group that was already selected, or the one that was on screen; failing both
       // the first tab's, failing that the default view's, so a pane migrated empty still
-      // has a group selected.
-      activeGroup: typeof old!.activeGroup === "string" && old!.activeGroup !== ""
-        ? old!.activeGroup
-        : wasActive?.group ?? tabs[0]?.group ?? base.right.activeGroup,
+      // has a group selected. A saved group the rail no longer OFFERS is dropped rather
+      // than kept: see offeredGroup.
+      activeGroup: offeredGroup(old!.activeGroup, wasActive?.group, tabs) ??
+        base.right.activeGroup,
       tabs,
       activeTabs,
     },
   };
   return isViewState(migrated) ? migrated : null;
+}
+
+// Which row a migrated pane should open on, given the one it saved. A saved group is
+// kept whenever the rail still offers it — including a user module's, which is why the
+// module table is hydrated BEFORE the layout in main.ts; check this before that runs and
+// every installed module looks revoked.
+//
+// A group the rail does NOT offer is the case this exists for. Revoking a module leaves
+// a view naming its row: the pane would open on "Unknown module" with nothing selected
+// on the rail, and a singleton row has no tab strip, so there is no close button and the
+// tab cannot be dismissed without editing layout.json by hand. Falling back leaves the
+// tab in place — re-enabling the module brings the row back with the tab where it was —
+// while making the view open somewhere real in the meantime.
+function offeredGroup(
+  saved: unknown,
+  onScreen: string | undefined,
+  tabs: ModuleRef[],
+): string | undefined {
+  const offered = new Set(railGroups());
+  if (typeof saved === "string" && saved !== "" && offered.has(saved)) {
+    return saved;
+  }
+  if (onScreen && offered.has(onScreen)) return onScreen;
+  return tabs.find((t) => offered.has(t.group))?.group;
 }
 
 // A pre-groups row: the same fields as a ModuleRef minus the group this adds.

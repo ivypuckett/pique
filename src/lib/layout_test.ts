@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { railGroups } from "./modules/manifest.ts";
+import { railGroups, setInstalledModules } from "./modules/manifest.ts";
 import {
   createInitialView,
   gridTemplateColumns,
@@ -43,7 +43,10 @@ Deno.test("resizeBoundary sets chat's character width, leaving the pane to flex"
 
 Deno.test("resizeBoundary clamps both panes to MIN_WIDTH_CH", () => {
   const v = createInitialView();
-  assertEquals(resizeBoundary(v, "center-right", 2, 100).chatWidthCh, MIN_WIDTH_CH);
+  assertEquals(
+    resizeBoundary(v, "center-right", 2, 100).chatWidthCh,
+    MIN_WIDTH_CH,
+  );
   // the flexible pane keeps its minimum too: 100ch available leaves chat 90
   assertEquals(
     resizeBoundary(v, "center-right", 200, 100).chatWidthCh,
@@ -133,14 +136,21 @@ Deno.test("addTab reveals the open kanban tab instead of adding a second", () =>
   let v = addTab(createInitialView(), "kanban"); // right-2
   v = addTab(v, "terminal"); // right-3, and the terminal group is selected
   v = addTab(v, "kanban");
-  assertEquals(v.right.tabs.map((t) => t.kind), ["terminal", "kanban", "terminal"]);
+  assertEquals(v.right.tabs.map((t) => t.kind), [
+    "terminal",
+    "kanban",
+    "terminal",
+  ]);
   assertEquals(v.right.activeGroup, "kanban");
   assertEquals(activeTabId(v), "right-2");
 });
 
 Deno.test("addTab appends a second terminal", () => {
   const v = addTab(createInitialView(), "terminal"); // right-1 is already a terminal
-  assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1", "right-2"]);
+  assertEquals(groupTabs(v, "terminal").map((t) => t.id), [
+    "right-1",
+    "right-2",
+  ]);
   assertEquals(activeTabId(v), "right-2");
 });
 
@@ -160,7 +170,10 @@ Deno.test("addTab ignores a path-scoped diff when opening the git diff module", 
 Deno.test("groupTabs lists one group's tabs, in open order", () => {
   let v = addTab(createInitialView(), "kanban");
   v = addTab(v, "terminal");
-  assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1", "right-3"]);
+  assertEquals(groupTabs(v, "terminal").map((t) => t.id), [
+    "right-1",
+    "right-3",
+  ]);
   assertEquals(groupTabs(v, "kanban").map((t) => t.id), ["right-2"]);
   assertEquals(groupTabs(v, "library"), []);
   // no group argument means the selected one
@@ -198,7 +211,10 @@ Deno.test("a group remembers its tab across a switch away and back", () => {
 
 Deno.test("newTab adds one more of the selected row's module", () => {
   const v = newTab(createInitialView()); // the terminal row
-  assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1", "right-2"]);
+  assertEquals(groupTabs(v, "terminal").map((t) => t.id), [
+    "right-1",
+    "right-2",
+  ]);
   assertEquals(activeTabId(v), "right-2");
 });
 
@@ -528,7 +544,12 @@ Deno.test("migrateView moves editors and path-scoped diffs into the editor group
       kind: "terminal",
       props: { argv: ["$EDITOR", "src/a.ts"], autoCloseOnExit: true },
     },
-    { id: "right-3", title: "b.ts", kind: "gitdiff", props: { path: "src/b.ts" } },
+    {
+      id: "right-3",
+      title: "b.ts",
+      kind: "gitdiff",
+      props: { path: "src/b.ts" },
+    },
   ], "right-2"))!;
   assertEquals(groupTabs(v, EDITOR).map((t) => t.title), ["a.ts", "b.ts"]);
   assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1"]);
@@ -567,7 +588,13 @@ Deno.test("migrateView adopts a grouped pane whose width is still in an explorer
     tabs: [
       { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
       { id: "right-2", title: "Kanban", kind: "kanban", group: "kanban" },
-      { id: "right-3", title: "a.ts", kind: "terminal", group: EDITOR, props: { path: "a" } },
+      {
+        id: "right-3",
+        title: "a.ts",
+        kind: "terminal",
+        group: EDITOR,
+        props: { path: "a" },
+      },
     ],
     activeTabs: { terminal: "right-1", kanban: "right-2", editor: "right-3" },
   }))!;
@@ -590,7 +617,12 @@ Deno.test("migrateView drops a remembered tab that no longer exists or moved gro
   const v = migrateView(groupedView({
     collapsed: false,
     activeGroup: "terminal",
-    tabs: [{ id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" }],
+    tabs: [{
+      id: "right-1",
+      title: "Terminal",
+      kind: "terminal",
+      group: "terminal",
+    }],
     activeTabs: { terminal: "right-1", kanban: "right-9", library: "right-1" },
   }))!;
   assertEquals(v.right.activeTabs, { terminal: "right-1" });
@@ -618,7 +650,13 @@ Deno.test("migrateView renames the explorer group an older grouped pane still na
     activeGroup: "explorer",
     tabs: [
       { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
-      { id: "right-2", title: "a.ts", kind: "terminal", group: "explorer", props: { path: "a" } },
+      {
+        id: "right-2",
+        title: "a.ts",
+        kind: "terminal",
+        group: "explorer",
+        props: { path: "a" },
+      },
     ],
     activeTabs: { terminal: "right-1", explorer: "right-2" },
   }))!;
@@ -682,8 +720,10 @@ Deno.test("migrateView refuses a view with no recognisable pane", () => {
 
 Deno.test("migrateView fills in a width it cannot read", () => {
   const base = createInitialView();
-  const raw = oldView([{ id: "right-1", title: "Terminal", kind: "terminal" }], "right-1") as
-    Record<string, unknown>;
+  const raw = oldView(
+    [{ id: "right-1", title: "Terminal", kind: "terminal" }],
+    "right-1",
+  ) as Record<string, unknown>;
   delete raw.chatWidthCh;
   raw.explorer = { widthCh: "wide" };
   const v = migrateView(raw)!;
@@ -697,4 +737,56 @@ Deno.test("a migrated view passes the guard the store uses", () => {
     { id: "right-2", title: "Library", kind: "library" },
   ], "right-1"))!;
   assertEquals(isViewState(v), true);
+});
+
+// Revoking a module the view had open leaves `activeGroup` naming a row the rail no
+// longer offers. Before this, the pane opened on that row: "Unknown module", nothing
+// selected on the rail, and — since a singleton row has no tab strip — no close button
+// either, so the tab could not be dismissed without editing layout.json. layout.ts:336
+// already worried about this shape for a cross-build layout; a revoke makes it routine.
+Deno.test("migrateView falls back when the selected row is one the rail no longer offers", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "notes", // a module that has since been revoked
+    tabs: [
+      { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
+      { id: "right-2", title: "Notes", kind: "notes", group: "notes" },
+    ],
+    activeTabs: { terminal: "right-1", notes: "right-2" },
+  }))!;
+  assertEquals(v.right.activeGroup, "terminal");
+  // The tab itself stays. Re-enabling the module brings the row back with the tab where
+  // it was left, and while it is gone the tab is simply unreachable rather than stuck
+  // on screen.
+  assertEquals(v.right.tabs.map((t) => t.id), ["right-1", "right-2"]);
+  assertEquals(isViewState(v), true);
+});
+
+// The fallback must not fire for a module that IS installed — which is why the module
+// table is hydrated before the layout in main.ts.
+Deno.test("migrateView keeps the selected row when it is an installed module", () => {
+  setInstalledModules([{ kind: "notes", label: "Notes", key: "" }]);
+  try {
+    const v = migrateView(groupedView({
+      collapsed: false,
+      activeGroup: "notes",
+      tabs: [{ id: "right-2", title: "Notes", kind: "notes", group: "notes" }],
+      activeTabs: { notes: "right-2" },
+    }))!;
+    assertEquals(v.right.activeGroup, "notes");
+  } finally {
+    setInstalledModules([]);
+  }
+});
+
+// Nothing open to fall back TO, so the default view's row is what is left. Not the
+// editor: createInitialView opens on the terminal, and the fallback chain ends there.
+Deno.test("migrateView falls back to the default row when no open tab sits on an offered one", () => {
+  const v = migrateView(groupedView({
+    collapsed: false,
+    activeGroup: "notes",
+    tabs: [{ id: "right-2", title: "Notes", kind: "notes", group: "notes" }],
+    activeTabs: { notes: "right-2" },
+  }))!;
+  assertEquals(v.right.activeGroup, "terminal");
 });

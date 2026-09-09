@@ -128,13 +128,13 @@ The same rule extensions follow, for the same reason: both halves are things the
 filesystem already tells us, so there is no separate "approved" flag that could
 disagree with what actually loads.
 
-| Step    | What happens                                                     |
-| ------- | ---------------------------------------------------------------- |
-| Arrive  | both files land in `pending/`                                    |
-| Review  | the Library row expands into the consent screen                  |
-| Consent | both files move to `extensions/` together                        |
-| Appear  | after a Refresh — a running view is not rewired underneath you   |
-| Revoke  | both move back to `pending/`; an open tab reads "Unknown module" |
+| Step    | What happens                                                   |
+| ------- | -------------------------------------------------------------- |
+| Arrive  | both files land in `pending/`                                  |
+| Review  | the Library row expands into the consent screen                |
+| Consent | both files move to `extensions/` together                      |
+| Appear  | after a Refresh — a running view is not rewired underneath you |
+| Revoke  | both move back to `pending/`; the row leaves the rail          |
 
 Consent re-reads and re-validates the definition at the moment you press it, not
 when the row was drawn: a Library tab can sit open all day, and the file can
@@ -142,6 +142,13 @@ change in between.
 
 Revoke is not delete. Re-enabling means consenting again, so a capability list
 that grew since cannot ride in on a past yes.
+
+A view that had the module open falls back to another row on the next launch,
+and its tab is kept but unreachable — re-enabling brings the row back with the
+tab where you left it. (Before that fallback existed, such a view opened on
+"Unknown module" with nothing selected on the rail and no close button, since a
+singleton row has no tab strip: the tab could not be dismissed without editing
+`layout.json` by hand.)
 
 ## Scopes
 

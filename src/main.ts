@@ -54,13 +54,15 @@ function setFont(token: string, value: string): void {
 // would otherwise render with none of the custom properties it is built on, and it can
 // correct settings.appearance.theme when that names a theme that no longer exists —
 // which only works once hydrateSettings has put the real settings in place.
-hydrateSession()
+// Modules FIRST, ahead of the layout. Two reasons, and the second is the sharp one:
+// the module table is a plain array rather than reactive state, so a tab whose kind
+// arrives after the first render stays "Unknown module" until something re-renders it;
+// and migrateView now drops a saved `activeGroup` the rail does not offer, so a layout
+// migrated before the table is filled would treat every installed module as revoked.
+hydrateModules()
+  .then(hydrateSession)
   .then(hydrateSettings)
   .then(hydrateThemes)
-  // Modules an installed extension contributed, before the mount for the same reason
-  // the layout is: the module table is a plain array, so a tab whose kind arrives after
-  // the first render stays "Unknown module" until something re-renders it.
-  .then(hydrateModules)
   .then(() => {
     mount(App, { target: document.getElementById("app")! });
   });
