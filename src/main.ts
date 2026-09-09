@@ -5,6 +5,7 @@ import { hydrateSession } from "./lib/store.ts";
 import { hydrateSettings, settings } from "./lib/settings/store.ts";
 import { hydrateThemes } from "./lib/settings/themes.ts";
 import { fillDisplay } from "./lib/settings/bindings.ts";
+import { hydrateModules } from "./lib/modules/bindings.ts";
 
 // Fill the display immediately, before anything is awaited: the window is created at
 // 1200x800 (desktop.ts, which cannot measure the screen) and this is what grows it, so
@@ -56,6 +57,10 @@ function setFont(token: string, value: string): void {
 hydrateSession()
   .then(hydrateSettings)
   .then(hydrateThemes)
+  // Modules an installed extension contributed, before the mount for the same reason
+  // the layout is: the module table is a plain array, so a tab whose kind arrives after
+  // the first render stays "Unknown module" until something re-renders it.
+  .then(hydrateModules)
   .then(() => {
     mount(App, { target: document.getElementById("app")! });
   });

@@ -1,9 +1,9 @@
 import { assertEquals } from "@std/assert";
 import {
   isDuplicable,
-  MODULES,
-  moduleDef,
   type ModuleDef,
+  moduleDef,
+  MODULES,
   railGroups,
   setInstalledModules,
 } from "./manifest.ts";

@@ -18,6 +18,10 @@ export const registry: Record<
   string,
   Component<{
     title: string;
+    // Which module this is. Only the user-module host reads it — it is what addresses
+    // the frame and what every moduleCall is attributed to — but it is passed to every
+    // module, because Column has one call site for all of them.
+    kind?: string;
     cwd?: string;
     workspaceId?: string;
     viewId?: string;

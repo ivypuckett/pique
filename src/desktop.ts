@@ -35,6 +35,8 @@ let skills: typeof import("./lib/skills/service.ts");
 let agents: typeof import("./lib/agents/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 let scopePrompt: typeof import("./lib/scope/prompt.ts");
+// Assigned when the module file server starts, at the very bottom of this file.
+let modulesPort = 0;
 
 // A module with no cwd of its own inherits the root workspace's, which lives in the
 // layout tree — so working-directory resolution reads "layout", not "settings".
@@ -96,6 +98,37 @@ win.bind("termKill", async (arg) => {
   const { id } = arg as { id: string };
   term.killSession(id);
   return true;
+});
+
+// Where the webview should point a user module's iframe. The port is assigned after the
+// awaits below, like `term` and the other late-loaded deps — handlers only run once the
+// user opens a module, long after serving starts.
+// Not `async`: there is nothing to await, and the lint rule that catches a pointless
+// async is worth more than matching the shape of its neighbours.
+win.bind("moduleManifest", () => {
+  // TEMP (Phase 2, Task 6): one hand-written fixture until modules/service.ts walks the
+  // scope chain for real in Phase 4. Replace, do not extend.
+  return Promise.resolve({
+    port: modulesPort,
+    modules: [{ kind: "notes", label: "Notes", key: "" }],
+  });
+});
+
+// TEMP (Phase 2, Task 6): logs what a frame asks for so the fixture can be verified
+// from stdout — a frame cannot report over the network, which is the CSP working as
+// designed. Task 8 replaces this with the capability-checked broker.
+win.bind("moduleCall", (arg) => {
+  const { moduleId, scope, method, payload } = arg as {
+    moduleId: string;
+    scope: string;
+    method: string;
+    payload: unknown;
+  };
+  console.log(
+    `[module] ${scope}/${moduleId} ${method}`,
+    JSON.stringify(payload),
+  );
+  return Promise.resolve({ ok: true });
 });
 
 win.bind("chatStart", async (arg) => {
@@ -906,3 +939,17 @@ Deno.serve(
   { hostname: "127.0.0.1" },
   (req) => serveDir(req, { fsRoot, quiet: true }),
 );
+
+// The module file server, deliberately LAST. deno desktop navigates the adopted window
+// to the FIRST Deno.serve, so starting this above the frontend's server loads a user
+// module's page as the whole app — verified by a spike, and silent when it happens.
+// Port 0: this address is handed to the webview at runtime, so unlike the frontend's it
+// does not need to be predictable.
+{
+  const { serveModuleUi } = await import("./lib/modules/server.ts");
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen: () => {} },
+    serveModuleUi,
+  );
+  modulesPort = (server.addr as Deno.NetAddr).port;
+}

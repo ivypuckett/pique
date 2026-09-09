@@ -90,7 +90,15 @@
             <div class="absolute inset-0" class:hidden={tab.id !== shown} data-tab-content>
               <ModuleFrame title={tab.title} header={false}>
                 {#if Module}
-                  <Module title={tab.title} {cwd} {workspaceId} {viewId} tabId={tab.id} {...tab.props} />
+                  <Module
+                  title={tab.title}
+                  kind={tab.kind}
+                  {cwd}
+                  {workspaceId}
+                  {viewId}
+                  tabId={tab.id}
+                  {...tab.props}
+                />
                 {:else}
                   <div class="text-sm opacity-60">
                     Unknown module: <span class="font-mono">{tab.kind}</span>

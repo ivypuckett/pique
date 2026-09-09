@@ -271,7 +271,7 @@ under the measured CSP. Nothing else is reachable, which makes the anchoring
 question small: there is one filename, and the scope and module ids are the only
 variables.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 ```ts
 import { assertEquals, assertThrows } from "@std/assert";
@@ -310,11 +310,11 @@ Deno.test("a bad scope or module id is refused, not resolved", () => {
 });
 ```
 
-- [ ] **Step 2:** Run it, watch it fail, then implement. `uiPathFor` reuses the
+- [x] **Step 2:** Run it, watch it fail, then implement. `uiPathFor` reuses the
       id regexes from `scope/paths.ts` and `extensions/paths.ts` rather than
       inventing a third.
 
-- [ ] **Step 3:** In `desktop.ts`, start this server **after** the existing
+- [x] **Step 3:** In `desktop.ts`, start this server **after** the existing
       `Deno.serve`, and expose its port through the `moduleManifest` bind. Add a
       one-line comment saying why the order matters, next to the head comment's
       other silent-when-violated constraints.
@@ -323,12 +323,12 @@ Deno.test("a bad scope or module id is refused, not resolved", () => {
 
 **Files:** `src/lib/modules/UserModule.svelte`, `src/lib/modules/contract.ts`
 
-- [ ] **Step 1:** `contract.ts` — the message shapes, no logic:
+- [x] **Step 1:** `contract.ts` — the message shapes, no logic:
       `{ t: "call", id, method, payload }` / `{ t: "result", id, ok, value }` /
       `{ t: "event", topic, payload }`. Shared by host and SDK so neither
       drifts.
 
-- [ ] **Step 2:** `UserModule.svelte` renders
+- [x] **Step 2:** `UserModule.svelte` renders
       `<iframe sandbox="allow-scripts" src={...ui.html}>` and on its `load`
       event posts a `MessageChannel` port to it. Every message on that port
       becomes a `bindings.moduleCall({ moduleId, scope, method, payload })` —
@@ -336,21 +336,21 @@ Deno.test("a bad scope or module id is refused, not resolved", () => {
       never reads them from the frame**, which is what makes a forged id
       impossible rather than merely detected.
 
-- [ ] **Step 3:** In web mode (`bindings` absent) render the same desktop-only
+- [x] **Step 3:** In web mode (`bindings` absent) render the same desktop-only
       placeholder Terminal and Chat use. No iframe at all.
 
-- [ ] **Step 4: Verify** `deno task web` — a fixture module's tab shows the
+- [x] **Step 4: Verify** `deno task web` — a fixture module's tab shows the
       placeholder and no console errors.
 
 ### Task 6: end-to-end with a fixture
 
-- [ ] **Step 1:** Hand-write `~/.pique/scopes/root/agent/extensions/notes/` with
+- [x] **Step 1:** Hand-write `~/.pique/scopes/root/agent/extensions/notes/` with
       a `module.json` and a `ui.html` that renders one line and calls one
       capability. Boot with `deno task dev`, add the module to the installed
       table by hand (the Library wiring is Phase 4), open it from the `+`
       picker.
 
-- [ ] **Step 2:** Confirm in the running app: the panel renders, the port
+- [x] **Step 2:** Confirm in the running app: the panel renders, the port
       handshake completes, and the module's own `<script src>` — add one
       deliberately — does **not** load. That last one is the CSP working; if it
       loads, the header is not being applied and Phase 3 is unsafe to start.
