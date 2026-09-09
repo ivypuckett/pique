@@ -540,18 +540,18 @@ Deno.test("an empty manifest permits nothing", () => {
 
 ### Task 13
 
-- [ ] **Step 1:** `docs/modules.md` — the authoring doc. It must state the one
+- [x] **Step 1:** `docs/modules.md` — the authoring doc. It must state the one
       inlined document constraint and _why_ (opaque origin, `'self'` matches
       nothing), the capability list, and the adversarial results from Task 9. An
       author who does not know why they cannot ship an `app.js` will file it as
       a bug.
 
-- [ ] **Step 2:** `docs/security.md` — a new subsection for the frame: what it
+- [x] **Step 2:** `docs/security.md` — a new subsection for the frame: what it
       holds (measured), what it does not (the network without the CSP; the
       advisory gate, unchanged), and the fact that a module widens what the
       standing agent → filesystem finding touches.
 
-- [ ] **Step 3:** `docs/extensions.md` — `module:` as a second thing an
+- [x] **Step 3:** `docs/extensions.md` — `module:` as a second thing an
       extension may contribute, in the same table as tools and skills.
 
 ---

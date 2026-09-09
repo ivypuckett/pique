@@ -85,6 +85,8 @@ Notes:
   [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates), per
   workspace and inherited from the default one — see
   [docs/prompts.md](docs/prompts.md).
+- Module: a panel of your own in the right pane, run in a sandboxed frame and
+  gated on the capabilities it asks for — see [docs/modules.md](docs/modules.md).
 - Extension: https://pi.dev/docs/latest/extensions
 - Skill: https://pi.dev/docs/latest/skills
 - Automaton: A prompt template plus the exact extension and skill set a run may

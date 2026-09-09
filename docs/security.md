@@ -30,6 +30,33 @@ RCE is the shortest path to compromise in this app, which is why "no `{@html}`"
 is a security property here and not a style preference. See
 [Verified clean](#verified-clean).
 
+## The frame: a boundary that is actually a boundary
+
+Everything above and below is inside the `-A` process. The one exception is a
+user module's iframe ([modules.md](modules.md)), which is worth stating
+precisely because it is the only place in pique where a boundary is enforced by
+something other than our own discipline.
+
+A module's document runs with `sandbox="allow-scripts"` and no
+`allow-same-origin`, served under `default-src 'none'`. Measured against the
+real webview: `parent.bindings`, `top.location`, `parent.document` and
+`localStorage` all throw, and every call it makes is checked against a manifest
+the user consented to before a handler runs.
+
+Two things this does NOT do, both load-bearing:
+
+1. **The sandbox does not stop the network — the CSP does.** A sandboxed frame
+   with no header reached a recording server through `img.src`, no-cors `fetch`,
+   `sendBeacon`, `<script src>`, `<link href>` and `WebSocket`. Six for six.
+   `default-src 'none'` blocked all six. So the header is a control, not
+   hardening, and `fs.read` plus a frame without it composes into exfiltration.
+2. **It does not fix the agent → filesystem boundary below.** It widens what
+   that weakness touches: an agent holding `write` can drop a module definition
+   into a live extensions dir, capabilities and all, and no consent screen is
+   drawn. What it cannot do is exceed the manifest it wrote — the broker
+   enforces per call — so the reach of a dropped-in module is what its own
+   manifest names, in one scope.
+
 ## What the review gates do and do not do
 
 | Surface         | Quarantine dir                 | Auto-discovered from live dir | Gated    |
@@ -39,6 +66,7 @@ is a security property here and not a style preference. See
 | Prompt template | `agent/prompts/pending/`       | `agent/prompts/`              | advisory |
 | Automaton       | `automatons/pending/` (unused) | `automatons/`                 | advisory |
 | Subagent        | none — by design               | `agent/agents/`               | none     |
+| User module     | `agent/pending/*.module.json`  | `agent/extensions/`           | advisory |
 
 "Advisory" is [extensions.md](extensions.md)'s own word, and it is the right
 one: the gate governs what a human _moves_ into the loading set, not what can
