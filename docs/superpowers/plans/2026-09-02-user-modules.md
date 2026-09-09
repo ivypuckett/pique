@@ -367,7 +367,7 @@ Deno.test("a bad scope or module id is refused, not resolved", () => {
 Pure, no Deno APIs, so the negative cases are cheap to cover exhaustively. This
 is the file a reviewer should be able to read in one sitting.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 ```ts
 import { assertEquals } from "@std/assert";
@@ -439,7 +439,7 @@ Deno.test("an empty manifest permits nothing", () => {
 });
 ```
 
-- [ ] **Step 2:** Run, fail, implement. Normalise with `@std/path`'s `resolve`
+- [x] **Step 2:** Run, fail, implement. Normalise with `@std/path`'s `resolve`
       before comparing, and compare on segment boundaries so the prefix test
       passes.
 
@@ -447,31 +447,31 @@ Deno.test("an empty manifest permits nothing", () => {
 
 **Files:** `src/desktop.ts`, `src/lib/modules/broker.ts`, `broker_test.ts`
 
-- [ ] **Step 1:** `broker.ts` — `dispatch(moduleId, scope, method, payload)`
+- [x] **Step 1:** `broker.ts` — `dispatch(moduleId, scope, method, payload)`
       calls `allows()` first and throws a refusal that names the method and the
       capability it would have needed. Tests cover: a granted call reaches its
       handler; a refused one never does (assert with a handler that records
       calls); the scope the handler receives is the one passed in, never one
       from the payload.
 
-- [ ] **Step 2:** In `desktop.ts`, before the first `await`, bind
+- [x] **Step 2:** In `desktop.ts`, before the first `await`, bind
       `moduleManifest` (installed modules for a scope, plus the module server
       port), `moduleCall` and `moduleEvents` (a bounded long-poll, copying
       `termRead`'s 20s shape at line 77). Each handler resolves the module's
       manifest for the scope it was given and passes it to `dispatch`.
 
-- [ ] **Step 3: Verify** `deno task test`, then `deno task dev` with the
+- [x] **Step 3: Verify** `deno task test`, then `deno task dev` with the
       fixture: a granted call returns data, a call the fixture is not granted
       returns a refusal the panel can display.
 
 ### Task 9: the adversarial fixture
 
-- [ ] **Step 1:** Add a fixture module that attempts, in one page:
+- [x] **Step 1:** Add a fixture module that attempts, in one page:
       `parent.bindings`, `top.location`, `parent.document`, `localStorage`, a
       `moduleCall` outside its manifest, a `../` escape from its `fs.read` root,
       another module's id, and an outbound beacon via `new Image().src`.
 
-- [ ] **Step 2:** Run it under `deno task dev` and record the result of each in
+- [x] **Step 2:** Run it under `deno task dev` and record the result of each in
       `docs/modules.md`. Assert on the `DOMException`, never on
       `location.origin` — WebKit reports the URL origin for a served frame while
       still enforcing opacity, so an origin assertion passes for the wrong
@@ -481,18 +481,23 @@ Deno.test("an empty manifest permits nothing", () => {
 
 ## Phase 4 — manifest and Library
 
+> **Reordered during execution (2026-09-02).** Tasks 10 and 11 moved into Phase
+> 3: the broker checks a call against a module's manifest, and there is no way
+> to read one without `definition.ts` and `service.ts`. The phase boundary as
+> written was wrong. Task 12 is what remains here.
+
 ### Task 10: `module.json`
 
 **Files:** `src/lib/modules/definition.ts`, `definition_test.ts`
 
-- [ ] **Step 1: Write the tests.** Cover: a valid file parses; a missing `kind`
+- [x] **Step 1: Write the tests.** Cover: a valid file parses; a missing `kind`
       or `label` is rejected; a `kind` that is not a legal id is rejected; a
       `kind` colliding with a built-in is rejected **at parse time** so it never
       reaches the table; an unknown capability name is rejected rather than
       ignored (a typo'd `fs.raed` must not silently grant nothing and look
       enabled); `capabilities` absent means an empty grant, not a full one.
 
-- [ ] **Step 2:** Run, fail, implement. Return a discriminated result
+- [x] **Step 2:** Run, fail, implement. Return a discriminated result
       (`{ ok: true, def }` / `{ ok: false, error }`) rather than throwing — a
       junk `module.json` in one extension must not break the listing of the
       others, exactly as a broken automaton is listed with its error today.
@@ -501,13 +506,13 @@ Deno.test("an empty manifest permits nothing", () => {
 
 **Files:** `src/lib/modules/service.ts`, `service_test.ts`
 
-- [ ] **Step 1:** `listModules(scope)` walks the same `chain(scope)` the
+- [x] **Step 1:** `listModules(scope)` walks the same `chain(scope)` the
       extension service walks, reads `module.json` from each **enabled**
       extension dir (never from `pending/`), and returns definitions plus their
       errors. Tests use a throwaway agent dir, mirroring
       `extensions/local_test.ts`.
 
-- [ ] **Step 2:** Wire it: on boot and on Library refresh, the frontend calls
+- [x] **Step 2:** Wire it: on boot and on Library refresh, the frontend calls
       `moduleManifest` and passes the result to `setInstalledModules`.
 
 ### Task 12: the Library row and the consent screen

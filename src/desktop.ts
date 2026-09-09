@@ -13,6 +13,10 @@
 //    array". PTY output is therefore sent as a plain number array and rebuilt into a
 //    Uint8Array on the frontend.
 
+import { dispatch } from "./lib/modules/broker.ts";
+import { handlersFor } from "./lib/modules/handlers.ts";
+import { listAllModules, manifestFor } from "./lib/modules/service.ts";
+
 const win = new Deno.BrowserWindow({
   title: "pique",
   width: 1200,
@@ -106,29 +110,35 @@ win.bind("termKill", async (arg) => {
 // Not `async`: there is nothing to await, and the lint rule that catches a pointless
 // async is worth more than matching the shape of its neighbours.
 win.bind("moduleManifest", () => {
-  // TEMP (Phase 2, Task 6): one hand-written fixture until modules/service.ts walks the
-  // scope chain for real in Phase 4. Replace, do not extend.
-  return Promise.resolve({
+  // Every scope's modules in one list: the rail is per-window, not per-scope, and a
+  // module carries the scope that owns it so the frame can be addressed there.
+  return listAllModules().then((defs) => ({
     port: modulesPort,
-    modules: [{ kind: "notes", label: "Notes", key: "" }],
-  });
+    modules: defs,
+  }));
 });
 
-// TEMP (Phase 2, Task 6): logs what a frame asks for so the fixture can be verified
-// from stdout — a frame cannot report over the network, which is the CSP working as
-// designed. Task 8 replaces this with the capability-checked broker.
-win.bind("moduleCall", (arg) => {
+// The one door for everything a user module asks for. `moduleId` and `scope` come from
+// the host component that mounted the frame (modules/UserModule.svelte), never from the
+// frame itself — a frame cannot name a module, so it cannot name another one. The
+// manifest is then resolved from disk for THAT module, and the broker refuses anything
+// it does not grant before a handler runs.
+win.bind("moduleCall", async (arg) => {
   const { moduleId, scope, method, payload } = arg as {
     moduleId: string;
     scope: string;
     method: string;
     payload: unknown;
   };
-  console.log(
-    `[module] ${scope}/${moduleId} ${method}`,
-    JSON.stringify(payload),
+  const manifest = await manifestFor(scope, moduleId);
+  if (!manifest) throw new Error(`no such module: ${moduleId}`);
+  return await dispatch(
+    manifest,
+    scope,
+    method,
+    payload,
+    handlersFor(moduleId),
   );
-  return Promise.resolve({ ok: true });
 });
 
 win.bind("chatStart", async (arg) => {

@@ -16,6 +16,7 @@
   //    frame never sends them and is never asked, so it cannot address another module's
   //    data by lying about who it is.
   import { moduleBindings, moduleUiPort } from "./bindings.ts";
+  import { moduleDef } from "./manifest.ts";
   import { type CallMessage, HANDSHAKE, type ResultMessage } from "./contract.ts";
 
   let { title, kind, workspaceId }: {
@@ -25,10 +26,11 @@
   } = $props();
 
   const b = moduleBindings();
-  // A module is scoped to the workspace whose view holds it; root is the fallback for a
-  // layout that predates workspace ids.
-  const scope = $derived(workspaceId ?? "root");
   const moduleId = $derived(kind ?? "");
+  // The scope that OWNS the module, from the table — not the workspace this view
+  // belongs to. A workspace showing one of root's modules addresses root's copy, and
+  // its capability checks run against root's manifest.
+  const scope = $derived(moduleDef(moduleId)?.scope ?? workspaceId ?? "root");
 
   let frame: HTMLIFrameElement | undefined = $state();
   // The port was read at hydration (bindings.ts), so the frame has an address on its

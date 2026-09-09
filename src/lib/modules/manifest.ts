@@ -19,6 +19,11 @@ export type ModuleDef = {
   label: string; // tab title and picker entry
   key: string; // ctrl+t <key>
   duplicable?: boolean; // may a view hold more than one?
+  // For a module an extension contributed: the scope whose extensions dir holds it.
+  // A workspace showing a module that root owns must address ROOT's copy — the rail is
+  // per-window, modules are per-scope. Absent for the built-ins, which belong to no
+  // scope at all.
+  scope?: string;
 };
 
 // Chat is the center column and the file tree is the editor row's own content; neither
