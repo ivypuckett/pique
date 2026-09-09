@@ -27,7 +27,13 @@ function recorder() {
 
 Deno.test("a granted call reaches its handler and returns its value", async () => {
   const { calls, handlers } = recorder();
-  const out = await dispatch(manifest({ kanban: true }), "ws-1", "kanbanGetBoard", {}, handlers);
+  const out = await dispatch(
+    manifest({ kanban: true }),
+    "ws-1",
+    "kanbanGetBoard",
+    {},
+    handlers,
+  );
   assertEquals(out, { statuses: [] });
   assertEquals(calls.length, 1);
 });
@@ -69,7 +75,8 @@ Deno.test("the handler is given the caller's scope, never one from the payload",
 Deno.test("an unknown method is refused before any lookup", async () => {
   const { calls, handlers } = recorder();
   await assertRejects(
-    () => dispatch(manifest({ kanban: true }), "ws-1", "termStart", {}, handlers),
+    () =>
+      dispatch(manifest({ kanban: true }), "ws-1", "termStart", {}, handlers),
     Error,
     "not granted",
   );
@@ -97,7 +104,14 @@ Deno.test("an fs call outside every granted root is refused", async () => {
   const { calls, handlers } = recorder();
   const m = manifest({ fs: { read: ["/home/u/notes"] } });
   await assertRejects(
-    () => dispatch(m, "ws-1", "fsRead", { path: "/home/u/notes/../secrets" }, handlers),
+    () =>
+      dispatch(
+        m,
+        "ws-1",
+        "fsRead",
+        { path: "/home/u/notes/../secrets" },
+        handlers,
+      ),
     Error,
     "not granted",
   );

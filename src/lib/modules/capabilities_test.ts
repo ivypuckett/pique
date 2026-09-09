@@ -57,7 +57,10 @@ Deno.test("a traversal out of a declared root is refused", () => {
 // startsWith check passes this test's opposite, which is why it is here.
 Deno.test("a sibling sharing a name prefix is not inside the root", () => {
   const notes = m({ fs: { read: ["/home/u/notes"] } });
-  assertEquals(allows(notes, "fsRead", { path: "/home/u/notes-private/x" }), false);
+  assertEquals(
+    allows(notes, "fsRead", { path: "/home/u/notes-private/x" }),
+    false,
+  );
   assertEquals(allows(notes, "fsRead", { path: "/home/u/notesecret" }), false);
 });
 
@@ -78,7 +81,11 @@ Deno.test("write does not imply read", () => {
 Deno.test("a relative or empty path is refused rather than resolved", () => {
   const notes = m({ fs: { read: ["/home/u/notes"] } });
   for (const p of ["notes/a.md", "", "./a.md", "~/notes/a.md"]) {
-    assertEquals(allows(notes, "fsRead", { path: p }), false, JSON.stringify(p));
+    assertEquals(
+      allows(notes, "fsRead", { path: p }),
+      false,
+      JSON.stringify(p),
+    );
   }
 });
 
@@ -100,5 +107,8 @@ Deno.test("an empty manifest permits nothing", () => {
 // An fs capability naming no roots grants no paths — an empty list is a grant of
 // nothing, never a wildcard.
 Deno.test("an fs grant with an empty root list permits nothing", () => {
-  assertEquals(allows(m({ fs: { read: [] } }), "fsRead", { path: "/x" }), false);
+  assertEquals(
+    allows(m({ fs: { read: [] } }), "fsRead", { path: "/x" }),
+    false,
+  );
 });

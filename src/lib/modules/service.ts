@@ -13,8 +13,12 @@
 // A `.ts` is NOT required. A module that only draws a panel needs no pi extension at
 // all, and requiring one would mean shipping a file whose only job is to exist — which
 // on Deno 2.9.5 is also a way to panic the app at boot if it is malformed.
-import { liveDir } from "../extensions/paths.ts";
-import { type ScopeId, scopeDir, scopesDir } from "../scope/paths.ts";
+import {
+  ensureExtensionDirs,
+  liveDir,
+  pendingDir,
+} from "../extensions/paths.ts";
+import { scopeDir, type ScopeId, scopesDir } from "../scope/paths.ts";
 import { parseDefinition } from "./definition.ts";
 import type { Manifest } from "./capabilities.ts";
 
@@ -36,6 +40,96 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// A module awaiting consent. Its definition is parsed so the consent screen can name
+// the capabilities it asks for — reading them is the whole point of the gate — but it
+// is not in the live dir, so nothing serves its document and the broker has no manifest
+// for it. It cannot run.
+export type PendingModule = {
+  scope: ScopeId;
+  name: string;
+  def?: Manifest;
+  error?: string;
+};
+
+// The same rule extensions follow, applied to modules: a module RUNS iff its definition
+// is in the live dir, and is AWAITING CONSENT iff there is one in pending/. Neither half
+// is a flag that could disagree with what actually loads — one is what the server serves
+// and the broker reads, the other is a directory listing.
+export async function listPendingModules(
+  scope: ScopeId,
+): Promise<PendingModule[]> {
+  const dir = pendingDir(scope);
+  const out: PendingModule[] = [];
+  const names: string[] = [];
+  try {
+    for await (const entry of Deno.readDir(dir)) {
+      if (entry.isFile && entry.name.endsWith(".module.json")) {
+        names.push(entry.name.slice(0, -".module.json".length));
+      }
+    }
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return [];
+    throw err;
+  }
+  for (const name of names.sort()) {
+    try {
+      const parsed = parseDefinition(
+        name,
+        await Deno.readTextFile(`${dir}/${name}.module.json`),
+      );
+      if (parsed.ok) out.push({ scope, name, def: parsed.def });
+      else out.push({ scope, name, error: parsed.error });
+    } catch (err) {
+      out.push({ scope, name, error: (err as Error).message });
+    }
+  }
+  return out;
+}
+
+// Consent: move the definition AND its document into the live dir together. Both move
+// or neither does — a definition without its document is a rail row that opens nothing,
+// and a document without its definition has no grants at all.
+export async function enableModule(
+  scope: ScopeId,
+  name: string,
+): Promise<void> {
+  const parsed = parseDefinition(
+    name,
+    await Deno.readTextFile(`${pendingDir(scope)}/${name}.module.json`),
+  );
+  // Re-read and re-validate at the moment of consent rather than trusting what the
+  // listing showed: a Library tab left open all day is a window in which the file can
+  // change between the reading and the pressing.
+  if (!parsed.ok) throw new Error(parsed.error);
+  await ensureExtensionDirs(scope);
+  await Deno.rename(
+    `${pendingDir(scope)}/${name}.ui.html`,
+    `${liveDir(scope)}/${name}.ui.html`,
+  );
+  await Deno.rename(
+    `${pendingDir(scope)}/${name}.module.json`,
+    `${liveDir(scope)}/${name}.module.json`,
+  );
+}
+
+// Revoke returns a module to the gate rather than deleting it, so re-enabling means
+// consenting to its capabilities again — which is what makes a changed capability list
+// impossible to slip past a user who once said yes.
+export async function revokeModule(
+  scope: ScopeId,
+  name: string,
+): Promise<void> {
+  await ensureExtensionDirs(scope);
+  await Deno.rename(
+    `${liveDir(scope)}/${name}.module.json`,
+    `${pendingDir(scope)}/${name}.module.json`,
+  );
+  await Deno.rename(
+    `${liveDir(scope)}/${name}.ui.html`,
+    `${pendingDir(scope)}/${name}.ui.html`,
+  );
 }
 
 // One scope's own modules. Nothing inherited — the caller composes scopes, because the
@@ -96,7 +190,10 @@ export async function listAllModules(): Promise<InstalledModule[]> {
     throw err;
   }
   // root first, so a workspace module never sorts ahead of the one it may shadow.
-  ids = ids.sort((a, b) => (a === "root" ? -1 : b === "root" ? 1 : a.localeCompare(b)));
+  ids = ids.sort((
+    a,
+    b,
+  ) => (a === "root" ? -1 : b === "root" ? 1 : a.localeCompare(b)));
   for (const id of ids) {
     // A directory under scopes/ that is not a legal scope id is not ours to read.
     try {

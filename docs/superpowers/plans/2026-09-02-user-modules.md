@@ -517,13 +517,19 @@ Deno.test("an empty manifest permits nothing", () => {
 
 ### Task 12: the Library row and the consent screen
 
-- [ ] **Step 1:** A module-bearing extension gets a badge in its Library row.
+> **Grew during execution.** Task 12 as written assumed a consent screen could
+> be bolted onto an existing gate. There was none: a `module.json` in the live
+> dir ran with its capabilities and nothing asked. The gate had to be built —
+> `pending/` for modules, `enableModule`, `revokeModule` — before a consent
+> screen had anything to gate.
+
+- [x] **Step 1:** A module-bearing extension gets a badge in its Library row.
       Its review already shows the extension's code; the consent screen adds
       what the module asks for, in the plain words of the capability table, and
       is shown **before** enable — the same position the code review already
       occupies.
 
-- [ ] **Step 2:** Revoking removes the module from the table on next refresh. An
+- [x] **Step 2:** Revoking removes the module from the table on next refresh. An
       open tab of it falls to "Unknown module" rather than a broken frame. Add
       this to the manual test plan; it is the case the existing unknown-kind
       handling was written for, and it should need no new code.

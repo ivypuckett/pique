@@ -34,7 +34,9 @@ export function handlersFor(moduleId: string): Handlers {
 
     storageGet: async (scope) => {
       try {
-        return JSON.parse(await Deno.readTextFile(storagePath(scope, moduleId)));
+        return JSON.parse(
+          await Deno.readTextFile(storagePath(scope, moduleId)),
+        );
       } catch (err) {
         // A module that has never written has no file; that is empty, not an error.
         if (err instanceof Deno.errors.NotFound) return null;
@@ -59,7 +61,10 @@ export function handlersFor(moduleId: string): Handlers {
     },
 
     fsWrite: async (_scope, payload) => {
-      const { path, contents } = payload as { path: string; contents?: unknown };
+      const { path, contents } = payload as {
+        path: string;
+        contents?: unknown;
+      };
       await Deno.writeTextFile(path, String(contents ?? ""));
       return true;
     },

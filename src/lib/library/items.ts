@@ -4,6 +4,7 @@
 // common. Pure — no fetching, no Deno APIs — so it is testable and safe to bundle.
 import type { ScopeId } from "../scope/paths.ts";
 import type { Extension } from "../extensions/bindings.ts";
+import type { InstalledModule, PendingModule } from "../modules/bindings.ts";
 import type { PromptInfo } from "../prompts/bindings.ts";
 import type { SkillInfo } from "../skills/bindings.ts";
 import type { AgentDef } from "../agents/bindings.ts";
@@ -15,6 +16,7 @@ import type { PromptFileInfo } from "../scope/prompt-bindings.ts";
 // explain both on every line.
 export type LibraryKind =
   | "extension"
+  | "module"
   | "prompt"
   | "skill"
   | "subagent"
@@ -53,6 +55,13 @@ type Common = {
 // runtime undefined.
 export type LibraryItem =
   | (Common & { kind: "extension"; ext: Extension })
+  // A module carries whichever half it has: `module` when it is installed, `pending`
+  // when it is still at the consent gate. Never both.
+  | (Common & {
+    kind: "module";
+    module?: InstalledModule;
+    pending?: PendingModule;
+  })
   | (Common & { kind: "prompt"; prompt: PromptInfo })
   | (Common & { kind: "skill"; skill: SkillInfo })
   | (Common & { kind: "subagent"; agent: AgentDef })
@@ -68,9 +77,10 @@ const KIND_ORDER: Record<LibraryKind, number> = {
   system: 0,
   appendix: 1,
   extension: 2,
-  prompt: 3,
-  skill: 4,
-  subagent: 5,
+  module: 3,
+  prompt: 4,
+  skill: 5,
+  subagent: 6,
 };
 
 export type LibraryGroups = {

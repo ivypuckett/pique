@@ -30,7 +30,9 @@ function parseCapabilities(raw: unknown): Capabilities | string {
   const out: Capabilities = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if ((BOOLEAN_CAPS as readonly string[]).includes(key)) {
-      if (typeof value !== "boolean") return `capability ${key} must be a boolean`;
+      if (typeof value !== "boolean") {
+        return `capability ${key} must be a boolean`;
+      }
       out[key as typeof BOOLEAN_CAPS[number]] = value;
       continue;
     }
@@ -39,8 +41,12 @@ function parseCapabilities(raw: unknown): Capabilities | string {
         return "capability fs must be an object of read/write root lists";
       }
       const fs: { read?: string[]; write?: string[] } = {};
-      for (const [side, roots] of Object.entries(value as Record<string, unknown>)) {
-        if (side !== "read" && side !== "write") return `unknown fs grant: ${side}`;
+      for (
+        const [side, roots] of Object.entries(value as Record<string, unknown>)
+      ) {
+        if (side !== "read" && side !== "write") {
+          return `unknown fs grant: ${side}`;
+        }
         if (!Array.isArray(roots) || roots.some((r) => typeof r !== "string")) {
           return `fs.${side} must be a list of paths`;
         }
@@ -48,7 +54,9 @@ function parseCapabilities(raw: unknown): Capabilities | string {
         // anchor, so a definition carrying one would grant nothing while looking like
         // it granted something.
         const bad = (roots as string[]).find((r) => !isAbsolute(r));
-        if (bad !== undefined) return `fs.${side} root must be absolute: ${bad}`;
+        if (bad !== undefined) {
+          return `fs.${side} root must be absolute: ${bad}`;
+        }
         fs[side] = roots as string[];
       }
       out.fs = fs;
@@ -63,7 +71,9 @@ function parseCapabilities(raw: unknown): Capabilities | string {
 // inside the file. A definition therefore cannot claim to be a module other than the one
 // it sits beside.
 export function parseDefinition(name: string, text: string): ParseResult {
-  if (!NAME_RE.test(name)) return { ok: false, error: `invalid module name: ${name}` };
+  if (!NAME_RE.test(name)) {
+    return { ok: false, error: `invalid module name: ${name}` };
+  }
   // A built-in always wins its kind. setInstalledModules filters this too, but refusing
   // it here means the collision is reported to whoever installed the module rather than
   // silently dropped.
@@ -91,7 +101,9 @@ export function parseDefinition(name: string, text: string): ParseResult {
   }
 
   const capabilities = parseCapabilities(obj.capabilities);
-  if (typeof capabilities === "string") return { ok: false, error: capabilities };
+  if (typeof capabilities === "string") {
+    return { ok: false, error: capabilities };
+  }
 
   return {
     ok: true,

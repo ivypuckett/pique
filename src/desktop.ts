@@ -15,7 +15,14 @@
 
 import { dispatch } from "./lib/modules/broker.ts";
 import { handlersFor } from "./lib/modules/handlers.ts";
-import { listAllModules, manifestFor } from "./lib/modules/service.ts";
+import {
+  enableModule,
+  listAllModules,
+  listModules,
+  listPendingModules,
+  manifestFor,
+  revokeModule,
+} from "./lib/modules/service.ts";
 
 const win = new Deno.BrowserWindow({
   title: "pique",
@@ -123,6 +130,30 @@ win.bind("moduleManifest", () => {
 // frame itself — a frame cannot name a module, so it cannot name another one. The
 // manifest is then resolved from disk for THAT module, and the broker refuses anything
 // it does not grant before a handler runs.
+win.bind("moduleList", async (arg) => {
+  const { scope } = arg as { scope: string };
+  const [own, pending] = await Promise.all([
+    listModules(scope),
+    listPendingModules(scope),
+  ]);
+  // What the scope inherits: root's modules are visible from every workspace, and are
+  // consented to and revoked in root, never here.
+  const inherited = scope === "root" ? [] : (await listModules("root")).modules;
+  return { installed: [...own.modules, ...inherited], pending };
+});
+
+win.bind("moduleEnable", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await enableModule(scope, name);
+  return true;
+});
+
+win.bind("moduleRevoke", async (arg) => {
+  const { scope, name } = arg as { scope: string; name: string };
+  await revokeModule(scope, name);
+  return true;
+});
+
 win.bind("moduleCall", async (arg) => {
   const { moduleId, scope, method, payload } = arg as {
     moduleId: string;
