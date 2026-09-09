@@ -11,6 +11,8 @@ import GitDiff from "../gitdiff/GitDiff.svelte";
 import Kanban from "../kanban/Kanban.svelte";
 import Library from "../library/Library.svelte";
 import Automatons from "../automatons/Automatons.svelte";
+import UserModule from "./UserModule.svelte";
+import { moduleDef } from "./manifest.ts";
 
 export const registry: Record<
   string,
@@ -32,3 +34,11 @@ export const registry: Record<
   library: Library,
   automatons: Automatons,
 };
+
+// Which component renders `kind`: the built-in for it, or the iframe host for a module
+// an installed extension contributed. A kind that is neither — read back from a layout
+// written by another build, or by a scope that has since revoked the module — returns
+// undefined, and Column.svelte renders its "Unknown module" branch for it.
+export function componentFor(kind: string) {
+  return registry[kind] ?? (moduleDef(kind) ? UserModule : undefined);
+}

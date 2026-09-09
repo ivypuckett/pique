@@ -12,7 +12,7 @@
   import ModuleRail from "./ModuleRail.svelte";
   import Splitter from "./Splitter.svelte";
   import TabStrip from "./TabStrip.svelte";
-  import { registry } from "./modules/registry.ts";
+  import { componentFor, registry } from "./modules/registry.ts";
 
   // `id` picks the branch: "center" is the chat column, which is one fixed module and so
   // carries no state of its own, and "right" the tabbed pane. The two share nothing but
@@ -86,7 +86,7 @@
           <!-- Every open tab of every group stays mounted, so a terminal keeps running while
                you work in another module; only the selected group's shown one is visible. -->
           {#each pane.tabs as tab (tab.id)}
-            {@const Module = registry[tab.kind]}
+            {@const Module = componentFor(tab.kind)}
             <div class="absolute inset-0" class:hidden={tab.id !== shown} data-tab-content>
               <ModuleFrame title={tab.title} header={false}>
                 {#if Module}

@@ -33,14 +33,33 @@ export const MODULES: ModuleDef[] = [
   { kind: "automatons", label: "Automatons", key: "a" },
 ];
 
+// Modules contributed by installed extensions, set at boot and on Library refresh.
+// Held apart from MODULES rather than merged into it because the ctrl+t chord reads
+// MODULES directly (App.svelte, StatusBar.svelte) and must not see an install: a
+// letter is a fixed namespace, and an install claiming one could shadow a built-in.
+let installed: ModuleDef[] = [];
+
+// Set once per refresh, not appended to — the argument is the whole installed set, so
+// a module that was revoked between refreshes disappears rather than lingering.
+export function setInstalledModules(defs: ModuleDef[]): void {
+  // A built-in always wins a collision: `kind` decides which component renders, so a
+  // shadowing entry would let an installed module replace Chat or Kanban.
+  installed = defs.filter((d) => !MODULES.some((m) => m.kind === d.kind));
+}
+
+// Built-ins first, so the rail's order stays stable as modules come and go.
+function allModules(): ModuleDef[] {
+  return [...MODULES, ...installed];
+}
+
 export function moduleDef(kind: string): ModuleDef | undefined {
-  return MODULES.find((m) => m.kind === kind);
+  return allModules().find((m) => m.kind === kind);
 }
 
 // The rail's rows, top to bottom — the order ctrl+t's arrows walk. The editor heads the
 // list: it is a row without a module, holding the tree and the files opened from it.
 export function railGroups(): string[] {
-  return [EDITOR, ...MODULES.map((m) => m.kind)];
+  return [EDITOR, ...allModules().map((m) => m.kind)];
 }
 
 // Whether a view may hold a second tab of this kind. An unknown kind — one read back

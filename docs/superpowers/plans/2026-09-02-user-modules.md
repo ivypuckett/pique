@@ -68,8 +68,9 @@ need to understand.
 - Binding values must be JSON. No `Uint8Array` returns.
 - `deno task test` is `deno test -A src/`. Test style:
   `Deno.test("a sentence describing the behaviour", () => { ... })`.
-- `deno lint` reports ~30 pre-existing problems. Not a gate; the count must not
-  grow.
+- `deno lint` reports **40** pre-existing problems (measured 2026-09-02, at
+  `56c6a62`). Not a gate; the count must not grow. An earlier draft of this plan
+  said ~30, carried over from an older plan — 40 is the real baseline.
 - In web mode (`deno task web`) there is no `globalThis.bindings`. A user module
   must show the desktop-only placeholder, as Terminal and Chat do.
 
@@ -121,7 +122,7 @@ module-level setter rather than threaded through every caller — the reducers i
 argument today, and giving them one would touch far more than this change needs.
 The setter is what tests reset.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 Create `src/lib/modules/manifest_test.ts`:
 
@@ -199,12 +200,12 @@ Deno.test("an unknown kind stays a singleton", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `deno test -A src/lib/modules/manifest_test.ts` Expected: FAIL — no export
 named `setInstalledModules`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `src/lib/modules/manifest.ts`, keep `MODULES` exactly as it is — it stays the
 built-in table and the chord's only source — and add:
@@ -230,7 +231,7 @@ function allModules(): ModuleDef[] {
 Then change `moduleDef` and `railGroups` to read `allModules()`. `isDuplicable`
 and `hasTabs` already go through `moduleDef`, so they follow for free.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `deno task test`. Expected: the new file passes and `layout_test.ts`,
 `session_test.ts` and `workspace_test.ts` are untouched and still green — they
@@ -240,20 +241,20 @@ are the proof that the merged table is invisible when nothing is installed.
 
 **Files:** `src/lib/modules/registry.ts`
 
-- [ ] **Step 1:** Add `UserModule` to the registry under a reserved kind, and
+- [x] **Step 1:** Add `UserModule` to the registry under a reserved kind, and
       export a `componentFor(kind)` that returns the built-in component when
       there is one and `UserModule` when the kind is an installed module.
       `Column.svelte` calls `componentFor(tab.kind)` instead of indexing
       `registry` directly; its "Unknown module" branch stays, and is what a kind
       that is neither built-in nor installed still falls to.
 
-- [ ] **Step 2: Verify** `deno task test`, then `deno task build` — the bundle
+- [x] **Step 2: Verify** `deno task test`, then `deno task build` — the bundle
       must still build with no `@std/*` import reaching a frontend module (see
       the frontend-bundle constraint; `registry.ts` is bundled).
 
 ### Task 3: manual checkpoint
 
-- [ ] **Step 1:** `deno task dev`. With nothing installed, the rail, the `+`
+- [x] **Step 1:** `deno task dev`. With nothing installed, the rail, the `+`
       picker, `ctrl+t` and every module behave exactly as before. This is the
       whole acceptance criterion for Phase 1: a refactor nobody can see.
 
@@ -553,7 +554,7 @@ Deno.test("an empty manifest permits nothing", () => {
   the unknown-kind contract and that is a bug in this work, not in the test.
 - **Build:** `deno task build`. No `@std/*` import may reach a bundled frontend
   module.
-- **Lint:** `deno lint` — the ~30 pre-existing problems must not grow.
+- **Lint:** `deno lint` — the 40 pre-existing problems must not grow.
 - **Web mode:** `deno task web` — a module tab shows the desktop-only
   placeholder, no console errors.
 - **Desktop:** `deno task dev` — install → review → consent → enable → refresh →
