@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   apiKeyInteraction,
+  authStatusFallback,
   buildCustomEntry,
   customProviderIds,
   removeProviderFromConfig,
@@ -187,4 +188,20 @@ Deno.test("apiKeyInteraction rejects a method the prompt does not offer", async 
     Error,
     "is not offered",
   );
+});
+
+// A snapshot emptied by one throwing provider makes every provider read as
+// unconfigured; the fallback re-establishes what the credential store and a live
+// check can say on their own.
+Deno.test("authStatusFallback prefers a stored credential, then a live check", () => {
+  assertEquals(authStatusFallback(true, undefined), {
+    configured: true,
+    source: "stored",
+  });
+  assertEquals(authStatusFallback(false, { source: "AWS_PROFILE" }), {
+    configured: true,
+    source: "environment",
+    label: "AWS_PROFILE",
+  });
+  assertEquals(authStatusFallback(false, undefined), { configured: false });
 });

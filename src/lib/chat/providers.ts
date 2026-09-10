@@ -16,6 +16,7 @@
 
 import { dirname } from "@std/path";
 import { ensureRuntime } from "./agent.ts";
+import { listAvailableModels } from "./available.ts";
 import { home } from "../home.ts";
 import {
   BEDROCK,
@@ -85,6 +86,25 @@ export function toProviderInfo(
     source: status.source,
     sourceLabel: status.label,
   };
+}
+
+// pi answers "is this provider configured?" out of a snapshot that its all-or-nothing
+// availability refresh leaves EMPTY whenever any ONE provider throws (see available.ts).
+// Every provider then reads as disconnected at once: Settings offers to connect what is
+// already connected, and pi's own gate refuses a send with "Provider is not configured".
+//
+// So an unconfigured-looking provider is asked again without the snapshot in the way,
+// and this folds that answer back into an AuthStatus with the precedence pi itself uses:
+// a stored credential first (which is what earns the Disconnect button), then whatever a
+// live auth check found — the environment, for the AWS_PROFILE and ANTHROPIC_API_KEY case.
+export function authStatusFallback(
+  stored: boolean,
+  check: { source?: string } | undefined,
+): { configured: boolean; source?: string; label?: string } {
+  if (stored) return { configured: true, source: "stored" };
+  return check
+    ? { configured: true, source: "environment", label: check.source }
+    : { configured: false };
 }
 
 // Stands in for the API key of an endpoint that does not use one. pi treats a custom
@@ -231,22 +251,48 @@ async function writeModelsJson(data: ModelsJson): Promise<void> {
 export async function listProviders(): Promise<ProviderInfo[]> {
   const runtime = await ensureRuntime();
   const custom = customProviderIds(await readModelsJson());
-  return runtime.getProviders().map((p: { id: string }) =>
-    toProviderInfo(p, runtime.getProviderAuthStatus(p.id), custom.has(p.id))
+  // Both fallback inputs are read once, off the credential store rather than the
+  // snapshot; a store that cannot be read leaves the stored set empty, which is what
+  // the snapshot already assumed.
+  const stored = new Set<string>();
+  try {
+    for (const entry of await runtime.listCredentials()) {
+      stored.add(entry.providerId);
+    }
+  } catch { /* no stored credentials to add — the live check still speaks */ }
+  return await Promise.all(
+    runtime.getProviders().map(async (p: { id: string }) => {
+      const status = runtime.getProviderAuthStatus(p.id);
+      return toProviderInfo(
+        p,
+        status.configured ? status : authStatusFallback(
+          stored.has(p.id),
+          await checkAuth(runtime, p.id),
+        ),
+        custom.has(p.id),
+      );
+    }),
   );
+}
+
+// One provider's live auth check. Throwing is the state this whole path exists for —
+// it is what empties pi's snapshot — so a provider that cannot answer reads as
+// unconfigured on its own rather than taking the other providers down with it.
+async function checkAuth(
+  runtime: { checkAuth(id: string): Promise<{ source?: string } | undefined> },
+  id: string,
+): Promise<{ source?: string } | undefined> {
+  try {
+    return await runtime.checkAuth(id);
+  } catch {
+    return undefined;
+  }
 }
 
 // Every model the connected providers offer. Session-independent, which is what makes
 // it usable from a picker that is choosing a model for a run that does not exist yet.
 export async function listModels(): Promise<ModelOption[]> {
-  const runtime = await ensureRuntime();
-  // deno-lint-ignore no-explicit-any
-  const available: readonly any[] = await runtime.getAvailable();
-  const models = available.map((m) => ({
-    provider: m.provider,
-    id: m.id,
-    name: m.name ?? m.id,
-  }));
+  const models = await listAvailableModels(await ensureRuntime());
   // Bedrock ships a static catalog that is mostly unusable in any one region; see
   // bedrock.ts for why the picker is narrowed rather than showing all 114.
   return filterBedrockModels(models, await resolveBedrockRegion());

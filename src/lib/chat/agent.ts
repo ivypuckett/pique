@@ -141,6 +141,7 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
+import { listAvailableModels } from "./available.ts";
 import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
@@ -458,12 +459,11 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
   const agent = agents.get(id);
   if (!runtime || !agent) return [];
   const current = agent.session.model;
-  // deno-lint-ignore no-explicit-any
-  const available: readonly any[] = await runtime.getAvailable();
-  const models = available.map((m) => ({
-    provider: m.provider,
-    id: m.id,
-    name: m.name ?? m.id,
+  // One provider at a time, so a provider that cannot resolve its credentials — an
+  // expired AWS SSO session, a stopped LM Studio — costs the picker its own models
+  // and not everyone else's. See available.ts.
+  const models = (await listAvailableModels(runtime)).map((m) => ({
+    ...m,
     current: m.provider === current?.provider && m.id === current?.id,
   }));
   // Same narrowing the automaton picker gets (providers.ts listModels): Bedrock's
