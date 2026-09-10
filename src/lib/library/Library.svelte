@@ -14,7 +14,7 @@
   import { systemPromptBindings } from "../scope/prompt-bindings.ts";
   import { extensionItems } from "../extensions/items.ts";
   import { moduleItems } from "../modules/items.ts";
-  import { moduleBindings } from "../modules/bindings.ts";
+  import { hydrateModules, moduleBindings } from "../modules/bindings.ts";
   import ModuleConsent from "../modules/ModuleConsent.svelte";
   import { type Draft, promptItems } from "../prompts/items.ts";
   import { skillItems } from "../skills/items.ts";
@@ -253,7 +253,7 @@
     } else if (item.kind === "module" && item.pending && mods) {
       const { name } = item.pending;
       act(
-        () => mods.moduleEnable({ scope, name }),
+        () => mods.moduleEnable({ scope, name }).then(hydrateModules),
         `Enabled ${item.title}. Open it from the + menu; a view already open needs a Refresh.`,
       );
     }
@@ -263,7 +263,7 @@
     if (item.kind === "module" && item.module && mods) {
       const { kind } = item.module;
       act(
-        () => mods.moduleRevoke({ scope, name: kind }),
+        () => mods.moduleRevoke({ scope, name: kind }).then(hydrateModules),
         `Revoked ${item.title}. An open tab of it now reads "Unknown module".`,
       );
       return;

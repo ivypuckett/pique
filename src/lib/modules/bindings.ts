@@ -4,6 +4,14 @@
 // window; in a browser tab this returns null and UserModule.svelte renders its
 // desktop-only placeholder, as Terminal and Chat do.
 import { type ModuleDef, setInstalledModules } from "./manifest.ts";
+import { writable } from "svelte/store";
+
+// Bumped every time the table is refilled. The table itself is a plain array in
+// manifest.ts — deliberately, so the pure layout reducers and their deno tests can read
+// it without loading a .svelte file — which means nothing re-renders when it changes.
+// Components that read the table build a LIST once (ModuleRail's rows) and subscribe to
+// this to know when to rebuild it.
+export const modulesVersion = writable(0);
 
 // Mirrors modules/service.ts's InstalledModule and PendingModule. Kept in sync by hand
 // — separate module graphs — and deliberately structural rather than imported: service.ts
@@ -11,7 +19,6 @@ import { type ModuleDef, setInstalledModules } from "./manifest.ts";
 export type ModuleCapabilities = {
   kanban?: boolean;
   storage?: boolean;
-  agent?: boolean;
   fs?: { read?: string[]; write?: string[] };
 };
 
@@ -79,6 +86,7 @@ export async function hydrateModules(): Promise<void> {
     const { port, modules } = await b.moduleManifest();
     uiPort = port;
     setInstalledModules(modules as ModuleDef[]);
+    modulesVersion.update((n) => n + 1);
   } catch {
     // A backend without the handler (an older build) simply has no user modules.
   }

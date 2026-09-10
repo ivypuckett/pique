@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { dispatch, type Handlers } from "./broker.ts";
-import type { Manifest } from "./capabilities.ts";
+import { type Manifest, METHODS } from "./capabilities.ts";
+import { handlersFor } from "./handlers.ts";
 
 const manifest = (caps: Manifest["capabilities"]): Manifest => ({
   kind: "notes",
@@ -116,4 +117,28 @@ Deno.test("an fs call outside every granted root is refused", async () => {
     "not granted",
   );
   assertEquals(calls, []);
+});
+
+// The gap this closes: `agentPrompt` shipped in METHODS with no handler behind it, so a
+// module could be granted it, the consent screen offered it in the warning group, and
+// the call then failed as "not implemented". A consent screen that asks a user to
+// approve something that cannot happen is the one defect this feature must not have.
+//
+// broker_test asserts the DISTINCTION between "not granted" and "not implemented"; this
+// asserts nothing real lands in the second bucket. Adding a method to METHODS without a
+// handler now fails here rather than in front of a user.
+Deno.test("every method the capability table names has a handler behind it", () => {
+  const implemented = new Set(Object.keys(handlersFor("notes")));
+  const missing = Object.keys(METHODS).filter((m) => !implemented.has(m));
+  assertEquals(missing, []);
+});
+
+// The other direction is not a bug but is worth knowing: a handler no method names is
+// dead code, reachable by nothing, because the capability check runs first.
+Deno.test("every handler is reachable through the capability table", () => {
+  const named = new Set(Object.keys(METHODS));
+  const unreachable = Object.keys(handlersFor("notes")).filter((m) =>
+    !named.has(m)
+  );
+  assertEquals(unreachable, []);
 });

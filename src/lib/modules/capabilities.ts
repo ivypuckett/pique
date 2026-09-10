@@ -21,8 +21,6 @@ export type Capabilities = {
   kanban?: boolean;
   // The module's own JSON blob, private to it and to the scope it runs in.
   storage?: boolean;
-  // Send a prompt to this view's chat.
-  agent?: boolean;
   // Absolute directory roots. Each grant is its own list: read does not imply write and
   // write does not imply read, because the pair a module actually needs is usually one
   // of them over a narrower set of paths than the other.
@@ -40,12 +38,14 @@ export type Manifest = {
 // deliberately: a method that is not in this table is refused, so adding a bind to
 // desktop.ts does not silently widen what a module can reach. Adding one here is a
 // decision, which is the point.
-const METHODS: Record<string, keyof Capabilities | "fs.read" | "fs.write"> = {
+export const METHODS: Record<
+  string,
+  keyof Capabilities | "fs.read" | "fs.write"
+> = {
   kanbanGetBoard: "kanban",
   kanbanGetLogs: "kanban",
   storageGet: "storage",
   storageSet: "storage",
-  agentPrompt: "agent",
   fsRead: "fs.read",
   fsWrite: "fs.write",
 };

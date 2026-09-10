@@ -2,10 +2,14 @@
   import { selectGroup } from "./store.ts";
   import { moduleLabel, type RightState } from "./layout.ts";
   import { isDuplicable, railGroups } from "./modules/manifest.ts";
+  import { modulesVersion } from "./modules/bindings.ts";
 
   let { viewId, right }: { viewId: string; right: RightState } = $props();
 
-  const groups = railGroups();
+  // Rebuilt whenever the module table is refilled — enabling or revoking a module in the
+  // Library changes which rows exist, and the table it reads is a plain array that
+  // nothing reacts to on its own.
+  const groups = $derived(($modulesVersion, railGroups()));
 
   // How many tabs a row is holding. Shown only where it can be more than one, so a
   // singleton row never carries a "1" that means nothing.

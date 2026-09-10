@@ -22,12 +22,13 @@ Deno.test("an unknown method is refused even with every capability granted", () 
   const all = m({
     kanban: true,
     storage: true,
-    agent: true,
     fs: { read: ["/"], write: ["/"] },
   });
   assertEquals(allows(all, "termStart", {}), false);
   assertEquals(allows(all, "chatPrompt", {}), false);
   assertEquals(allows(all, "settingsWrite", {}), false);
+  // Removed from the set when it turned out nothing implemented it.
+  assertEquals(allows(all, "agentPrompt", {}), false);
   assertEquals(allows(all, "", {}), false);
 });
 

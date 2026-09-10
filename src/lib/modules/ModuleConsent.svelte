@@ -20,7 +20,6 @@
     ...(capabilities.fs?.read?.length
       ? [{ risk: true, text: `Read files under: ${capabilities.fs.read.join(", ")}` }]
       : []),
-    ...(capabilities.agent ? [{ risk: true, text: "Send prompts to this view's chat" }] : []),
     ...(capabilities.kanban ? [{ risk: false, text: "Read this scope's kanban board" }] : []),
     ...(capabilities.storage ? [{ risk: false, text: "Keep its own saved data" }] : []),
   ]);

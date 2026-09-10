@@ -109,7 +109,6 @@ checked.
 | ---------- | --------------------------------- | ------------------------------------------------- |
 | `kanban`   | `kanbanGetBoard`, `kanbanGetLogs` | read the board of the scope you are open in       |
 | `storage`  | `storageGet`, `storageSet`        | your own JSON blob, private to you and that scope |
-| `agent`    | `agentPrompt`                     | send a prompt to this view's chat                 |
 | `fs.read`  | `fsRead`                          | read files under the roots you declared           |
 | `fs.write` | `fsWrite`                         | write files under the roots you declared          |
 
@@ -133,7 +132,7 @@ disagree with what actually loads.
 | Arrive  | both files land in `pending/`                                  |
 | Review  | the Library row expands into the consent screen                |
 | Consent | both files move to `extensions/` together                      |
-| Appear  | after a Refresh — a running view is not rewired underneath you |
+| Appear  | as soon as you consent — the rail rebuilds, open tabs are left |
 | Revoke  | both move back to `pending/`; the row leaves the rail          |
 
 Consent re-reads and re-validates the definition at the moment you press it, not
@@ -189,6 +188,10 @@ tell you its request was blocked, so do not build on one noticing.
   asks permission, so the only place to allow it is the CSP header, per named
   host, with the consent screen naming those hosts. Until that exists, a module
   reads what it is granted and shows it.
+- **Sending a prompt to the chat.** Drafted as an `agent` capability and cut
+  before release: the broker allowed it while nothing implemented it, so a user
+  could have consented to something that could not happen. A consent screen that
+  asks about a grant with no effect is worse than one that does not offer it.
 - **A `ctrl+t` letter.** The chord is a fixed namespace, and an install claiming
   a letter could shadow a built-in. Modules are reachable from the rail and the
   `+` picker.
