@@ -1,9 +1,10 @@
 # User Modules — Design
 
-**Date:** 2026-09-02 **Status:** Proposed. Nothing below is implemented. The
-frame spike ran on 2026-09-02; its results are in
-[The frame, measured](#the-frame-measured) and they changed three decisions.
-Implementation plan:
+**Date:** 2026-09-02 **Status:** Implemented (2026-09-02). See
+[modules.md](../../modules.md) for the feature doc; deviations from this spec
+are recorded at the end. The frame spike ran the same day; its results are in
+[The frame, measured](#the-frame-measured) and they changed three decisions
+before any code was written. Implementation plan:
 [2026-09-02-user-modules.md](../plans/2026-09-02-user-modules.md).
 
 ## Purpose
@@ -387,3 +388,51 @@ enforces (decision 7), so a forged manifest still cannot exceed what it names;
 and the frame is a real boundary (decision 1), so the worst a dropped-in module
 achieves is what its manifest asked for, in one scope, rather than the `-A`
 process.
+
+## Deviations from this spec
+
+Recorded because the reasoning is the part worth re-reading. Nine, in descending
+order of how much they changed the design.
+
+1. **The `agent` capability was cut.** It shipped in the method table with no
+   handler behind it, so it could be granted, the consent screen offered it in
+   the warning group, and the call then failed as "not implemented". A consent
+   screen that asks a user to approve something that cannot happen is the one
+   defect this feature must not have. A test now holds the table to its handlers
+   in both directions.
+2. **A module is two sibling FILES, not a directory.** The spec sketched
+   `extensions/my_panel/{index.ts,module.json,ui/index.html}`.
+   `extensions/local.ts` discovers extensions as `extensions/<name>.ts` by
+   basename, so a directory would never have loaded as one. A module is
+   `notes.module.json` and `notes.ui.html` beside an optional `notes.ts`, and
+   the existing `.ts`-only listing ignores both.
+3. **There was no gate to attach the consent screen to.** Decision 7 assumed
+   one. A `module.json` in the live dir ran with whatever it declared and
+   nothing asked, so `pending/` for modules, `enableModule` and `revokeModule`
+   were built first. Consent re-reads and re-validates at the press, because the
+   window between reading a definition and agreeing to it is unbounded.
+4. **`define_module` was added.** Nothing in this spec put files into
+   `pending/`, which left the machinery real but unreachable — a module could
+   only be installed by hand. The tool mirrors `define_extension` and refuses,
+   at authoring time, both an unknown capability and an external `<script src>`.
+5. **`moduleEvents` was never built.** Decision 6 planned a bounded long-poll
+   beside `moduleCall`. Nothing needed a push channel — a panel polls when it
+   wants fresh data — so the event shapes were removed from the contract rather
+   than left as types the host does not honour.
+6. **A module's kind is its filename**, not a `kind` field in the definition, so
+   a definition cannot claim to be a module other than the one it sits beside.
+7. **Hydration order changed.** `hydrateModules` runs before `hydrateSession`,
+   because `migrateView` now drops a saved `activeGroup` the rail does not
+   offer, and a layout migrated before the module table is filled would treat
+   every installed module as revoked.
+8. **`migrateView` gained a fallback** that this spec did not anticipate.
+   Revoking a module a view had open left it opening on a row the rail no longer
+   lists: "Unknown module", nothing selected, and — since a singleton row has no
+   tab strip — no close button, so the tab could not be dismissed without
+   editing `layout.json`. Found by looking at a seeded fixture, not by a test.
+9. **Decision 10's "refresh" was a promise nothing kept.** Nothing refilled the
+   module table after boot, so a consented module appeared only after a restart
+   while the docs said Refresh. Enable and revoke now re-hydrate, and a version
+   store tells the rail to rebuild — verified by watching the rail gain and lose
+   a row live, since a build and a type check both pass on a rail that never
+   re-renders.

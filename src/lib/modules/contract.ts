@@ -26,16 +26,10 @@ export type ResultMessage = {
   value: unknown;
 };
 
-// Host → frame, unsolicited: a board changed, a file moved. Phase 3 wires the source;
-// the shape is fixed here so the frame SDK can be written against it now.
-export type EventMessage = {
-  t: "event";
-  topic: string;
-  payload: unknown;
-};
-
-export type FrameMessage = CallMessage;
-export type HostMessage = ResultMessage | EventMessage;
+// There is deliberately no event shape here. A push channel (a board changed, a file
+// moved) was designed and not built, because nothing yet needs one: a panel polls when
+// it wants fresh data. Adding the type before the mechanism would leave a contract the
+// host does not honour, which is worse than an obvious absence.
 
 // The single message the host posts on the window (not the port) to hand the port over.
 // The frame listens for it, keeps `event.ports[0]`, and speaks only on that afterwards.

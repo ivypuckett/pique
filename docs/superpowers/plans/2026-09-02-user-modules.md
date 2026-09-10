@@ -27,8 +27,11 @@ table (`MODULES`) stops being a `const` and becomes a merged runtime value.
 constraints this plan treats as non-negotiable, and every one of them is a thing
 that silently does the wrong thing if ignored.
 
-**Status:** The spec is Proposed, not accepted. This plan is what building it
-would take; writing it is not a decision to build it.
+**Status:** Executed 2026-09-02, commits `4280c60`..`973d83d`. Every task below
+is done, plus four things this plan did not contain: the consent gate itself
+(Task 12 assumed one existed), `define_module`, a `migrateView` fallback for a
+revoked module's row, and the removal of a capability nothing implemented. The
+spec's Deviations section records why each was needed.
 
 ---
 
