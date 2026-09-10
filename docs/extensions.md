@@ -19,8 +19,9 @@ Extensions come from two origins, which differ only in how the bytes arrive:
 An extension may also contribute a **module**: a panel in the right pane, drawn
 by its own HTML in a sandboxed frame. That is a second thing an extension can
 ship, not a second kind of extension — same acquisition, same review, same
-revoke — and it has its own consent gate over the capabilities it asks for. See
-[modules.md](modules.md).
+revoke — and it has its own consent gate over the capabilities it asks for. An
+agent writes one with `define_module`, the way it writes an extension with
+`define_extension`. See [modules.md](modules.md).
 
 A third source is not an extension at all: tools **compiled into pique**
 (`kanbanTools`, `promptAuthoringTools`, `define_extension` itself) are passed to

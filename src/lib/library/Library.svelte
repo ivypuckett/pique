@@ -659,7 +659,11 @@
       {:else if item.kind === "module"}
         {@const def = item.module ?? item.pending?.def}
         {#if def}
-          <ModuleConsent capabilities={def.capabilities} name={item.subtitle ?? def.label} />
+          <ModuleConsent
+            capabilities={def.capabilities}
+            name={item.subtitle ?? def.label}
+            rationale={def.rationale}
+          />
         {/if}
       {:else if item.kind === "prompt"}
         <PromptDetail prompt={item.prompt} />

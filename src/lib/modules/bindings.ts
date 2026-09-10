@@ -25,6 +25,7 @@ export type ModuleCapabilities = {
 export type InstalledModule = {
   kind: string;
   label: string;
+  rationale?: string;
   duplicable?: boolean;
   capabilities: ModuleCapabilities;
   scope: string;

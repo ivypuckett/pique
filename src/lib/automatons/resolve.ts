@@ -21,6 +21,7 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
+import { moduleAuthoringTools } from "../modules/agent-tools.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { isValidSource, listEnabledPackages } from "../extensions/packages.ts";
 import { livePath } from "../extensions/paths.ts";
@@ -39,6 +40,7 @@ export const BUILTIN_GROUPS: Record<
 > = {
   "kanban": kanbanTools,
   "extension-authoring": extensionAuthoringTools,
+  "module-authoring": moduleAuthoringTools,
   "prompt-authoring": promptAuthoringTools,
 };
 

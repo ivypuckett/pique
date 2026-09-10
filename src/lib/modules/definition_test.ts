@@ -99,3 +99,15 @@ Deno.test("duplicable must be a boolean when present", () => {
   assertEquals(r.ok, true);
   if (r.ok) assertEquals(r.def.duplicable, true);
 });
+
+// An agent-authored module carries its reason (modules/agent-tools.ts) and the consent
+// screen shows it. Validated like every other field rather than passed through: it is
+// rendered to a user who is deciding whether to trust the thing.
+Deno.test("a rationale is carried through, and must be a string", () => {
+  const r = ok("notes", { label: "N", rationale: "A scratchpad." });
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.def.rationale, "A scratchpad.");
+  assertEquals(ok("notes", { label: "N", rationale: 42 }).ok, false);
+  const none = ok("notes", { label: "N" });
+  assertEquals(none.ok && none.def.rationale, undefined);
+});

@@ -99,6 +99,9 @@ export function parseDefinition(name: string, text: string): ParseResult {
   if (obj.duplicable !== undefined && typeof obj.duplicable !== "boolean") {
     return { ok: false, error: "duplicable must be a boolean" };
   }
+  if (obj.rationale !== undefined && typeof obj.rationale !== "string") {
+    return { ok: false, error: "rationale must be a string" };
+  }
 
   const capabilities = parseCapabilities(obj.capabilities);
   if (typeof capabilities === "string") {
@@ -110,6 +113,7 @@ export function parseDefinition(name: string, text: string): ParseResult {
     def: {
       kind: name,
       label: label.trim(),
+      rationale: obj.rationale as string | undefined,
       duplicable: obj.duplicable as boolean | undefined,
       capabilities,
     },

@@ -144,6 +144,7 @@ import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
 import { readJson, resolveModuleDir } from "../settings/file.ts";
 import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
+import { moduleAuthoringTools } from "../modules/agent-tools.ts";
 import { inheritedExtensionPaths } from "../extensions/service.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
@@ -256,6 +257,7 @@ export async function startAgent(
   const agentDefs = await listVisibleAgents(scope);
   const customTools = [
     ...extensionAuthoringTools(scope),
+    ...moduleAuthoringTools(scope),
     ...promptAuthoringTools(scope),
     ...kanbanTools(scope),
     ...subagentTools(scope, cwd, modelRuntime, model, agentDefs),

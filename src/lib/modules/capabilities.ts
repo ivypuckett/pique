@@ -29,6 +29,10 @@ export type Capabilities = {
 
 export type Manifest = {
   kind: string;
+  // Why this module exists, when an agent wrote it (modules/agent-tools.ts). Shown on
+  // the consent screen: a user deciding about a panel they did not ask for needs the
+  // reason as much as the grants.
+  rationale?: string;
   label: string;
   duplicable?: boolean;
   capabilities: Capabilities;

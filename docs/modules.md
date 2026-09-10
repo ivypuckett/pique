@@ -8,6 +8,20 @@ Every capability surface before this one reaches the **agent**: an extension
 registers tools, a skill teaches it, a prompt template steers it. A module is
 the first that reaches **you** — it draws.
 
+## Where a module comes from
+
+Two ways in, and both land at the same gate.
+
+**Ask the agent.** `define_module` writes the panel and its definition into the
+scope's quarantine dir. The agent chooses what to ask for; you decide whether it
+gets it. Its stated reason is carried in the definition and shown to you on the
+consent screen — as its own account of itself, not as pique vouching for it.
+
+**Write the files yourself.** Drop them in `pending/` by hand. Same gate, same
+consent screen.
+
+Neither path can put a module into use. Only consent does.
+
 ## Two files
 
 A module is an extension that also draws, so it lives where its extension lives:
@@ -129,7 +143,7 @@ disagree with what actually loads.
 
 | Step    | What happens                                                   |
 | ------- | -------------------------------------------------------------- |
-| Arrive  | both files land in `pending/`                                  |
+| Arrive  | `define_module`, or two files placed in `pending/` by hand     |
 | Review  | the Library row expands into the consent screen                |
 | Consent | both files move to `extensions/` together                      |
 | Appear  | as soon as you consent — the rail rebuilds, open tabs are left |

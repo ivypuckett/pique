@@ -47,11 +47,12 @@ async function writeSkill(scope: ScopeId, name: string): Promise<void> {
   );
 }
 
-Deno.test("the three pique: groups resolve to tool definitions, not paths", async () => {
+Deno.test("the pique: groups resolve to tool definitions, not paths", async () => {
   await withTempHome(async () => {
     const r = await resolveExtensionRefs("ws-1", [
       "pique:kanban",
       "pique:extension-authoring",
+      "pique:module-authoring",
       "pique:prompt-authoring",
     ]);
     assertEquals(r.extensionPaths, []);
@@ -60,6 +61,7 @@ Deno.test("the three pique: groups resolve to tool definitions, not paths", asyn
     assertEquals(Object.keys(BUILTIN_GROUPS).sort(), [
       "extension-authoring",
       "kanban",
+      "module-authoring",
       "prompt-authoring",
     ]);
   });

@@ -10,7 +10,11 @@
   // something they could have used.
   import type { ModuleCapabilities } from "./bindings.ts";
 
-  let { capabilities, name }: { capabilities: ModuleCapabilities; name: string } = $props();
+  let { capabilities, name, rationale }: {
+    capabilities: ModuleCapabilities;
+    name: string;
+    rationale?: string;
+  } = $props();
 
   // Ordered by how much a person should care, not by how the JSON is written.
   const lines = $derived([
@@ -26,6 +30,11 @@
 </script>
 
 <div class="flex flex-col gap-2 text-sm">
+  {#if rationale}
+    <!-- An agent's stated reason. Quoted rather than asserted: this is the module's own
+         account of itself, not pique vouching for it. -->
+    <div class="border-l-2 border-base-300 pl-2 italic opacity-70">{rationale}</div>
+  {/if}
   <div class="opacity-70">
     <span class="font-mono">{name}</span> runs its own code in a sandboxed frame. It can do
     only what you allow here:
