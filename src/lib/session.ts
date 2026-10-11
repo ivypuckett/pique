@@ -104,7 +104,9 @@ export function isSessionState(s: unknown): s is SessionState {
 }
 
 // Every view through adoptView (layout.ts), so none opens on a module that is gone.
+// Rebuilt from the two fields a session has rather than spread, so a key an older
+// build wrote (the root workspace's) is dropped instead of written back forever.
 export function adoptSession(s: SessionState): SessionState {
   const adopt = (w: WorkspaceState) => ({ ...w, views: w.views.map(adoptView) });
-  return { ...s, workspaces: s.workspaces.map(adopt) };
+  return { workspaces: s.workspaces.map(adopt), activeId: s.activeId };
 }

@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   addWorkspace,
+  adoptSession,
   allWorkspaces,
   closeWorkspace,
   createInitialSession,
@@ -113,4 +114,13 @@ Deno.test("isSessionState accepts a real session and rejects malformed shapes", 
   // activeId names no workspace
   const s = createInitialSession();
   assertEquals(isSessionState({ ...s, activeId: "ws-999" }), false);
+});
+
+// A layout written while the root workspace existed still passes the guard when its
+// active workspace is a numbered one; the root it carries is dropped, not kept.
+Deno.test("adoptSession keeps only what a session has", () => {
+  const s = createInitialSession();
+  const old = { ...s, root: s.workspaces[0] } as typeof s;
+  assertEquals(isSessionState(old), true);
+  assertEquals(Object.keys(adoptSession(old)).sort(), ["activeId", "workspaces"]);
 });
