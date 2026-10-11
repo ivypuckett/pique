@@ -12,7 +12,6 @@ import {
   listLocal,
   listVisibleLocal,
   type LocalState,
-  promoteLocal,
   readLocalSource,
   removeLocal,
   revokeLocal,
@@ -24,7 +23,6 @@ import {
   listEnabledPackages,
   listPendingPackages,
   type PackageType,
-  promotePackage,
   removePackage,
   resolvePackageFiles,
   revokePackage,
@@ -37,7 +35,6 @@ import {
   scopeAgentDir,
   type ScopeId,
 } from "../scope/paths.ts";
-import { assertPromotable, type PromoteResult } from "../scope/promote.ts";
 import { digestOf } from "../digest.ts";
 
 export {
@@ -320,19 +317,3 @@ export async function extensionLoadErrors(
   }));
 }
 
-// Move this extension up to root. Both origins land in root's quarantine rather than
-// its loading set — see promoteLocal and promotePackage for why an approval made in one
-// workspace does not carry.
-export async function promoteExtension(
-  scope: ScopeId,
-  id: string,
-  state: ExtState,
-  overwrite = false,
-): Promise<PromoteResult> {
-  assertPromotable(scope);
-  const { origin, key } = parseId(id);
-  if (origin === "local") {
-    return await promoteLocal(scope, key, state, overwrite);
-  }
-  return await promotePackage(scope, key, overwrite);
-}

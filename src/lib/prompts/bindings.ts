@@ -2,8 +2,7 @@
 // win.bind handlers in src/desktop.ts (delegating to prompts/service.ts) — keep
 // arg/return shapes in sync by hand (separate module graphs).
 import type { PromptInfo, PromptState } from "./service.ts";
-import type { PromoteResult } from "../scope/promote.ts";
-export type { PromoteResult, PromptInfo, PromptState };
+export type { PromptInfo, PromptState };
 
 // Every call names the scope it acts on: a template belongs to one scope, and saving it
 // in root is what makes it invocable in every workspace. `promptsList` is a scope's own
@@ -24,16 +23,6 @@ export interface PromptBindings {
   promptsDelete(
     arg: { scope: string; name: string; state: PromptState },
   ): Promise<unknown>;
-  // Moves the template into root, keeping the state it was in. `{ conflict: true }` is
-  // the "root already has one" answer, which the caller resolves with `overwrite`.
-  promptsPromote(
-    arg: {
-      scope: string;
-      name: string;
-      state: PromptState;
-      overwrite?: boolean;
-    },
-  ): Promise<PromoteResult>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — the Prompts
