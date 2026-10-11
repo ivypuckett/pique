@@ -812,9 +812,6 @@ skills = await import("./lib/skills/service.ts");
 agents = await import("./lib/agents/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 scopePrompt = await import("./lib/scope/prompt.ts");
-// Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
-// ~/.pique/scopes/root before anything reads from the new locations. No-op once done.
-await (await import("./lib/scope/migrate.ts")).migrateToScopes();
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const { fromFileUrl } = await import("@std/path");
 // Resolved off this module rather than the cwd: `--include dist` embeds the build one

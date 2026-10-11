@@ -10,8 +10,7 @@
 // The rail row that holds the file tree and the files opened from it. It has no module of
 // its own, which is why it is a bare id rather than a MODULES entry. moduleLabel has no
 // entry to read a label from either, so it capitalises this id — the row is named here and
-// nowhere else. It was called the explorer until the rename; migrateView still answers to
-// that id, since it is written into every layout.json older than the change.
+// nowhere else.
 export const EDITOR = "editor";
 
 export type ModuleDef = {

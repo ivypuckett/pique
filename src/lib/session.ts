@@ -1,9 +1,9 @@
 import {
   createInitialWorkspace,
   isWorkspaceState,
-  migrateWorkspace,
   type WorkspaceState,
 } from "./workspace.ts";
+import { adoptView } from "./layout.ts";
 import { ROOT } from "./scope/paths.ts";
 
 // A session is the root workspace plus an ordered set of numbered workspaces,
@@ -119,40 +119,8 @@ export function isSessionState(s: unknown): s is SessionState {
   return ids.includes(obj.activeId);
 }
 
-// Adopt a persisted layout of any older shape rather than discarding it — a rejected
-// tree costs the user every workspace, its working directory and its views.
-//
-// Two generations are handled, and they compose: layouts written before root existed are
-// `{ workspaces, activeId }` and gain a fresh root above the workspaces they already
-// have (`defaultDir` is the old global setting root's cwd now supersedes — see
-// settings/file.ts resolveModuleDir), and views written before the right pane had groups
-// are converted one level down, in migrateWorkspace.
-export function migrateSession(
-  raw: unknown,
-  defaultDir?: string,
-): SessionState | null {
-  if (isSessionState(raw)) return raw;
-  if (typeof raw !== "object" || raw === null) return null;
-  const obj = raw as Record<string, unknown>;
-  if (!Array.isArray(obj.workspaces)) return null;
-  const migrated = obj.workspaces.map(migrateWorkspace);
-  if (migrated.some((w) => w === null)) return null;
-  const workspaces = migrated as WorkspaceState[];
-
-  let root: WorkspaceState | null;
-  if (obj.root === undefined) {
-    const fresh = createInitialWorkspace(ROOT, "Root");
-    root = defaultDir && defaultDir.trim() !== ""
-      ? { ...fresh, cwd: defaultDir }
-      : fresh;
-  } else {
-    root = migrateWorkspace(obj.root);
-    if (!root) return null;
-  }
-
-  const ids = [root.id, ...workspaces.map((w) => w.id)];
-  const activeId = typeof obj.activeId === "string" && ids.includes(obj.activeId)
-    ? obj.activeId
-    : (workspaces[0]?.id ?? ROOT);
-  return { root, workspaces, activeId };
+// Every view through adoptView (layout.ts), so none opens on a module that is gone.
+export function adoptSession(s: SessionState): SessionState {
+  const adopt = (w: WorkspaceState) => ({ ...w, views: w.views.map(adoptView) });
+  return { ...s, root: adopt(s.root), workspaces: s.workspaces.map(adopt) };
 }

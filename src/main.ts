@@ -46,10 +46,6 @@ function setFont(token: string, value: string): void {
 // the default layout/theme. In web-dev (no backend) both resolve to defaults at once.
 // Wrapped (not top-level await) because the build target predates module TLA.
 //
-// Sequenced, not concurrent: hydrateSession reads the OLD settings.workspace.defaultDir
-// to seed the root workspace's cwd on a pre-root layout, and hydrateSettings persists a
-// Settings object that no longer carries that field. Running them together left the
-// read racing the write, correct only by virtue of a 150ms debounce.
 // hydrateThemes comes last and before the mount: it injects the theme rules, so the app
 // would otherwise render with none of the custom properties it is built on, and it can
 // correct settings.appearance.theme when that names a theme that no longer exists —
@@ -57,8 +53,8 @@ function setFont(token: string, value: string): void {
 // Modules FIRST, ahead of the layout. Two reasons, and the second is the sharp one:
 // the module table is a plain array rather than reactive state, so a tab whose kind
 // arrives after the first render stays "Unknown module" until something re-renders it;
-// and migrateView now drops a saved `activeGroup` the rail does not offer, so a layout
-// migrated before the table is filled would treat every installed module as revoked.
+// and adoptView drops a saved `activeGroup` the rail does not offer, so a layout
+// adopted before the table is filled would treat every installed module as removed.
 hydrateModules()
   .then(hydrateSession)
   .then(hydrateSettings)

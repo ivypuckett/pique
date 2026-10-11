@@ -32,8 +32,8 @@ import {
   createInitialSession,
   focusAdjacent as focusAdjacentWorkspaceFn,
   focusWorkspace as focusWorkspaceFn,
+  adoptSession,
   isSessionState,
-  migrateSession,
   type SessionState,
   updateWorkspace,
   workspaceById,
@@ -59,25 +59,10 @@ let hydrated = false;
 
 export async function hydrateSession(): Promise<void> {
   const raw = await readConfig("layout");
-  // Layouts written before the root workspace existed are adopted under a fresh
-  // root, seeded with the old global default dir that root's cwd now supersedes.
-  const settings = await readConfig("settings");
-  const defaultDir =
-    (settings as { workspace?: { defaultDir?: unknown } } | null)
-      ?.workspace?.defaultDir;
-  const adopted = !isSessionState(raw);
-  const migrated = migrateSession(
-    raw,
-    typeof defaultDir === "string" ? defaultDir : undefined,
-  );
-  if (migrated) session.set(migrated);
+  // A layout of any other shape — corrupt, or written by an older build — is dropped
+  // and the defaults stand.
+  if (isSessionState(raw)) session.set(adoptSession(raw));
   hydrated = true;
-  // set() above ran while `hydrated` was still false, so the persist subscription
-  // skipped it — right for a tree read back unchanged, wrong for one we just
-  // transformed. Write an adopted tree NOW: the settings.workspace.defaultDir that
-  // seeded root's cwd is dropped the first time settings are persisted, so leaving
-  // the old shape on disk until the user's next action risks losing it.
-  if (migrated && adopted) await writeConfig("layout", migrated);
 }
 
 // Every workspace in rail order, root first — what the rail and Session.svelte render.

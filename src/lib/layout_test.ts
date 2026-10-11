@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { railGroups, setInstalledModules } from "./modules/manifest.ts";
+import { setInstalledModules } from "./modules/manifest.ts";
 import {
   createInitialView,
   gridTemplateColumns,
@@ -18,8 +18,8 @@ import {
   focusAdjacentTab,
   focusTabAt,
   groupTabs,
+  adoptView,
   isViewState,
-  migrateView,
   newTab,
   selectGroup,
   setActiveTab,
@@ -472,286 +472,25 @@ Deno.test("addTab opens a Library tab titled Library", () => {
   assertEquals(activeTabId(v), tab.id);
 });
 
-// A view as it was persisted before the right pane had groups: one flat `rows` list with
-// a single `activeTabId`, and the explorer's width and hidden flag beside it.
-function oldView(
-  rows: Record<string, unknown>[],
-  activeTabId: string,
-  extra: Record<string, unknown> = {},
-): unknown {
-  return {
-    id: "view-1",
-    chatWidthCh: 80,
-    center: {
-      collapsed: false,
-      activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
-    },
-    right: { collapsed: false, activeTabId, rows },
-    explorer: { widthCh: 24, hidden: true },
-    ...extra,
-  };
+// A view saved while a module was installed, read back after it was removed.
+function savedView(right: ViewState["right"]): ViewState {
+  return { ...createInitialView(), right };
 }
 
-Deno.test("migrateView returns a view that is already grouped untouched", () => {
-  const v = createInitialView();
-  assertEquals(migrateView(v), v);
-});
-
-Deno.test("migrateView groups a pre-groups pane by kind and keeps the shown tab", () => {
-  const v = migrateView(oldView([
-    { id: "right-1", title: "Terminal", kind: "terminal" },
-    { id: "right-2", title: "Kanban", kind: "kanban" },
-    { id: "right-3", title: "Terminal", kind: "terminal" },
-  ], "right-2"))!;
-  assertEquals(v.right.tabs.map((t) => [t.id, t.group]), [
-    ["right-1", "terminal"],
-    ["right-2", "kanban"],
-    ["right-3", "terminal"],
-  ]);
-  assertEquals(v.right.activeGroup, "kanban");
-  assertEquals(activeTabId(v), "right-2");
-  // every other group opens on its first tab
-  assertEquals(v.right.activeTabs, { kanban: "right-2", terminal: "right-1" });
-  // and the rest of the view survives
-  assertEquals(v.id, "view-1");
-  assertEquals(v.chatWidthCh, 80);
-  assertEquals(v.editorWidthCh, 24); // carried out of the old explorer object
-});
-
-Deno.test("migrateView keeps the first of a singleton kind that was duplicated", () => {
-  const v = migrateView(oldView([
-    { id: "right-1", title: "Kanban", kind: "kanban" },
-    { id: "right-2", title: "Kanban", kind: "kanban" },
-    { id: "right-3", title: "Kanban", kind: "kanban" },
-  ], "right-3"))!;
-  assertEquals(v.right.tabs.map((t) => t.id), ["right-1"]);
-  assertEquals(v.right.activeGroup, "kanban");
-  // the tab that was on screen is gone, so the group falls back to the one that is left
-  assertEquals(activeTabId(v), "right-1");
-});
-
-Deno.test("migrateView moves editors and path-scoped diffs into the editor group", () => {
-  const v = migrateView(oldView([
-    { id: "right-1", title: "Terminal", kind: "terminal" },
-    {
-      id: "right-2",
-      title: "a.ts",
-      kind: "terminal",
-      props: { argv: ["$EDITOR", "src/a.ts"], autoCloseOnExit: true },
-    },
-    {
-      id: "right-3",
-      title: "b.ts",
-      kind: "gitdiff",
-      props: { path: "src/b.ts" },
-    },
-  ], "right-2"))!;
-  assertEquals(groupTabs(v, EDITOR).map((t) => t.title), ["a.ts", "b.ts"]);
-  assertEquals(groupTabs(v, "terminal").map((t) => t.id), ["right-1"]);
-  assertEquals(v.right.activeGroup, EDITOR);
-  assertEquals(activeTabId(v), "right-2");
-});
-
-Deno.test("migrateView selects a group for a pane migrated with no tabs at all", () => {
-  const v = migrateView(oldView([], ""))!;
-  assertEquals(v.right.tabs, []);
-  assertEquals(v.right.activeGroup, "terminal");
-  assertEquals(activeTabId(v), "");
-});
-
-// A view as persisted between grouping the pane and moving the tree into the explorer
-// row: `right` is already grouped, but the tree's width still sits in an `explorer`
-// object. Rejecting this shape cost the app every workspace it read.
-function groupedView(right: Record<string, unknown>): unknown {
-  return {
-    id: "view-1",
-    chatWidthCh: 57,
-    center: {
-      collapsed: false,
-      activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Chat", kind: "chat", group: "chat" }],
-    },
-    right,
-    explorer: { widthCh: 42, hidden: false },
-  };
-}
-
-Deno.test("migrateView adopts a grouped pane whose width is still in an explorer object", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
-    activeGroup: "kanban",
-    tabs: [
-      { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
-      { id: "right-2", title: "Kanban", kind: "kanban", group: "kanban" },
-      {
-        id: "right-3",
-        title: "a.ts",
-        kind: "terminal",
-        group: EDITOR,
-        props: { path: "a" },
-      },
-    ],
-    activeTabs: { terminal: "right-1", kanban: "right-2", editor: "right-3" },
-  }))!;
-  assertEquals(v.right.tabs.map((t) => [t.id, t.group]), [
-    ["right-1", "terminal"],
-    ["right-2", "kanban"],
-    ["right-3", EDITOR],
-  ]);
-  assertEquals(v.right.activeGroup, "kanban"); // the selected row is kept, not re-derived
-  assertEquals(v.right.activeTabs, {
-    terminal: "right-1",
-    kanban: "right-2",
-    editor: "right-3",
-  });
-  assertEquals(v.editorWidthCh, 42); // carried out of the old explorer object
-  assertEquals(isViewState(v), true);
-});
-
-Deno.test("migrateView drops a remembered tab that no longer exists or moved group", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
-    activeGroup: "terminal",
-    tabs: [{
-      id: "right-1",
-      title: "Terminal",
-      kind: "terminal",
-      group: "terminal",
-    }],
-    activeTabs: { terminal: "right-1", kanban: "right-9", library: "right-1" },
-  }))!;
-  assertEquals(v.right.activeTabs, { terminal: "right-1" });
-  assertEquals(isViewState(v), true);
-});
-
-Deno.test("migrateView keeps a grouped pane's selected row even with nothing open in it", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
-    activeGroup: "library",
-    tabs: [],
-    activeTabs: {},
-  }))!;
-  assertEquals(v.right.activeGroup, "library");
-  assertEquals(activeTabId(v), "");
-});
-
-// The rename of the explorer row to the editor. The dangerous shape is the second one: a
-// view written by the build immediately before the rename is structurally current, so it
-// reaches isViewState and would be adopted whole, its tabs stranded in a row the rail no
-// longer lists.
-Deno.test("migrateView renames the explorer group an older grouped pane still names", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
-    activeGroup: "explorer",
-    tabs: [
-      { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
-      {
-        id: "right-2",
-        title: "a.ts",
-        kind: "terminal",
-        group: "explorer",
-        props: { path: "a" },
-      },
-    ],
-    activeTabs: { terminal: "right-1", explorer: "right-2" },
-  }))!;
-  assertEquals(v.right.activeGroup, EDITOR);
-  assertEquals(v.right.tabs.map((t) => t.group), ["terminal", EDITOR]);
-  assertEquals(v.right.activeTabs, { terminal: "right-1", editor: "right-2" });
-  assertEquals(isViewState(v), true);
-});
-
-// The shape the build immediately before the rename wrote: the row's id in three places,
-// and the width under its old name.
-function preRenameView(widthKey: string): unknown {
-  return {
-    id: "view-1",
-    chatWidthCh: 57,
-    [widthKey]: 42,
-    right: {
-      collapsed: false,
-      activeGroup: "explorer",
-      tabs: [{
-        id: "right-1",
-        title: "a.ts",
-        kind: "terminal",
-        group: "explorer",
-        props: { path: "a" },
-      }],
-      activeTabs: { explorer: "right-1" },
-    },
-  };
-}
-
-Deno.test("migrateView renames the explorer group and carries its width across", () => {
-  const v = migrateView(preRenameView("explorerWidthCh"))!;
-  assertEquals(v.right.activeGroup, EDITOR);
-  assertEquals(v.right.tabs[0].group, EDITOR);
-  assertEquals(v.right.activeTabs, { editor: "right-1" });
-  assertEquals(v.editorWidthCh, 42);
-  assertEquals("explorerWidthCh" in v, false); // moved, so it stops being written back
-  assertEquals(railGroups().includes(v.right.activeGroup), true); // reachable from the rail
-});
-
-// Why the rewrite runs ahead of migrateView's isViewState short circuit rather than inside
-// the migrations below it. isRightState asks only that a group be a non-empty string, so a
-// view still naming the explorer passes the guard — and short-circuiting there would adopt
-// it whole, stranding the tree's tabs in a row railGroups no longer offers.
-Deno.test("migrateView renames the explorer group even in a view the guard accepts", () => {
-  const accepted = preRenameView("editorWidthCh");
-  assertEquals(isViewState(accepted), true);
-  const v = migrateView(accepted)!;
-  assertEquals(v.right.activeGroup, EDITOR);
-  assertEquals(v.right.tabs[0].group, EDITOR);
-  assertEquals(v.right.activeTabs, { editor: "right-1" });
-});
-
-Deno.test("migrateView refuses a view with no recognisable pane", () => {
-  assertEquals(migrateView(null), null);
-  assertEquals(migrateView({}), null);
-  assertEquals(migrateView({ right: { rows: "nope" } }), null);
-  assertEquals(migrateView({ right: { rows: [{ id: 1 }] } }), null);
-});
-
-Deno.test("migrateView fills in a width it cannot read", () => {
-  const base = createInitialView();
-  const raw = oldView(
-    [{ id: "right-1", title: "Terminal", kind: "terminal" }],
-    "right-1",
-  ) as Record<string, unknown>;
-  delete raw.chatWidthCh;
-  raw.explorer = { widthCh: "wide" };
-  const v = migrateView(raw)!;
-  assertEquals(v.chatWidthCh, base.chatWidthCh);
-  assertEquals(v.editorWidthCh, base.editorWidthCh);
-});
-
-Deno.test("a migrated view passes the guard the store uses", () => {
-  const v: ViewState = migrateView(oldView([
-    { id: "right-1", title: "Terminal", kind: "terminal" },
-    { id: "right-2", title: "Library", kind: "library" },
-  ], "right-1"))!;
-  assertEquals(isViewState(v), true);
-});
-
-// Revoking a module the view had open leaves `activeGroup` naming a row the rail no
-// longer offers. Before this, the pane opened on that row: "Unknown module", nothing
-// selected on the rail, and — since a singleton row has no tab strip — no close button
-// either, so the tab could not be dismissed without editing layout.json. layout.ts:336
-// already worried about this shape for a cross-build layout; a revoke makes it routine.
-Deno.test("migrateView falls back when the selected row is one the rail no longer offers", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
-    activeGroup: "notes", // a module that has since been revoked
+// A removed module leaves views naming its row. Opening there would show "Unknown
+// module" with nothing selected on the rail and — since a singleton row has no tab
+// strip — no close button either, so the tab could not be dismissed.
+Deno.test("adoptView falls back when the selected row is one the rail no longer offers", () => {
+  const v = adoptView(savedView({
+    activeGroup: "notes", // a module that has since been removed
     tabs: [
       { id: "right-1", title: "Terminal", kind: "terminal", group: "terminal" },
       { id: "right-2", title: "Notes", kind: "notes", group: "notes" },
     ],
     activeTabs: { terminal: "right-1", notes: "right-2" },
-  }))!;
+  }));
   assertEquals(v.right.activeGroup, "terminal");
-  // The tab itself stays. Re-enabling the module brings the row back with the tab where
+  // The tab itself stays. Reinstalling the module brings the row back with the tab where
   // it was left, and while it is gone the tab is simply unreachable rather than stuck
   // on screen.
   assertEquals(v.right.tabs.map((t) => t.id), ["right-1", "right-2"]);
@@ -760,29 +499,26 @@ Deno.test("migrateView falls back when the selected row is one the rail no longe
 
 // The fallback must not fire for a module that IS installed — which is why the module
 // table is hydrated before the layout in main.ts.
-Deno.test("migrateView keeps the selected row when it is an installed module", () => {
+Deno.test("adoptView keeps the selected row when it is an installed module", () => {
   setInstalledModules([{ kind: "notes", label: "Notes", key: "" }]);
   try {
-    const v = migrateView(groupedView({
-      collapsed: false,
+    const v = adoptView(savedView({
       activeGroup: "notes",
       tabs: [{ id: "right-2", title: "Notes", kind: "notes", group: "notes" }],
       activeTabs: { notes: "right-2" },
-    }))!;
+    }));
     assertEquals(v.right.activeGroup, "notes");
   } finally {
     setInstalledModules([]);
   }
 });
 
-// Nothing open to fall back TO, so the default view's row is what is left. Not the
-// editor: createInitialView opens on the terminal, and the fallback chain ends there.
-Deno.test("migrateView falls back to the default row when no open tab sits on an offered one", () => {
-  const v = migrateView(groupedView({
-    collapsed: false,
+// Nothing open to fall back TO, so the default view's row is what is left.
+Deno.test("adoptView falls back to the default row when no open tab sits on an offered one", () => {
+  const v = adoptView(savedView({
     activeGroup: "notes",
     tabs: [{ id: "right-2", title: "Notes", kind: "notes", group: "notes" }],
     activeTabs: { notes: "right-2" },
-  }))!;
+  }));
   assertEquals(v.right.activeGroup, "terminal");
 });

@@ -1,7 +1,6 @@
 import {
   createInitialView,
   isViewState,
-  migrateView,
   type ViewState,
 } from "./layout.ts";
 
@@ -100,16 +99,3 @@ export function isWorkspaceState(w: unknown): w is WorkspaceState {
     (obj.views as ViewState[]).some((v) => v.id === obj.activeId);
 }
 
-// Adopt a persisted workspace whose views may predate the right pane's groups, migrating
-// each view before the guard above sees it. Null when the workspace itself is malformed
-// or any of its views cannot be migrated.
-export function migrateWorkspace(raw: unknown): WorkspaceState | null {
-  if (isWorkspaceState(raw)) return raw;
-  if (typeof raw !== "object" || raw === null) return null;
-  const obj = raw as Record<string, unknown>;
-  if (!Array.isArray(obj.views)) return null;
-  const views = obj.views.map(migrateView);
-  if (views.some((v) => v === null)) return null;
-  const migrated = { ...obj, views } as WorkspaceState;
-  return isWorkspaceState(migrated) ? migrated : null;
-}
