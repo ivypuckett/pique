@@ -7,7 +7,6 @@ import type { Extension } from "../extensions/bindings.ts";
 import type { InstalledModule, PendingModule } from "../modules/bindings.ts";
 import type { PromptInfo } from "../prompts/bindings.ts";
 import type { SkillInfo } from "../skills/bindings.ts";
-import type { AgentDef } from "../agents/bindings.ts";
 import type { PromptFileInfo } from "../scope/prompt-bindings.ts";
 
 // `system` and `appendix` are two kinds rather than one with a mode because they merge
@@ -19,7 +18,6 @@ export type LibraryKind =
   | "module"
   | "prompt"
   | "skill"
-  | "subagent"
   | "system"
   | "appendix";
 
@@ -64,7 +62,6 @@ export type LibraryItem =
   })
   | (Common & { kind: "prompt"; prompt: PromptInfo })
   | (Common & { kind: "skill"; skill: SkillInfo })
-  | (Common & { kind: "subagent"; agent: AgentDef })
   // Same payload for both, because the file is the same shape either way — what differs
   // is the merge rule, which the kind itself names.
   | (Common & { kind: "system"; file: PromptFileInfo })
@@ -80,7 +77,6 @@ const KIND_ORDER: Record<LibraryKind, number> = {
   module: 3,
   prompt: 4,
   skill: 5,
-  subagent: 6,
 };
 
 export type LibraryGroups = {

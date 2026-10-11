@@ -40,7 +40,6 @@ let git: typeof import("./lib/gitdiff/git.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
-let agents: typeof import("./lib/agents/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
 let scopePrompt: typeof import("./lib/scope/prompt.ts");
 // Assigned when the module file server starts, at the very bottom of this file.
@@ -565,49 +564,6 @@ win.bind("skillsPromote", async (arg) => {
   return await skills.promoteSkill(scope, name, overwrite === true);
 });
 
-// Subagents — named system prompts a chat agent delegates to (docs/subagents.md). Both
-// halves write to the same live dir: there is no quarantine here, so unlike prompts*
-// these handlers have no approve/reject pair, and an agent's define_subagent writes
-// exactly what the Library does. agentsList is the scope's own definitions — the ones it
-// can edit or delete; what run_subagent can reach is resolved per call, in the tool.
-win.bind("agentsList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await agents.listAgents(scope);
-});
-
-win.bind("agentsSave", async (arg) => {
-  const { scope, name, description, tools, model, systemPrompt } = arg as {
-    scope: string;
-    name: string;
-    description: string;
-    tools?: string[];
-    model?: string;
-    systemPrompt: string;
-  };
-  await agents.saveAgent(scope, name, {
-    description,
-    tools,
-    model,
-    systemPrompt,
-  });
-  return true;
-});
-
-win.bind("agentsDelete", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await agents.deleteAgent(scope, name);
-  return true;
-});
-
-win.bind("agentsPromote", async (arg) => {
-  const { scope, name, overwrite } = arg as {
-    scope: string;
-    name: string;
-    overwrite?: boolean;
-  };
-  return await agents.promoteAgent(scope, name, overwrite === true);
-});
-
 // The scope's two prompt files, SYSTEM.md and APPEND_SYSTEM.md (docs/scopes.md). Unlike
 // every other Library kind these are singletons addressed by KIND, not by name — there
 // is one of each per scope — and the human half is the only half: no agent tool writes
@@ -665,7 +621,6 @@ git = await import("./lib/gitdiff/git.ts");
 extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
 skills = await import("./lib/skills/service.ts");
-agents = await import("./lib/agents/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
 scopePrompt = await import("./lib/scope/prompt.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");

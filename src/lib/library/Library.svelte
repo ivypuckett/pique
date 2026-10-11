@@ -10,7 +10,6 @@
   } from "../extensions/bindings.ts";
   import { promptBindings } from "../prompts/bindings.ts";
   import { skillBindings } from "../skills/bindings.ts";
-  import { agentBindings } from "../agents/bindings.ts";
   import { systemPromptBindings } from "../scope/prompt-bindings.ts";
   import { extensionItems } from "../extensions/items.ts";
   import { moduleItems } from "../modules/items.ts";
@@ -18,7 +17,6 @@
   import ModuleConsent from "../modules/ModuleConsent.svelte";
   import { type Draft, promptItems } from "../prompts/items.ts";
   import { skillItems } from "../skills/items.ts";
-  import { agentItems, type Draft as AgentDraft } from "../agents/items.ts";
   import {
     PROMPT_FILE_NAMES,
     promptFileItems,
@@ -30,8 +28,6 @@
   import PromptDetail from "../prompts/PromptDetail.svelte";
   import PromptEditor from "../prompts/PromptEditor.svelte";
   import SkillDetail from "../skills/SkillDetail.svelte";
-  import AgentDetail from "../agents/AgentDetail.svelte";
-  import AgentEditor from "../agents/AgentEditor.svelte";
   import SystemPromptDetail from "../scope/SystemPromptDetail.svelte";
   import SystemPromptEditor from "../scope/SystemPromptEditor.svelte";
 
@@ -60,12 +56,11 @@
   const mods = moduleBindings();
   const prompts = promptBindings();
   const skills = skillBindings();
-  const agents = agentBindings();
   const sysPrompts = systemPromptBindings();
-  // All five factories read the same `globalThis.bindings`, so one check covers the
+  // All four factories read the same `globalThis.bindings`, so one check covers the
   // lot: in web mode there is no desktop backend at all.
   const desktop = ext !== null && prompts !== null && skills !== null &&
-    agents !== null && sysPrompts !== null;
+    sysPrompts !== null;
 
   let items = $state<LibraryItem[]>([]);
   let loadErrors = $state<Array<{ name: string; error: string }>>([]);
@@ -97,17 +92,15 @@
   // Held by item rather than by key so the confirm can name what it is replacing.
   let promoting = $state<LibraryItem | null>(null);
 
-  // Two independent drafts rather than one union: the two forms share no field, and
-  // opening either closes the other, so the shell never has to ask which one is showing.
+  // Independent drafts rather than one union: the forms share no field, and opening
+  // either closes the other, so the shell never has to ask which one is showing.
   let draft = $state<Draft | null>(null);
-  let agentDraft = $state<AgentDraft | null>(null);
   let fileDraft = $state<PromptFileDraft | null>(null);
 
   const KIND_LABEL: Record<LibraryKind, string> = {
     extension: "ext",
     prompt: "prompt",
     skill: "skill",
-    subagent: "subagent",
     system: "system",
     appendix: "appendix",
   };
@@ -116,7 +109,7 @@
   // a scope switch that lands mid-flight must not paint one scope's extensions beside
   // another's templates.
   async function refresh(): Promise<void> {
-    if (!ext || !prompts || !skills || !agents || !sysPrompts) return;
+    if (!ext || !prompts || !skills || !sysPrompts) return;
     const forScope = scope;
     // Captured, not re-read after the await: reading the prop again would mix one
     // scope's list with the other's answer to "does this scope inherit".
@@ -128,8 +121,6 @@
         ownPrompts,
         rootPrompts,
         visibleSkills,
-        ownAgents,
-        rootAgents,
         ownFiles,
         rootFiles,
         moduleList,
@@ -142,9 +133,6 @@
           // of its templates twice.
           forIsRoot ? Promise.resolve([]) : prompts.promptsList({ scope: ROOT }),
           skills.skillsVisible({ scope: forScope }),
-          agents.agentsList({ scope: forScope }),
-          // Same rule as the templates above, for the same reason.
-          forIsRoot ? Promise.resolve([]) : agents.agentsList({ scope: ROOT }),
           sysPrompts.systemPromptsList({ scope: forScope }),
           mods
             ? mods.moduleList({ scope: forScope })
@@ -162,7 +150,6 @@
         ...moduleItems(moduleList.installed, moduleList.pending, forScope),
         ...promptItems(ownPrompts, rootPrompts, forScope),
         ...skillItems(visibleSkills, forScope),
-        ...agentItems(ownAgents, rootAgents, forScope),
       ];
       loadErrors = failures;
     } catch (e) {
@@ -187,7 +174,6 @@
       await run();
       openKey = null;
       draft = null;
-      agentDraft = null;
       fileDraft = null;
       await refresh();
       if (touchesPrompts) refreshChatCommands();
@@ -283,12 +269,6 @@
         () => sysPrompts.systemPromptsDelete({ scope, kind }),
         `Deleted ${item.title}. Type /reload in a Chat module to apply.`,
       );
-    } else if (item.kind === "subagent" && agents) {
-      const { name } = item.agent;
-      act(
-        () => agents.agentsDelete({ scope, name }),
-        `Deleted ${name}. run_subagent can no longer reach it.`,
-      );
     } else if (item.kind === "extension" && ext) {
       const { id, name, state } = item.ext;
       act(
@@ -328,10 +308,6 @@
     if (item.kind === "skill" && skills) {
       const { name } = item.skill;
       return (overwrite) => skills.skillsPromote({ scope, name, overwrite });
-    }
-    if (item.kind === "subagent" && agents) {
-      const { name } = item.agent;
-      return (overwrite) => agents.agentsPromote({ scope, name, overwrite });
     }
     return null;
   }
@@ -374,21 +350,6 @@
       // which is what makes "create" and "edit" one button here.
       fileDraft = { kind: item.kind, body: item.file.body ?? "" };
       draft = null;
-      agentDraft = null;
-      return;
-    }
-    if (item.kind === "subagent") {
-      agentDraft = {
-        name: item.agent.name,
-        description: item.agent.description,
-        // Joined back into the one string the field holds; the save splits it again.
-        tools: (item.agent.tools ?? []).join(", "),
-        model: item.agent.model ?? "",
-        systemPrompt: item.agent.systemPrompt,
-        creating: false,
-      };
-      draft = null;
-      fileDraft = null;
       return;
     }
     if (item.kind !== "prompt") return;
@@ -399,26 +360,11 @@
       body: item.prompt.body,
       creating: false,
     };
-    agentDraft = null;
     fileDraft = null;
   }
 
   function newPrompt(): void {
     draft = { name: "", description: "", argumentHint: "", body: "", creating: true };
-    agentDraft = null;
-    fileDraft = null;
-  }
-
-  function newAgent(): void {
-    agentDraft = {
-      name: "",
-      description: "",
-      tools: "",
-      model: "",
-      systemPrompt: "",
-      creating: true,
-    };
-    draft = null;
     fileDraft = null;
   }
 
@@ -433,26 +379,6 @@
       d.body.trim() === ""
         ? `Deleted ${name}. Type /reload in a Chat module to apply.`
         : `Saved ${name}. Type /reload in a Chat module to apply it to a running chat.`,
-    );
-  }
-
-  function saveAgentDraft(): void {
-    const d = agentDraft;
-    if (!agents || !d) return;
-    const tools = d.tools.split(",").map((t) => t.trim()).filter(Boolean);
-    act(
-      () =>
-        agents.agentsSave({
-          scope,
-          name: d.name.trim(),
-          description: d.description.trim(),
-          // Absent and empty mean the same thing for both of these — an empty tools list
-          // is pi's base set, an empty model is the parent's — so neither is written.
-          tools: tools.length > 0 ? tools : undefined,
-          model: d.model.trim() || undefined,
-          systemPrompt: d.systemPrompt,
-        }),
-      `Saved ${d.name.trim()}. The agent can delegate to it on its next tool call.`,
     );
   }
 
@@ -534,7 +460,6 @@
   $effect(() => {
     void scope;
     draft = null;
-    agentDraft = null;
     fileDraft = null;
   });
 </script>
@@ -583,7 +508,7 @@
             disabled={busy}
             onclick={() => revoke(item)}
           >Revoke</button>
-        {:else if item.state === "active" && (item.kind === "prompt" || item.kind === "subagent" || item.kind === "system" || item.kind === "appendix")}
+        {:else if item.state === "active" && (item.kind === "prompt" || item.kind === "system" || item.kind === "appendix")}
           <button
             type="button"
             class="btn btn-ghost btn-xs"
@@ -667,8 +592,6 @@
         {/if}
       {:else if item.kind === "prompt"}
         <PromptDetail prompt={item.prompt} />
-      {:else if item.kind === "subagent"}
-        <AgentDetail agent={item.agent} />
       {:else if item.kind === "system" || item.kind === "appendix"}
         <SystemPromptDetail file={item.file} />
       {:else}
@@ -713,7 +636,7 @@
     <button
       class="btn btn-ghost btn-xs ml-auto"
       aria-label="Refresh"
-      title="Re-read this scope's prompt files, extensions, templates, skills and subagents"
+      title="Re-read this scope's prompt files, extensions, templates and skills"
       onclick={() => refreshKey++}
     >↻</button>
   </div>
@@ -739,9 +662,6 @@
         </button>
         <button type="button" class="btn btn-sm" disabled={busy} onclick={newPrompt}>
           New prompt
-        </button>
-        <button type="button" class="btn btn-sm" disabled={busy} onclick={newAgent}>
-          New subagent
         </button>
         <button
           type="button"
@@ -782,17 +702,6 @@
             {busy}
             onsave={saveDraft}
             oncancel={() => (draft = null)}
-          />
-        </div>
-      {/if}
-
-      {#if agentDraft}
-        <div class="mt-3">
-          <AgentEditor
-            bind:draft={agentDraft}
-            {busy}
-            onsave={saveAgentDraft}
-            oncancel={() => (agentDraft = null)}
           />
         </div>
       {/if}
@@ -939,10 +848,8 @@
         house rules while each workspace adds its own archetype. Both reach a running
         chat on <code>/reload</code>. Extensions add tools to Chat and load into sessions
         started afterwards, or on
-        <code>/reload</code>. A template is sent by typing <code>/name</code>. A subagent
-        is a system prompt the chat agent hands a task to with
-        <code>run_subagent</code>, and is reachable as soon as it is saved — no
-        <code>/reload</code>. Skills are read-only here — add one by putting a
+        <code>/reload</code>. A template is sent by typing <code>/name</code>. Skills are
+        read-only here — add one by putting a
         <code>&lt;name&gt;/SKILL.md</code> directory or a <code>&lt;name&gt;.md</code>
         file in this scope's <code>agent/skills/</code>. <b>Promote</b> moves a row into
         Root, where every workspace inherits it — the workspace keeps no copy, and an

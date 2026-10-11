@@ -3,7 +3,7 @@
 // keep arg/return shapes in sync by hand (separate module graphs).
 //
 // Type-only import: scope/prompt.ts is Deno-side, and erasing the import is what keeps
-// it out of the webview bundle. Same arrangement as agents/bindings.ts over parse.ts.
+// it out of the webview bundle.
 import type { PromptFileInfo, PromptFileKind } from "./prompt.ts";
 export type { PromptFileInfo, PromptFileKind };
 
@@ -12,8 +12,7 @@ export type { PromptFileInfo, PromptFileKind };
 // to create and nothing to name — `systemPromptsSave` writes whichever of the two you
 // point it at, and saving an empty body deletes the file (scope/prompt.ts says why).
 //
-// No approve/reject pair, for the reason agents/bindings.ts gives: these are written by
-// the human half only. No agent tool reaches them, so there is no quarantine.
+// No approve/reject pair: these are written by the human half only. No agent tool reaches them, so there is no quarantine.
 export interface SystemPromptBindings {
   // Both of the scope's OWN files, present or not — always two entries. What an agent
   // there actually runs with is resolved backend-side, per session.
@@ -27,7 +26,7 @@ export interface SystemPromptBindings {
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend — the Library then
-// shows a desktop-only note, same as prompts/extensions/skills/subagents.
+// shows a desktop-only note, same as prompts/extensions/skills.
 export function systemPromptBindings(): SystemPromptBindings | null {
   const b = (globalThis as unknown as { bindings?: unknown }).bindings;
   return b ? (b as SystemPromptBindings) : null;

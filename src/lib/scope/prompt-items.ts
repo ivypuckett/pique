@@ -4,7 +4,7 @@ import type { PromptFileInfo, PromptFileKind } from "./prompt-bindings.ts";
 import type { LibraryItem, LibraryState } from "../library/items.ts";
 import { ROOT, type ScopeId } from "./paths.ts";
 
-// The editor's state. No name field, unlike the prompt-template and subagent drafts:
+// The editor's state. No name field, unlike the prompt-template draft:
 // there is exactly one file of each kind per scope, so `kind` IS the identity.
 export type PromptFileDraft = {
   kind: PromptFileKind;

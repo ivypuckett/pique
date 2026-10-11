@@ -2,8 +2,8 @@
   import type { PromptFileInfo } from "./prompt-bindings.ts";
 
   // The read-only view of one of a scope's two prompt files. Separate from the editor
-  // for the reason AgentDetail gives: a create and an edit are the same form, and an
-  // absent file is created through that same form rather than a third state here.
+  // because a create and an edit are the same form, and an absent file is created
+  // through that same form rather than a third state here.
   let { file }: { file: PromptFileInfo } = $props();
 </script>
 

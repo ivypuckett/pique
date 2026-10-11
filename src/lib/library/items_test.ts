@@ -53,17 +53,6 @@ function skill(title: string, state: LibraryState): LibraryItem {
   };
 }
 
-function subagent(title: string, state: LibraryState): LibraryItem {
-  return {
-    kind: "subagent",
-    key: `subagent/root/${title}`,
-    scope: "root",
-    state,
-    title,
-    agent: { name: title, description: "", systemPrompt: "" },
-  };
-}
-
 function promptFile(
   kind: "system" | "appendix",
   title: string,
@@ -99,16 +88,15 @@ Deno.test("groups by state, mixing kinds within a group", () => {
 // pure alphabetical sort would not.
 // The two prompt files lead: they steer everything below them, and they are the only
 // rows that are always present, so they must not drift down a long extension list.
-Deno.test("within a group, the prompt files lead, then extensions, prompts, skills, subagents", () => {
+Deno.test("within a group, the prompt files lead, then extensions, prompts, skills", () => {
   const groups = groupItems([
-    subagent("aaa", "active"),
     skill("bbb", "active"),
     prompt("ccc", "active"),
     ext("ddd", "active"),
     promptFile("appendix", "eee", "active"),
     promptFile("system", "fff", "active"),
   ]);
-  assertEquals(titles(groups.active), ["fff", "eee", "ddd", "ccc", "bbb", "aaa"]);
+  assertEquals(titles(groups.active), ["fff", "eee", "ddd", "ccc", "bbb"]);
 });
 
 Deno.test("ties within a kind break by title", () => {

@@ -64,8 +64,8 @@ Deno.test("toFrontendEvent maps a tool update to its text blocks only", () => {
   const out = toFrontendEvent({
     type: "tool_execution_update",
     toolCallId: "c1",
-    toolName: "run_subagent",
-    args: { agent: "scout" },
+    toolName: "long_task",
+    args: { task: "scan" },
     partialResult: {
       content: [{ type: "text", text: 'ls {"path":"."}' }],
       details: null,

@@ -1,6 +1,6 @@
 // Moving a library item UP the scope chain: out of the workspace that owns it and into
 // root, where every workspace inherits it. The per-kind halves live in that kind's own
-// service (agents/, prompts/, skills/, extensions/), the way every other cross-kind
+// service (prompts/, skills/, extensions/), the way every other cross-kind
 // Library operation does; this module holds only what all of them share. Runs
 // Deno-side only.
 //

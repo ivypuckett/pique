@@ -383,9 +383,8 @@ Deno.test("ordinary text is still sent to the model", async () => {
   });
 });
 
-// What run_subagent's progress rides on: a tool that reports partial results while it
-// is still running. The call must stay open, or the transcript would show a delegation
-// as finished at its first line of progress.
+// A tool that reports partial results while it is still running. The call must stay
+// open, or the transcript would show it as finished at its first line of progress.
 Deno.test("a tool update shows partial output while the call is still running", async () => {
   await withFakeBackend(async (f) => {
     const s = chatSession("ws-tool-update", "view-1");
@@ -395,8 +394,8 @@ Deno.test("a tool update shows partial output while the call is still running", 
     f.emit("agent-1", {
       kind: "tool_start",
       id: "c1",
-      name: "run_subagent",
-      args: '{"agent":"scout"}',
+      name: "long_task",
+      args: '{"task":"scan"}',
     });
     f.emit("agent-1", { kind: "tool_update", id: "c1", result: "ls {}" });
     f.emit("agent-1", {
@@ -409,8 +408,8 @@ Deno.test("a tool update shows partial output while the call is still running", 
     assertEquals(get(s.items), [{
       role: "tool",
       id: "c1",
-      name: "run_subagent",
-      args: '{"agent":"scout"}',
+      name: "long_task",
+      args: '{"task":"scan"}',
       result: 'ls {}\nread {"file":"a.ts"}',
       isError: false,
       done: false,
@@ -419,14 +418,14 @@ Deno.test("a tool update shows partial output while the call is still running", 
     f.emit("agent-1", {
       kind: "tool_end",
       id: "c1",
-      name: "run_subagent",
-      result: "the scout's answer",
+      name: "long_task",
+      result: "the task's answer",
       isError: false,
     });
     await settle();
 
     const done = get(s.items)[0];
-    assertEquals(done.role === "tool" && done.result, "the scout's answer");
+    assertEquals(done.role === "tool" && done.result, "the task's answer");
     assertEquals(done.role === "tool" && done.done, true);
 
     s.release();

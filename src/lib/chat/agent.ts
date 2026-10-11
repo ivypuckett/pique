@@ -75,8 +75,7 @@ export type ChatEvent =
   | { kind: "thinking"; delta: string }
   | { kind: "tool_start"; id: string; name: string; args: string }
   // A partial result from a tool still running (pi's onUpdate), replacing whatever the
-  // last one showed. run_subagent is the only tool that sends these today, streaming
-  // the nested session's tool calls; the call stays open until its tool_end.
+  // last one showed; the call stays open until its tool_end.
   | { kind: "tool_update"; id: string; result: string }
   | {
     kind: "tool_end";
@@ -148,8 +147,6 @@ import { moduleAuthoringTools } from "../modules/agent-tools.ts";
 import { inheritedExtensionPaths } from "../extensions/service.ts";
 import { promptAuthoringTools } from "../prompts/agent-tools.ts";
 import { inheritedPromptDirs } from "../prompts/service.ts";
-import { subagentTools } from "../agents/agent-tools.ts";
-import { listVisibleAgents } from "../agents/service.ts";
 import { resolveScopeConfig } from "../scope/config.ts";
 import { resolveAppendPrompts, resolveBasePrompt } from "../scope/prompt.ts";
 import {
@@ -254,12 +251,10 @@ export async function startAgent(
   // Tools compiled into pique, all bound to this scope: define_extension and
   // define_prompt quarantine into it. Tools
   // from extensions the user has *enabled* don't appear here — those load below.
-  const agentDefs = await listVisibleAgents(scope);
   const customTools = [
     ...extensionAuthoringTools(scope),
     ...moduleAuthoringTools(scope),
     ...promptAuthoringTools(scope),
-    ...subagentTools(scope, cwd, modelRuntime, model, agentDefs),
   ];
 
   // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
