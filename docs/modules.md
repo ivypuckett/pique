@@ -1,42 +1,41 @@
 # User Modules
 
-How a panel of your own gets into pique's right pane, what it may reach, and —
-at the end — what is measured, what is assumed, and what this version
-deliberately does not do.
+How a panel of your own gets into pique's right pane, what it can reach, and —
+at the end — what this version deliberately does not do.
 
 Every capability surface before this one reaches the **agent**: an extension
 registers tools, a skill teaches it, a prompt template steers it. A module is
-the first that reaches **you** — it draws.
+the first that reaches **you** — it draws. It is how pique grows UI it does not
+ship: when you want a Kanban board, ask the agent for one.
 
 ## Where a module comes from
 
-Two ways in, and both land at the same gate.
+**Ask the agent.** `define_module` writes the panel and its definition into
+pi's extensions dir, and the module is on the rail as soon as the call returns —
+the chat re-reads the module table when the tool succeeds. The tool exists for
+what its description carries: the agent holds `write` and could put the files
+there itself, but this is where it learns what a module is.
 
-**Ask the agent.** `define_module` writes the panel and its definition into the
-scope's quarantine dir. The agent chooses what to ask for; you decide whether it
-gets it. Its stated reason is carried in the definition and shown to you on the
-consent screen — as its own account of itself, not as pique vouching for it.
+**Write the files yourself.** Drop them in the same dir, then reopen the app (or
+let any `define_module` call refresh the rail).
 
-**Write the files yourself.** Drop them in `pending/` by hand. Same gate, same
-consent screen.
-
-Neither path can put a module into use. Only consent does.
+There is no consent step. A module is trusted the way an extension is — see
+[Trust](#trust).
 
 ## Two files
 
-A module is an extension that also draws, so it lives where its extension lives:
-beside it, in the scope's extensions dir.
+A module is an extension that also draws, so it lives where extensions live:
 
 ```
-~/.pique/scopes/<root|ws-N>/agent/extensions/
-  notes.module.json     what it is and what it asks for
+~/.pi/agent/extensions/
+  notes.module.json     what it is called
   notes.ui.html         the single document its frame runs
   notes.ts              OPTIONAL — the pi extension, if it registers tools too
 ```
 
 The module's **kind** is the filename, never a field inside the file. A
 definition therefore cannot claim to be a module other than the one it sits
-beside, and it cannot claim to be `kanban`.
+beside, and it cannot claim to be `terminal`.
 
 `notes.ts` is optional and most modules will not have one. A panel that only
 draws needs no pi extension, and on Deno 2.9.5 a malformed one panics the app at
@@ -45,40 +44,27 @@ boot — so do not add a file whose only job is to exist.
 ```json
 {
   "label": "Notes",
-  "duplicable": false,
-  "capabilities": {
-    "kanban": true,
-    "storage": true,
-    "fs": { "read": ["/home/you/notes"] }
-  }
+  "duplicable": false
 }
 ```
 
-An unknown capability name is an error, not an ignored key: a typo'd `fs.raed`
-that parsed as "grants nothing" would show as enabled in the consent screen and
-then fail at runtime with nothing to explain it.
+Any other key is ignored, so a definition written for an older build (one with
+`capabilities` or a `rationale`) still loads.
 
-## One document, everything inlined
+## One document
 
-**A module is one HTML file. Its script and style go inside it.** No `app.js`,
-no `style.css`, no image files.
-
-This is the constraint most likely to read as a bug, so here is why. The frame
-is sandboxed with no `allow-same-origin`, which makes its origin _opaque_. Two
-things follow, both measured rather than assumed:
-
-- It cannot `fetch` even the server that served it. Its own data files are
-  unreachable at runtime.
-- `'self'` in the frame's CSP matches nothing, so `script-src 'self'` does not
-  let it load its own `app.js` either. This was checked against a no-CSP control
-  of the same page: the files load with no header and are refused with one.
-
-Everything that is not in the document arrives over the port instead.
+**A module is one HTML file, with its own script and style inside it.** The
+module server serves that document and nothing beside it, so a relative
+`<script src="app.js">` 404s — `define_module` refuses one rather than letting
+it fail where the agent cannot see. An absolute URL (a library from a CDN)
+loads: the frame can reach the network.
 
 ## Talking to pique
 
-pique posts your frame a `MessagePort` once its document loads. Keep it and
-speak only on it:
+The frame is served from the module server's own port, so it is a different
+origin from the app's window and cannot reach `globalThis.bindings` directly.
+pique posts it a `MessagePort` once its document loads instead. Keep it and
+speak on it:
 
 ```html
 <script>
@@ -107,126 +93,55 @@ function call(method, payload) {
 }
 
 async function start() {
-  const board = await call("kanbanGetBoard", {});
-  document.body.textContent = `${board.statuses.length} columns`;
+  const saved = await call("storageGet");
+  document.body.textContent = JSON.stringify(saved);
 }
 </script>
 ```
 
-Your frame never sends its own name or scope, and is never asked for them. pique
-holds both, which is what makes them impossible to forge rather than merely
-checked.
+Your frame never sends its own name, and is never asked for it. pique holds it,
+so a call is always the calling module's own.
 
-## What you may ask for
+## What you may call
 
-| Capability | Methods                           | Grants                                            |
-| ---------- | --------------------------------- | ------------------------------------------------- |
-| `kanban`   | `kanbanGetBoard`, `kanbanGetLogs` | read the board of the scope you are open in       |
-| `storage`  | `storageGet`, `storageSet`        | your own JSON blob, private to you and that scope |
-| `fs.read`  | `fsRead`                          | read files under the roots you declared           |
-| `fs.write` | `fsWrite`                         | write files under the roots you declared          |
+| Method       | Payload              | Does                                                     |
+| ------------ | -------------------- | -------------------------------------------------------- |
+| `storageGet` | —                    | your own JSON blob, `null` until you have written one    |
+| `storageSet` | any JSON value       | replaces it (`~/.pique/modules/<name>.json`)             |
+| `fsRead`     | `{ path }`           | the text of a file                                       |
+| `fsWrite`    | `{ path, contents }` | writes a file                                            |
 
-The method list is closed: anything not in that table is refused even to a
-module that was granted everything. Read does not imply write, an empty root
-list grants nothing, and a relative path is refused rather than resolved.
+Anything else is refused as "not a module method". Paths are not restricted.
 
-There is no network capability. See [Deliberately absent](#deliberately-absent).
+## Trust
 
-## The gate
+pique adopts pi's philosophy: nothing is gated or sandboxed by pique. A module
+runs with no consent screen, no capability list and no content-security policy,
+and the methods above reach the whole filesystem. What it is kept out of is the
+app's own window — a different origin, so it cannot call `win.bind` handlers or
+read the app's DOM — which is a property of where it is served, not a policy.
 
-> A module **runs** iff its definition is in the scope's `extensions/` dir. It
-> is **awaiting consent** iff there is one in that scope's `pending/` dir.
+Sandboxing is left to whoever wants it: an extension can intercept what an agent
+writes (`pi.on("tool_call")`), and a stricter module host would be its own
+change. See [security.md](security.md) for where this sits among pique's
+boundaries.
 
-The same rule extensions follow, for the same reason: both halves are things the
-filesystem already tells us, so there is no separate "approved" flag that could
-disagree with what actually loads.
+## Deleting
 
-| Step    | What happens                                                   |
-| ------- | -------------------------------------------------------------- |
-| Arrive  | `define_module`, or two files placed in `pending/` by hand     |
-| Review  | the Library row expands into the consent screen                |
-| Consent | both files move to `extensions/` together                      |
-| Appear  | as soon as you consent — the rail rebuilds, open tabs are left |
-| Revoke  | both move back to `pending/`; the row leaves the rail          |
-
-Consent re-reads and re-validates the definition at the moment you press it, not
-when the row was drawn: a Library tab can sit open all day, and the file can
-change in between.
-
-Revoke is not delete. Re-enabling means consenting again, so a capability list
-that grew since cannot ride in on a past yes.
-
-A view that had the module open falls back to another row on the next launch,
-and its tab is kept but unreachable — re-enabling brings the row back with the
-tab where you left it. (Before that fallback existed, such a view opened on
-"Unknown module" with nothing selected on the rail and no close button, since a
-singleton row has no tab strip: the tab could not be dismissed without editing
-`layout.json` by hand.)
-
-## Scopes
-
-A module belongs to the scope whose dir holds it. Root's modules are visible
-from every workspace and are consented to and revoked _in root_; a workspace's
-are its own. A module always addresses the scope that owns it — root's Notes
-reads root's board, whichever workspace you opened it from.
-
-## What the frame cannot do
-
-Measured against the real webview (WebKitGTK 605.1.15), not read from a spec:
-
-| Attempt                        | Result                      |
-| ------------------------------ | --------------------------- |
-| `parent.bindings`              | `DOMException`              |
-| `top.location`                 | `DOMException`              |
-| `parent.document`              | `DOMException`              |
-| `localStorage`                 | `DOMException`              |
-| `fetch` anything               | blocked                     |
-| `new Image().src` to a server  | blocked **by the CSP**      |
-| `sendBeacon`, `WebSocket`      | blocked **by the CSP**      |
-| a capability it wasn't granted | refused by the broker       |
-| naming another module's id     | ignored — pique supplies it |
-
-The distinction in that table is worth keeping: the sandbox blocks the first
-five, and the **CSP** blocks the network ones. A sandboxed frame without the
-header reached a recording server through six separate channels — `img.src`,
-no-cors `fetch`, `sendBeacon`, `<script src>`, `<link href>` and `WebSocket`.
-The sandbox is a boundary against pique's process, not against the network.
-
-One consequence for your own error handling: under the CSP, five of those six
-still _report success_ to JavaScript. Only `WebSocket` throws. A frame cannot
-tell you its request was blocked, so do not build on one noticing.
+Settings → Library lists every module beside the extensions; Delete removes both
+files. A view that had the module open falls back to another row on the next
+launch, and its tab is kept but unreachable — writing the module again brings the
+row back with the tab where you left it.
 
 ## Deliberately absent
 
-- **Network.** Not an oversight and not a broker setting: an `<img>` tag never
-  asks permission, so the only place to allow it is the CSP header, per named
-  host, with the consent screen naming those hosts. Until that exists, a module
-  reads what it is granted and shows it.
-- **Sending a prompt to the chat.** Drafted as an `agent` capability and cut
-  before release: the broker allowed it while nothing implemented it, so a user
-  could have consented to something that could not happen. A consent screen that
-  asks about a grant with no effect is worse than one that does not offer it.
+- **Sending a prompt to the chat.** Drafted once and cut: nothing implemented
+  it.
 - **A `ctrl+t` letter.** The chord is a fixed namespace, and an install claiming
-  a letter could shadow a built-in. Modules are reachable from the rail and the
-  `+` picker.
-- **Hot-add.** An enabled module appears after a Refresh; it does not
-  materialise into an open view.
-- **Tailwind and daisyUI.** The frame gets the theme's colours as CSS custom
-  properties. Tying every module to our build's class set is exactly the
-  coupling the frame exists to avoid.
-
-## Known weak
-
-The gate is **advisory**, in the same sense the extension gate is
-([extensions.md](extensions.md)): it governs what a human moves into the loading
-set, not what can appear there. An agent holding `write` can put a definition
-straight into `extensions/`, capabilities and all, without a consent screen ever
-being drawn.
-
-What that agent still cannot do is exceed the manifest it wrote: the broker
-enforces on every call, and the CSP is on the document whatever the definition
-says. So the blast radius of a dropped-in module is what its own manifest names,
-in one scope — not the `-A` process. That is the property this design buys, and
-it is the one to check first if any of it is ever changed.
-
-See [security.md](security.md) for where this sits among pique's boundaries.
+  a letter could shadow a built-in. Modules are reachable from the rail, and
+  with `ctrl+t ↑`/`↓`.
+- **Hot-add from disk.** A module written by hand appears after the rail is
+  re-read; it does not materialise into an open view on its own.
+- **Tailwind, daisyUI and the app's theme.** A module brings its own styling.
+  Tying every module to our build's class set is exactly the coupling a
+  separate document avoids.

@@ -3,7 +3,8 @@
 **Status: proposal. Nothing here is shipped, seeded, or written to `~/.pique`.**
 Card `717e160f` asks what should go in a default prompt; this is the answer for
 you to approve, reject or edit. If you approve it, the text in §5 gets pasted
-into root's `APPEND_SYSTEM.md` from the Library — by you, once, deliberately.
+into `~/.pi/agent/APPEND_SYSTEM.md` from Settings → Library — by you, once,
+deliberately.
 
 ---
 
@@ -25,10 +26,9 @@ descriptions, the tool-use guidelines and the environment framing live — a
 default that replaced all of that would have to re-derive it, badly, and would
 get stale every time pi changed.
 
-`APPEND_SYSTEM.md` is added on top and keeps pi's preamble intact. It is also
-inherited by concatenation (see [scopes.md](scopes.md)), which is what the
-default needs: it goes in **root**, every workspace gets it, and a workspace can
-still add its own archetype without restating or losing it.
+`APPEND_SYSTEM.md` is added on top and keeps pi's preamble intact. It lives in
+pi's agent dir, so every conversation gets it. (A trusted project's own
+`.pi/APPEND_SYSTEM.md` takes its place there rather than adding to it.)
 
 **Recommendation: the default is an appendix. `SYSTEM.md` stays empty by
 default, and decision 2 stands unchanged.**
@@ -77,9 +77,9 @@ and the proposed default would be redundant here.
 
 The difference is reach and ownership:
 
-|                   | `CLAUDE.md`                     | root `APPEND_SYSTEM.md`               |
+|                   | `CLAUDE.md`                     | `~/.pi/agent/APPEND_SYSTEM.md`        |
 | ----------------- | ------------------------------- | ------------------------------------- |
-| Applies to        | one project directory           | every workspace, every scope          |
+| Applies to        | one project directory           | every conversation, every project     |
 | Lives in          | the repo, shared with the team  | your machine, yours alone             |
 | Present when      | someone put one there           | always                                |
 | Survives a `cwd`  | no — a different project, gone  | yes                                   |
@@ -91,10 +91,9 @@ itself.
 
 **Consequence for the text:** §5 must not restate what a project's own
 `CLAUDE.md` would say. It states the four rules and stops — no build commands,
-no directory conventions, no house style. Those belong to a project or to a
-workspace archetype.
+no directory conventions, no house style. Those belong to a project.
 
-## 5. Proposed body for root's `APPEND_SYSTEM.md`
+## 5. Proposed body for `APPEND_SYSTEM.md`
 
 ```markdown
 ## Working rules
@@ -165,7 +164,7 @@ Of the behavioral half, the recurring patterns across tools are:
   only where the answer changes the output.*
 - **Cap the retry loop** (Cursor: stop after ~3 linter-fix iterations). —
   *Concrete and worth having, but it belongs to a specific toolchain. A
-  workspace archetype is the right place for it, not root.*
+  project's own `.pi/APPEND_SYSTEM.md` is the right place for it.*
 - **Do not name your tools to the user.** — *Tone, and wrong for pique: the
   transcript already shows the tool calls, so hiding them in prose would
   contradict what is on screen.*
@@ -189,16 +188,15 @@ is that most of that volume is describing a tool surface pique does not have.
   easiest thing to add yourself later.
 - **Persona.** "You are an expert…" spends tokens without changing behavior in
   any way I can verify, and it is the part of a prompt most likely to age badly.
-- **Anything language- or stack-specific.** That is precisely what a workspace
-  `APPEND_SYSTEM.md` is for — the Swift/Go case on card `795e0c9a`. Putting Go
-  advice in root would push it into the Swift workspace too, which is the exact
-  failure the appendix design exists to prevent.
+- **Anything language- or stack-specific.** That is what a project's own
+  `.pi/APPEND_SYSTEM.md` is for. Putting Go advice in the global appendix would
+  push it into the Swift project too.
 - **Safety or refusal language.** Not pique's layer, and a home-rolled version
   would be worse than none.
 
 ## 8. If you approve
 
-There is no code to write. Library → Root scope → the `APPEND_SYSTEM.md` row →
+There is no code to write. Settings → Library → the `APPEND_SYSTEM.md` row →
 Edit → paste §5 → Save. It applies to new conversations immediately and to
 running ones on `/reload`.
 

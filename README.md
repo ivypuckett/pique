@@ -34,12 +34,16 @@ WebKitGTK, so if the window never appears, start it from the task instead.
 
 1. A view is one thread for one context: its own chat window, and the modules
    sitting beside it. A workspace groups several of those — they share its
-   directory, tools, prefs and board, but not a conversation. (Chat windows used
+   directory, but not a conversation. (Chat windows used
    to be sticky between views; one conversation per view is what lets a single
    workspace carry parallel lines of work.)
 2. System prompts can do more harm than good. Not specifying one within pique
    removes it entirely.
-3. Linux, macOS and Windows are all supported targets. Linux is what pique is
+3. pique adopts pi's philosophy: it uses pi's own agent dir (`~/.pi/agent`, shared
+   with the `pi` CLI) and lets pi discover what is in it. Nothing is gated or
+   sandboxed by pique — an extension, or a module, is trusted code, and
+   sandboxing is left to an extension that wants to provide it.
+4. Linux, macOS and Windows are all supported targets. Linux is what pique is
    developed against today, and the codebase still carries POSIX assumptions the
    other two trip over — an unset `$HOME`, `/` hardcoded as the path separator.
    Those are bugs to fix, not the design.
@@ -59,10 +63,8 @@ WebKitGTK, so if the window never appears, start it from the task instead.
 Notes:
 
 - Workspaces tile vertically and views horizontally.
-- The default workspace exists to allow an agent to manage the harness. In
-  practice, it centralizes/defaults most settings.
-- Each view holds its own chat; what views inside a workspace share is
-  everything else — its directory, tools, prefs and board.
+- Each view holds its own chat; what views inside a workspace share is its
+  directory. Everything else — tools, prompts, prefs — is the same everywhere.
 
 ### Agent Structure
 
@@ -70,41 +72,30 @@ Notes:
 - Provider: LM Studio, Anthropic, etc.
 - Thinking Level: Sets how much the agent deliberates before speaking.
 
-- System Prompt: A markdown file, `agent/SYSTEM.md` in a scope's directory,
-  which replaces pi's own preamble for every agent that runs there. The nearest
-  one on the chain wins, so a workspace's shadows the root one it inherits.
-  pique ships none (decision 2) — with no `SYSTEM.md` anywhere, pi's preamble is
-  what runs.
-- System Prompt Appendix: `agent/APPEND_SYSTEM.md`, added on top of whatever the
-  base turned out to be rather than replacing it. Merges the other way: every
-  one on the chain applies, root's first — so root holds house rules and each
-  workspace adds its own archetype. Both are edited in the Library; see
-  [docs/scopes.md](docs/scopes.md).
+- System Prompt: `~/.pi/agent/SYSTEM.md`, which replaces pi's own preamble.
+  pique ships none (decision 2) — with no `SYSTEM.md`, pi's preamble is what
+  runs. In a trusted project, its own `.pi/SYSTEM.md` takes precedence.
+- System Prompt Appendix: `~/.pi/agent/APPEND_SYSTEM.md`, added on top of
+  whichever base applies rather than replacing it — house rules without a
+  replacement preamble. Both are edited in Settings → Library.
 - Prompt Template: A markdown file you send as a message by typing `/name` in a
   chat, with `$1`/`$@` arguments substituted in. Plain
-  [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates), per
-  workspace and inherited from the default one — see
+  [pi Prompt Templates](https://pi.dev/docs/latest/prompt-templates) — see
   [docs/prompts.md](docs/prompts.md).
-- Module: a panel of your own in the right pane, run in a sandboxed frame and
-  gated on the capabilities it asks for — see [docs/modules.md](docs/modules.md).
+- Module: a panel of your own in the right pane — ask the agent for one (a
+  board, a dashboard) and it writes it with `define_module`. See
+  [docs/modules.md](docs/modules.md).
 - Extension: https://pi.dev/docs/latest/extensions
 - Skill: https://pi.dev/docs/latest/skills
-- Automaton: A prompt template plus the exact extension and skill set a run may
-  load, launched without a conversation — see
-  [docs/automatons.md](docs/automatons.md).
-- Subagent: A named system prompt, plus an optional tool and model restriction,
-  that a chat agent delegates a task to. It runs in its own isolated session and
-  reports back as text — see [docs/subagents.md](docs/subagents.md).
 
 ### Modules
 
-- Kanban Board: Standard kanban-style board accessible for both agents and
-  humans.
 - Editor: File tree which opens files into an $EDITOR terminal window.
 - Terminal: Terminal which opens with current $SHELL.
 - Diff: Git diff of highlighted item (or current workspace folder).
-- Library: The current scope's system prompt and appendix, extensions, prompt
-  templates, skills and subagents — review, enable, edit.
-- Automatons: Named agents — one prompt template plus the extensions and skills
-  they may load — launched by a button, or unattended by a schedule or a card
-  arriving in a column, which first need a human to approve the definition.
+- Your own: any module the agent (or you) has written — see
+  [docs/modules.md](docs/modules.md).
+
+Settings → Library lists what is in pi's agent dir — the system prompt and
+appendix, extensions and installed packages, modules, prompt templates and
+skills — to view, edit, install and delete.
