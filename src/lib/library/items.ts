@@ -4,7 +4,7 @@
 // common. Pure — no fetching, no Deno APIs — so it is testable and safe to bundle.
 import type { ScopeId } from "../scope/paths.ts";
 import type { Extension } from "../extensions/bindings.ts";
-import type { InstalledModule, PendingModule } from "../modules/bindings.ts";
+import type { InstalledModule } from "../modules/bindings.ts";
 import type { PromptInfo } from "../prompts/bindings.ts";
 import type { SkillInfo } from "../skills/bindings.ts";
 import type { PromptFileInfo } from "../scope/prompt-bindings.ts";
@@ -53,13 +53,7 @@ type Common = {
 // runtime undefined.
 export type LibraryItem =
   | (Common & { kind: "extension"; ext: Extension })
-  // A module carries whichever half it has: `module` when it is installed, `pending`
-  // when it is still at the consent gate. Never both.
-  | (Common & {
-    kind: "module";
-    module?: InstalledModule;
-    pending?: PendingModule;
-  })
+  | (Common & { kind: "module"; module: InstalledModule })
   | (Common & { kind: "prompt"; prompt: PromptInfo })
   | (Common & { kind: "skill"; skill: SkillInfo })
   // Same payload for both, because the file is the same shape either way — what differs

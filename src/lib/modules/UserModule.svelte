@@ -1,20 +1,12 @@
 <script lang="ts">
-  // Host side of a user-contributed module. The module's own HTML runs in a sandboxed
-  // iframe served by modules/server.ts, never in this document: it is code pique did not
-  // write, and everything in this window can reach `globalThis.bindings` and the -A
-  // process behind it.
+  // Host side of a user-contributed module. The module's own HTML runs in an iframe
+  // served by modules/server.ts, never in this document. The frame is NOT sandboxed — a
+  // module is trusted the way an extension is (docs/modules.md) — but it is served from
+  // the module server's own port, so it is a different origin from this window and
+  // cannot reach `globalThis.bindings` directly; it asks through the port below.
   //
-  // Three properties this component exists to hold, all of them measured rather than
-  // assumed (spec: "The frame, measured"):
-  //
-  // 1. `sandbox="allow-scripts"` with no `allow-same-origin`. The frame's origin is then
-  //    opaque: parent.bindings, top.location, parent.document and localStorage all throw
-  //    from inside it. Adding allow-same-origin would silently undo the whole design.
-  // 2. The frame is addressed by a URL on the module server's port, which serves it
-  //    under `default-src 'none'` — the only thing stopping outbound network.
-  // 3. `moduleId` and `scope` travel with the CALL, from this component's props. The
-  //    frame never sends them and is never asked, so it cannot address another module's
-  //    data by lying about who it is.
+  // `moduleId` and `scope` travel with the CALL, from this component's props. The frame
+  // never sends them and is never asked, so its calls are always its own.
   import { moduleBindings, moduleUiPort } from "./bindings.ts";
   import { moduleDef } from "./manifest.ts";
   import { type CallMessage, HANDSHAKE, type ResultMessage } from "./contract.ts";
@@ -28,8 +20,7 @@
   const b = moduleBindings();
   const moduleId = $derived(kind ?? "");
   // The scope that OWNS the module, from the table — not the workspace this view
-  // belongs to. A workspace showing one of root's modules addresses root's copy, and
-  // its capability checks run against root's manifest.
+  // belongs to. A workspace showing one of root's modules addresses root's copy.
   const scope = $derived(moduleDef(moduleId)?.scope ?? workspaceId ?? "root");
 
   let frame: HTMLIFrameElement | undefined = $state();
@@ -64,7 +55,7 @@
         payload: call.payload,
       }));
     } catch (e) {
-      // A refusal is a normal outcome, not a crash: the panel may show it.
+      // A failed call is a normal outcome, not a crash: the panel may show it.
       reply(false, e instanceof Error ? e.message : String(e));
     }
   }
@@ -76,11 +67,9 @@
     browser tab).
   </div>
 {:else if src}
-  <!-- sandbox is deliberately allow-scripts ONLY. See note 1. -->
   <iframe
     bind:this={frame}
     {src}
-    sandbox="allow-scripts"
     title={title}
     class="h-full w-full border-0 bg-base-100"
     onload={onLoad}

@@ -13,48 +13,28 @@ import { writable } from "svelte/store";
 // this to know when to rebuild it.
 export const modulesVersion = writable(0);
 
-// Mirrors modules/service.ts's InstalledModule and PendingModule. Kept in sync by hand
-// — separate module graphs — and deliberately structural rather than imported: service.ts
-// calls Deno APIs, and a value import from it would break the frontend bundle.
-export type ModuleCapabilities = {
-  storage?: boolean;
-  fs?: { read?: string[]; write?: string[] };
-};
-
+// Mirrors modules/service.ts's InstalledModule. Kept in sync by hand — separate module
+// graphs — and deliberately structural rather than imported: service.ts calls Deno APIs,
+// and a value import from it would break the frontend bundle.
 export type InstalledModule = {
   kind: string;
   label: string;
-  rationale?: string;
   duplicable?: boolean;
-  capabilities: ModuleCapabilities;
   scope: string;
-};
-
-export type PendingModule = {
-  scope: string;
-  name: string;
-  def?: Omit<InstalledModule, "scope">;
-  error?: string;
 };
 
 export interface ModuleBindings {
-  // Everything the Library shows for one scope: what it has installed, what is waiting
-  // at the consent gate, and what it inherits.
-  moduleList(
-    arg: { scope: string },
-  ): Promise<{ installed: InstalledModule[]; pending: PendingModule[] }>;
-  // Consent. Re-reads and re-validates the definition, so a file rewritten while the
-  // Library sat open is refused rather than silently enabled.
-  moduleEnable(arg: { scope: string; name: string }): Promise<unknown>;
-  // Back to the gate, not deleted: re-enabling means consenting again.
-  moduleRevoke(arg: { scope: string; name: string }): Promise<unknown>;
+  // Everything the Library shows for one scope: what it has installed, and what it
+  // inherits.
+  moduleList(arg: { scope: string }): Promise<InstalledModule[]>;
+  // Deletes the module's definition and document.
+  moduleRemove(arg: { scope: string; name: string }): Promise<unknown>;
   // Where to point a module's iframe, plus what this scope has installed. The port is
   // the module file server's (modules/server.ts), assigned at boot.
   moduleManifest(): Promise<{ port: number; modules: unknown[] }>;
-  // One door for everything a module asks for. `moduleId` and `scope` are supplied by
-  // the HOST component, never by the frame — a frame cannot name a module, so it has
-  // nothing to forge. Rejects with the refusal message when the module's manifest does
-  // not grant `method`.
+  // One door for everything a module asks for (modules/handlers.ts). `moduleId` and
+  // `scope` are supplied by the HOST component, never by the frame. Rejects with the
+  // handler's error, or when `method` is not one a module can call.
   moduleCall(
     arg: { moduleId: string; scope: string; method: string; payload: unknown },
   ): Promise<unknown>;

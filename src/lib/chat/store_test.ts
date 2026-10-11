@@ -26,6 +26,7 @@ function fakeBindings(resumed: Item[] = []) {
   let next = 1;
   let reloads = 0;
   let listedCommands = 0;
+  let moduleTableReads = 0;
   let reloadSummary: ReloadSummary = { added: [], removed: [], failed: [] };
   const bindings = {
     // deno-lint-ignore no-explicit-any
@@ -75,6 +76,10 @@ function fakeBindings(resumed: Item[] = []) {
     scopeConfigRead: () => Promise.resolve({}),
     scopeConfigWrite: () => Promise.resolve(true),
     scopeConfigResolve: () => Promise.resolve({}),
+    moduleManifest: () => {
+      moduleTableReads++;
+      return Promise.resolve({ port: 0, modules: [] });
+    },
   };
   return {
     bindings,
@@ -86,6 +91,7 @@ function fakeBindings(resumed: Item[] = []) {
     },
     reloadCount: () => reloads,
     listedCommandsCount: () => listedCommands,
+    moduleTableReads: () => moduleTableReads,
     setReloadSummary(s: ReloadSummary) {
       reloadSummary = s;
     },
@@ -477,4 +483,35 @@ Deno.test("formatReloadNotice reports the system prompt and the scope's model", 
     "Reloaded — +t; model default is now anthropic/claude-opus-5 — new chat to use it",
     "the model is reported, not applied: this conversation keeps the model it has",
   );
+});
+
+// A module the agent writes is in use at once, so the rail is re-read when the tool
+// succeeds — and only then.
+Deno.test("a successful define_module re-reads the module table", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-define-module", "view-1");
+    s.retain();
+    await settle();
+
+    f.emit("agent-1", {
+      kind: "tool_end",
+      id: "c1",
+      name: "define_module",
+      result: "refused",
+      isError: true,
+    });
+    await settle();
+    assertEquals(f.moduleTableReads(), 0);
+
+    f.emit("agent-1", {
+      kind: "tool_end",
+      id: "c2",
+      name: "define_module",
+      result: "wrote notes",
+      isError: false,
+    });
+    await settle();
+    assertEquals(f.moduleTableReads(), 1);
+    s.release();
+  });
 });

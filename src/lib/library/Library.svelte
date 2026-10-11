@@ -13,7 +13,6 @@
   import { extensionItems } from "../extensions/items.ts";
   import { moduleItems } from "../modules/items.ts";
   import { hydrateModules, moduleBindings } from "../modules/bindings.ts";
-  import ModuleConsent from "../modules/ModuleConsent.svelte";
   import { type Draft, promptItems } from "../prompts/items.ts";
   import { skillItems } from "../skills/items.ts";
   import {
@@ -131,7 +130,7 @@
           sysPrompts.systemPromptsList({ scope: forScope }),
           mods
             ? mods.moduleList({ scope: forScope })
-            : Promise.resolve({ installed: [], pending: [] }),
+            : Promise.resolve([]),
           // And again: root's own two files are its `ownFiles`, so asking twice would
           // list SYSTEM.md as both active and inherited from itself.
           forIsRoot
@@ -142,7 +141,7 @@
       items = [
         ...promptFileItems(ownFiles, rootFiles, forScope),
         ...extensionItems(visibleExts, forScope),
-        ...moduleItems(moduleList.installed, moduleList.pending, forScope),
+        ...moduleItems(moduleList, forScope),
         ...promptItems(ownPrompts, rootPrompts, forScope),
         ...skillItems(visibleSkills, forScope),
       ];
@@ -231,24 +230,10 @@
         `Enabled ${item.title}. Type ${item.title} in a chat to use it.`,
         true,
       );
-    } else if (item.kind === "module" && item.pending && mods) {
-      const { name } = item.pending;
-      act(
-        () => mods.moduleEnable({ scope, name }).then(hydrateModules),
-        `Enabled ${item.title}. Open it from the + menu; a view already open needs a Refresh.`,
-      );
     }
   }
 
   function revoke(item: LibraryItem): void {
-    if (item.kind === "module" && item.module && mods) {
-      const { kind } = item.module;
-      act(
-        () => mods.moduleRevoke({ scope, name: kind }).then(hydrateModules),
-        `Revoked ${item.title}. An open tab of it now reads "Unknown module".`,
-      );
-      return;
-    }
     if (item.kind !== "extension" || !ext) return;
     const { id, name } = item.ext;
     act(
@@ -263,6 +248,12 @@
       act(
         () => sysPrompts.systemPromptsDelete({ scope, kind }),
         `Deleted ${item.title}. Type /reload in a Chat module to apply.`,
+      );
+    } else if (item.kind === "module" && mods) {
+      const { kind } = item.module;
+      act(
+        () => mods.moduleRemove({ scope, name: kind }).then(hydrateModules),
+        `Deleted ${item.title}. An open tab of it now reads "Unknown module".`,
       );
     } else if (item.kind === "extension" && ext) {
       const { id, name, state } = item.ext;
@@ -442,7 +433,7 @@
             title={openKey === item.key ? "" : "Read it first"}
             onclick={() => enable(item)}
           >Enable</button>
-        {:else if item.state === "active" && (item.kind === "extension" || item.kind === "module")}
+        {:else if item.state === "active" && item.kind === "extension"}
           <button
             type="button"
             class="btn btn-ghost btn-xs"
@@ -485,14 +476,9 @@
       {#if item.kind === "extension"}
         {#if reviewed}<ExtensionReview source={reviewed} />{/if}
       {:else if item.kind === "module"}
-        {@const def = item.module ?? item.pending?.def}
-        {#if def}
-          <ModuleConsent
-            capabilities={def.capabilities}
-            name={item.subtitle ?? def.label}
-            rationale={def.rationale}
-          />
-        {/if}
+        <div class="mt-2 break-all font-mono text-[0.65rem] opacity-60">
+          {item.module.kind}.module.json · {item.module.kind}.ui.html
+        </div>
       {:else if item.kind === "prompt"}
         <PromptDetail prompt={item.prompt} />
       {:else if item.kind === "system" || item.kind === "appendix"}

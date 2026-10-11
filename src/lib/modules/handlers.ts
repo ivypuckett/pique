@@ -1,12 +1,14 @@
-// What each granted capability actually does. Separate from broker.ts so the broker's
-// refusal logic can be tested against recording handlers, and separate from desktop.ts
-// so these are ordinary functions rather than bind callbacks. Runs Deno-side.
+// Everything a user module can ask pique for, over its port. Separate from desktop.ts so
+// these are ordinary functions rather than bind callbacks. Nothing here is gated: a
+// module is trusted the way an extension is, and sandboxing one is left to whoever
+// wants it (docs/modules.md). Runs Deno-side.
 //
-// Every handler here takes the scope from its first argument and never looks one up:
-// the broker holds the only scope there is, and a handler that resolved its own would
-// be a second source of truth for the question this whole design turns on.
-import type { Handlers } from "./broker.ts";
+// Every handler takes the scope from its first argument: the host component that
+// mounted the frame supplies it, never the frame.
 import { scopeDir } from "../scope/paths.ts";
+
+export type Handler = (scope: string, payload: unknown) => Promise<unknown>;
+export type Handlers = Record<string, Handler>;
 
 // A module's private JSON blob, one file per module per scope. Under the scope dir
 // rather than the agent dir: this is the module's own state, not something pi loads.
@@ -15,7 +17,7 @@ function storagePath(scope: string, moduleId: string): string {
 }
 
 // The handler set for one module. Bound to the module's id because storage is per
-// module — everything else needs only the scope the broker passes in.
+// module — everything else needs only the scope.
 export function handlersFor(moduleId: string): Handlers {
   return {
     storageGet: async (scope) => {
@@ -38,10 +40,6 @@ export function handlersFor(moduleId: string): Handlers {
     },
 
     fsRead: async (_scope, payload) => {
-      // The path was checked against the module's granted roots by the broker before
-      // this ran. Re-reading it from the payload here is safe for exactly that reason
-      // and for no other — do not add a handler that takes a path the broker has not
-      // seen, or this comment becomes a lie.
       const { path } = payload as { path: string };
       return await Deno.readTextFile(path);
     },

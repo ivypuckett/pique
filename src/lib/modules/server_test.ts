@@ -1,23 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { modulePolicy, uiPathFor } from "./server.ts";
-
-// The header is the network control, and the only one there is: a sandboxed frame with
-// no CSP reached a recording server through img.src, no-cors fetch, sendBeacon,
-// <script src>, <link href> and WebSocket alike (spec: "Outbound requests"). If this
-// string weakens, a module silently gets the network back and no test but this one
-// would notice.
-Deno.test("the CSP grants inline script and style, and nothing else", () => {
-  const p = modulePolicy();
-  assertEquals(p.includes("default-src 'none'"), true);
-  assertEquals(p.includes("script-src 'unsafe-inline'"), true);
-  assertEquals(p.includes("style-src 'unsafe-inline'"), true);
-  // 'self' matches nothing from an opaque origin — measured, not assumed. Including it
-  // would only mislead a reader into thinking a module may ship separate files.
-  assertEquals(p.includes("'self'"), false);
-  // default-src covers connect/img/font/frame; naming them would suggest the omission
-  // of one is meaningful.
-  assertEquals(p.includes("connect-src"), false);
-});
+import { uiPathFor } from "./server.ts";
 
 // A module's UI is a sibling of its extension, not a directory: pi auto-discovers
 // `extensions/*.ts` by basename, so a directory would not load as an extension at all.

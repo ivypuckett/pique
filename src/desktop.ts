@@ -13,15 +13,11 @@
 //    array". PTY output is therefore sent as a plain number array and rebuilt into a
 //    Uint8Array on the frontend.
 
-import { dispatch } from "./lib/modules/broker.ts";
 import { handlersFor } from "./lib/modules/handlers.ts";
 import {
-  enableModule,
   listAllModules,
   listModules,
-  listPendingModules,
-  manifestFor,
-  revokeModule,
+  removeModule,
 } from "./lib/modules/service.ts";
 
 const win = new Deno.BrowserWindow({
@@ -121,35 +117,24 @@ win.bind("moduleManifest", () => {
   }));
 });
 
-// The one door for everything a user module asks for. `moduleId` and `scope` come from
-// the host component that mounted the frame (modules/UserModule.svelte), never from the
-// frame itself — a frame cannot name a module, so it cannot name another one. The
-// manifest is then resolved from disk for THAT module, and the broker refuses anything
-// it does not grant before a handler runs.
 win.bind("moduleList", async (arg) => {
   const { scope } = arg as { scope: string };
-  const [own, pending] = await Promise.all([
-    listModules(scope),
-    listPendingModules(scope),
-  ]);
   // What the scope inherits: root's modules are visible from every workspace, and are
-  // consented to and revoked in root, never here.
+  // managed in root, never here.
+  const own = (await listModules(scope)).modules;
   const inherited = scope === "root" ? [] : (await listModules("root")).modules;
-  return { installed: [...own.modules, ...inherited], pending };
+  return [...own, ...inherited];
 });
 
-win.bind("moduleEnable", async (arg) => {
+win.bind("moduleRemove", async (arg) => {
   const { scope, name } = arg as { scope: string; name: string };
-  await enableModule(scope, name);
+  await removeModule(scope, name);
   return true;
 });
 
-win.bind("moduleRevoke", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await revokeModule(scope, name);
-  return true;
-});
-
+// The one door for everything a user module asks for. `moduleId` and `scope` come from
+// the host component that mounted the frame (modules/UserModule.svelte), never from the
+// frame itself.
 win.bind("moduleCall", async (arg) => {
   const { moduleId, scope, method, payload } = arg as {
     moduleId: string;
@@ -157,15 +142,9 @@ win.bind("moduleCall", async (arg) => {
     method: string;
     payload: unknown;
   };
-  const manifest = await manifestFor(scope, moduleId);
-  if (!manifest) throw new Error(`no such module: ${moduleId}`);
-  return await dispatch(
-    manifest,
-    scope,
-    method,
-    payload,
-    handlersFor(moduleId),
-  );
+  const handler = handlersFor(moduleId)[method];
+  if (!handler) throw new Error(`${method} is not a module method`);
+  return await handler(scope, payload);
 });
 
 win.bind("chatStart", async (arg) => {

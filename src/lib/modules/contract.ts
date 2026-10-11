@@ -8,8 +8,7 @@
 // to forge — it cannot name a module other than itself, because it never names one at
 // all.
 
-// Frame → host. `id` correlates the reply; `method` is checked against the module's
-// granted capabilities before anything runs (modules/capabilities.ts).
+// Frame → host. `id` correlates the reply; `method` names one of modules/handlers.ts.
 export type CallMessage = {
   t: "call";
   id: number;
@@ -17,8 +16,8 @@ export type CallMessage = {
   payload: unknown;
 };
 
-// Host → frame. `ok: false` carries a refusal or a handler error, as a string the panel
-// may display — never an object that might leak a path or a stack.
+// Host → frame. `ok: false` carries a handler error, as a string the panel may display
+// — never an object that might leak a path or a stack.
 export type ResultMessage = {
   t: "result";
   id: number;

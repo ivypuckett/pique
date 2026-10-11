@@ -17,6 +17,7 @@ import {
 import { scopeBindings } from "../scope/bindings.ts";
 import { patchScopeChat } from "../scope/store.ts";
 import { ROOT } from "../scope/paths.ts";
+import { hydrateModules } from "../modules/bindings.ts";
 
 // Defined next to ChatEvent in chat/agent.ts: the backend rebuilds the same Items for a
 // resumed conversation, so the shape has to be one thing, not two.
@@ -153,6 +154,9 @@ function createSession(
           : i)
         )
       );
+      // A module the agent just wrote is in use already; the rail only has to re-read
+      // the table to show it (modules/agent-tools.ts).
+      if (ev.name === "define_module" && !ev.isError) hydrateModules();
     } else if (ev.kind === "done" || ev.kind === "error") {
       streaming.set(false);
       if (ev.kind === "error") {
