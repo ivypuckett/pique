@@ -7,6 +7,8 @@
     "web": "deno run -A npm:vite",
     "build": "deno run -A npm:vite build",
     "test": "deno test -A src/",
+    "check": "deno check src/",
+    "verify": "deno fmt --check && deno lint && deno task check && deno task test",
     "icon": "rsvg-convert -w 1024 -h 1024 assets/pique.svg -o assets/pique.png"
   },
   "imports": {
