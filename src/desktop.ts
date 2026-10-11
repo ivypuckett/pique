@@ -426,8 +426,9 @@ win.bind("systemPromptsDelete", async (arg) => {
 
 // The agent dir this process runs against, and pi's own — the setting can differ from
 // the first until the next launch, and Settings says so.
-win.bind("agentDir", () =>
-  Promise.resolve({ dir: paths.agentDir(), pi: paths.piAgentDir() })
+win.bind(
+  "agentDir",
+  () => Promise.resolve({ dir: paths.agentDir(), pi: paths.piAgentDir() }),
 );
 
 // Copy the `pi` CLI's setup in (lib/import.ts). It may have replaced auth.json,

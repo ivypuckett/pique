@@ -1,8 +1,8 @@
 # Prompt templates
 
 A **prompt template** is a reusable message, stored as one markdown file, that
-you send by typing `/name` in a Chat module. It is pi's own feature — pique adds a
-place to write them.
+you send by typing `/name` in a Chat module. It is pi's own feature — pique adds
+a place to write them.
 
 It grants nothing and does not run until you type its name. It is text that
 lands in the input box.
@@ -49,15 +49,15 @@ contains `$1` is left alone.
   review-staged.md     invocable as /review-staged
 ```
 
-That is the agent folder (Settings → Library; see the README), and `prompts/` in it
-is exactly where pi looks. Settings → Library
-is a full editor: create, edit, delete. An agent writes one with pi's own `write`
-tool, and it is invocable as soon as it lands.
+That is the agent folder (Settings → Library; see the README), and `prompts/` in
+it is exactly where pi looks. Settings → Library is a full editor: create, edit,
+delete. An agent writes one with pi's own `write` tool, and it is invocable as
+soon as it lands.
 
 ## Editing takes effect immediately
 
-Prompt templates are read from the resource loader on every prompt, so saving one
-refreshes the running conversations (`chatReloadPrompts` →
+Prompt templates are read from the resource loader on every prompt, so saving
+one refreshes the running conversations (`chatReloadPrompts` →
 `resourceLoader.reload()`) and the `/` menu, **without** restarting the agent or
 losing the transcript. The system prompt is the one that needs asking for: it is
 rebuilt only when pi's own `reload()` runs, which is what `/reload` does — see
@@ -69,24 +69,24 @@ A template's body arrives as **your message**, not as system-prompt text. That
 is the whole difference between the two places an instruction can live, and it
 decides which one to use:
 
-|                                          | Where                                         | Reaches the model as               |
-| ---------------------------------------- | --------------------------------------------- | ---------------------------------- |
-| A standing instruction, every conversation | `~/.pique/agent/SYSTEM.md` or `APPEND_SYSTEM.md` | the system prompt               |
-| An instruction for one task, on demand   | `~/.pique/agent/prompts/<name>.md`            | a user turn, when you type `/name` |
+|                                            | Where                                            | Reaches the model as               |
+| ------------------------------------------ | ------------------------------------------------ | ---------------------------------- |
+| A standing instruction, every conversation | `~/.pique/agent/SYSTEM.md` or `APPEND_SYSTEM.md` | the system prompt                  |
+| An instruction for one task, on demand     | `~/.pique/agent/prompts/<name>.md`               | a user turn, when you type `/name` |
 
 Nothing is selectable per conversation: every conversation runs the same system
-prompt (or, in a trusted project, that project's own `.pi/SYSTEM.md`). Editing that file does reach a running
-conversation, but only when it asks — `/reload` — whereas a template takes
-effect the moment it is saved, because it never touches the system prompt at all
-(above).
+prompt (or, in a trusted project, that project's own `.pi/SYSTEM.md`). Editing
+that file does reach a running conversation, but only when it asks — `/reload` —
+whereas a template takes effect the moment it is saved, because it never touches
+the system prompt at all (above).
 
 pique used to have a third thing, a **profile**, whose body was appended to the
 system prompt and which carried a tool allowlist. It is gone; templates and
 `SYSTEM.md` are what remain. Old profiles may still be on disk under
-`~/.pique/scopes/` and are no longer read by anything. Porting
-one is a rewrite rather than a move: a body written to be appended to a system
-prompt usually reads oddly as a message, and there is no replacement at all for
-its `tools:` allowlist.
+`~/.pique/scopes/` and are no longer read by anything. Porting one is a rewrite
+rather than a move: a body written to be appended to a system prompt usually
+reads oddly as a message, and there is no replacement at all for its `tools:`
+allowlist.
 
 ## Other sources
 
@@ -106,8 +106,7 @@ menu:
 
 pi's loader records a `collision` diagnostic naming the winning and losing file
 whenever two templates share a name. Surfacing it would catch collisions with
-package- and project-supplied templates, which pique cannot see from disk
-alone.
+package- and project-supplied templates, which pique cannot see from disk alone.
 
 ### 2. Argument validation
 

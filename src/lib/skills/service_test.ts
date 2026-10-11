@@ -32,9 +32,7 @@ Deno.test("no skills dir lists nothing rather than failing", async () => {
 
 Deno.test("both directory and loose-file skills are listed", async () => {
   await withTempHome(async () => {
-    await writeDirSkill("changelog-style",
-      "---\ndescription: d1\n---\nbody",
-    );
+    await writeDirSkill("changelog-style", "---\ndescription: d1\n---\nbody");
     await writeFileSkill("terse", "---\ndescription: d2\n---\nbody");
 
     assertEquals(
@@ -54,9 +52,7 @@ Deno.test("both directory and loose-file skills are listed", async () => {
 // reported so the mismatch is visible, but it is NOT what the skill is named here.
 Deno.test("a frontmatter name that disagrees with the basename is reported, not used", async () => {
   await withTempHome(async () => {
-    await writeDirSkill("changelog-style",
-      "---\nname: something-else\n---\nb",
-    );
+    await writeDirSkill("changelog-style", "---\nname: something-else\n---\nb");
 
     const [skill] = await listSkills();
     assertEquals(skill.name, "changelog-style");
@@ -83,9 +79,7 @@ Deno.test("when both shapes share a name, the directory form wins and the loose 
 // it via `error` rather than blend the two into the same blank description.
 Deno.test("malformed frontmatter still lists the skill, with its name, and carries the error", async () => {
   await withTempHome(async () => {
-    await writeDirSkill("broken",
-      "---\ndescription: [unclosed\n---\nbody",
-    );
+    await writeDirSkill("broken", "---\ndescription: [unclosed\n---\nbody");
 
     const [skill] = await listSkills();
     assertEquals(skill.name, "broken");

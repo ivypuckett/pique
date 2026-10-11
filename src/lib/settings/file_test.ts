@@ -102,7 +102,10 @@ Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () =
 Deno.test("resolveAgentDir reads the setting, expanding a leading ~", () => {
   const home = Deno.env.get("HOME");
   assertEquals(resolveAgentDir({ agent: { dir: "/x/agent" } }), "/x/agent");
-  assertEquals(resolveAgentDir({ agent: { dir: "~/.pi/agent" } }), `${home}/.pi/agent`);
+  assertEquals(
+    resolveAgentDir({ agent: { dir: "~/.pi/agent" } }),
+    `${home}/.pi/agent`,
+  );
 });
 
 Deno.test("resolveAgentDir is undefined for a blank, missing or malformed setting", () => {

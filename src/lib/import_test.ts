@@ -31,7 +31,10 @@ Deno.test("pi's setup comes across, and its chat history does not", async () => 
 
     const result = await importFromPi();
 
-    assertEquals(await read(`${agentDir()}/extensions/weather.ts`), "// weather");
+    assertEquals(
+      await read(`${agentDir()}/extensions/weather.ts`),
+      "// weather",
+    );
     assertEquals(await read(`${agentDir()}/prompts/review.md`), "review");
     assertEquals(await read(`${agentDir()}/auth.json`), '{"anthropic":{}}');
     await assertRejects(() => Deno.stat(`${agentDir()}/sessions`));

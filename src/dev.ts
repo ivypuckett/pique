@@ -58,11 +58,15 @@ export function launchCommand(
   const bundle = entries.find((e) => e.endsWith(".app"));
   // -W waits for the app to quit, so `deno task dev` stays in the foreground and ^C
   // still ends the session the way it does on the other two platforms.
-  if (os === "darwin" && bundle) return { cmd: "open", args: ["-W", join(dir, bundle)] };
+  if (os === "darwin" && bundle) {
+    return { cmd: "open", args: ["-W", join(dir, bundle)] };
+  }
   const exe = os === "windows" ? `${APP}.exe` : APP;
   if (!entries.includes(exe)) {
     throw new Error(
-      `deno desktop left no ${exe} in ${dir}/ — found: ${entries.join(", ") || "nothing"}`,
+      `deno desktop left no ${exe} in ${dir}/ — found: ${
+        entries.join(", ") || "nothing"
+      }`,
     );
   }
   return { cmd: join(dir, exe), args: [] };

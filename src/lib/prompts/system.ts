@@ -28,7 +28,9 @@ export type PromptFileInfo = {
 const KINDS: PromptFileKind[] = ["system", "appendix"];
 
 export function promptFilePath(kind: PromptFileKind): string {
-  return `${agentDir()}/${kind === "system" ? "SYSTEM.md" : "APPEND_SYSTEM.md"}`;
+  return `${agentDir()}/${
+    kind === "system" ? "SYSTEM.md" : "APPEND_SYSTEM.md"
+  }`;
 }
 
 // Both files' text as one string, for telling whether either moved under a running

@@ -6,7 +6,9 @@ import { activeToolNames, startAgent, stopAgent } from "./agent.ts";
 import { installPackage } from "../extensions/service.ts";
 import { ensureExtensionDirs, livePath } from "../extensions/paths.ts";
 
-async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
+async function withTempHome(
+  fn: (home: string) => Promise<void>,
+): Promise<void> {
   const prev = Deno.env.get("HOME");
   const dir = await Deno.makeTempDir();
   Deno.env.set("HOME", dir);
@@ -50,7 +52,10 @@ async function tools(): Promise<string[]> {
 Deno.test("a local extension in pi's agent dir reaches the agent", async () => {
   await withTempHome(async () => {
     await ensureExtensionDirs();
-    await Deno.writeTextFile(livePath("local_tool"), extensionSource("local_tool"));
+    await Deno.writeTextFile(
+      livePath("local_tool"),
+      extensionSource("local_tool"),
+    );
     assertEquals((await tools()).includes("local_tool"), true);
   });
 });

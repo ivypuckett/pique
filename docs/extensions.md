@@ -10,10 +10,10 @@ calls. One extension registers one or more tools.
 
 Extensions come from two origins, which differ only in how the bytes arrive:
 
-| Origin      | What it is                             | Acquired by                                                     |
-| ----------- | -------------------------------------- | --------------------------------------------------------------- |
-| **local**   | a loose `.ts` module                   | the agent writing one with pi's own tools, or you, by hand      |
-| **package** | a pi package from npm/git/a local path | Settings → Library, backed by pi's `DefaultPackageManager`      |
+| Origin      | What it is                             | Acquired by                                                |
+| ----------- | -------------------------------------- | ---------------------------------------------------------- |
+| **local**   | a loose `.ts` module                   | the agent writing one with pi's own tools, or you, by hand |
+| **package** | a pi package from npm/git/a local path | Settings → Library, backed by pi's `DefaultPackageManager` |
 
 An extension may also contribute a **module**: a panel in the right pane, drawn
 by its own HTML. That is a second thing an extension can ship, not a second kind
@@ -26,10 +26,10 @@ user-managed and does not appear in the list.
 
 ## Where they live
 
-pique keeps a pi agent dir, laid out exactly as the `pi` CLI's `~/.pi/agent`, and
-pi discovers what is in it itself. It is `~/.pique/agent` unless moved in Settings →
-Library (point it at `~/.pi/agent` to share one setup with the CLI), and "Import from
-pi" copies the CLI's setup in:
+pique keeps a pi agent dir, laid out exactly as the `pi` CLI's `~/.pi/agent`,
+and pi discovers what is in it itself. It is `~/.pique/agent` unless moved in
+Settings → Library (point it at `~/.pi/agent` to share one setup with the CLI),
+and "Import from pi" copies the CLI's setup in:
 
 ```
 ~/.pique/agent/
@@ -43,14 +43,14 @@ pi" copies the CLI's setup in:
 
 There is no pique-side record that could disagree with what pi loads, and no
 gate between writing a file and it running: an extension is trusted code. A
-sandbox, if you want one, belongs in an extension of its own — `pi.on("tool_call")`
-is where one would intercept what an agent does.
+sandbox, if you want one, belongs in an extension of its own —
+`pi.on("tool_call")` is where one would intercept what an agent does.
 
-| Step    | local                       | package                                            |
-| ------- | --------------------------- | -------------------------------------------------- |
-| Install | write `extensions/<n>.ts`   | `install(source)` + `addSourceToSettings(source)`  |
-| View    | the file                    | the entry files `resolveExtensionSources()` yields |
-| Delete  | `Deno.remove`               | `removeSourceFromSettings()` + `remove(source)`    |
+| Step    | local                     | package                                            |
+| ------- | ------------------------- | -------------------------------------------------- |
+| Install | write `extensions/<n>.ts` | `install(source)` + `addSourceToSettings(source)`  |
+| View    | the file                  | the entry files `resolveExtensionSources()` yields |
+| Delete  | `Deno.remove`             | `removeSourceFromSettings()` + `remove(source)`    |
 
 Every change takes effect in Chat modules opened **afterwards**. A session
 already running picks the change up when someone types **`/reload`** in it —
@@ -132,10 +132,10 @@ this is visible.
 The genuinely broken case is distinguishable from it: an extension that fails to
 **import** is still in pi's loading set, and pi's reload swallows the error, so
 nothing in the list sets it apart. `service.ts:extensionLoadErrors` reads them
-back off a loader, and the Library lists them above everything else.
-They are shown as their own group rather than marked against a row, because a
-package's failure names a file inside its install tree rather than the source
-string the row shows, and matching the two up would quietly miss.
+back off a loader, and the Library lists them above everything else. They are
+shown as their own group rather than marked against a row, because a package's
+failure names a file inside its install tree rather than the source string the
+row shows, and matching the two up would quietly miss.
 
 ---
 
@@ -166,9 +166,9 @@ becomes a turn, and `chat/agent.ts:listCommands` contributes the entry to the
 `/` menu as the one command sourced from pique itself. The reply is a `notice`
 line, styled as pique speaking rather than as the model, naming what was added,
 removed, or failed to load — and, when they apply, that the system prompt was
-updated and that the model default is not what this conversation runs.
-Tools were once the only thing it mentioned, which left an applied `SYSTEM.md`
-edit reported as "no tool changes".
+updated and that the model default is not what this conversation runs. Tools
+were once the only thing it mentioned, which left an applied `SYSTEM.md` edit
+reported as "no tool changes".
 
 Reporting failures there is the point of the summary: pi's reload swallows a
 module that will not import, so without it a broken extension is
@@ -193,8 +193,9 @@ still able to run a turn.
   re-apply it: a conversation keeps the model it has been running rather than
   having one swapped in underneath it. It is _reported_ instead — the notice
   names the default when a new chat would come up on a different model, which
-  happens when the pick was made in another view or on disk. A default that is merely unavailable is not mentioned, since a new chat
-  would fall back to exactly what this session already took.
+  happens when the pick was made in another view or on disk. A default that is
+  merely unavailable is not mentioned, since a new chat would fall back to
+  exactly what this session already took.
 - Whether a **provider** accepts a request whose history names a tool absent
   from the current tool list is untested — the mock endpoint accepts anything.
   It only arises after a removal in a conversation that already used the tool.
@@ -210,12 +211,11 @@ still able to run a turn.
 ### 2. Source validation
 
 Nothing checks that a module in `extensions/` parses, default-exports a
-function, or calls `pi.registerTool()`. A malformed one may throw during pi's session
-startup, breaking **new chat sessions** rather than failing quietly. The obvious
-check — importing it to see if it loads — _executes_ it.
+function, or calls `pi.registerTool()`. A malformed one may throw during pi's
+session startup, breaking **new chat sessions** rather than failing quietly. The
+obvious check — importing it to see if it loads — _executes_ it.
 
 ### 3. Package updates
 
 `checkForAvailableUpdates()` and `update()` exist in pi's package manager and
 are unused. An "update available" affordance is a natural follow-up.
-

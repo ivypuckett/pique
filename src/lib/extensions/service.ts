@@ -135,7 +135,10 @@ export async function removeExtension(id: string): Promise<void> {
 export async function extensionLoadErrors(): Promise<
   Array<{ name: string; error: string }>
 > {
-  const loader = new DefaultResourceLoader({ cwd: home(), agentDir: agentDir() });
+  const loader = new DefaultResourceLoader({
+    cwd: home(),
+    agentDir: agentDir(),
+  });
   await loader.reload();
   const errors: Array<{ path: string; error: string }> =
     loader.getExtensions().errors ?? [];

@@ -1,51 +1,52 @@
 # Keybindings
 
-Everything is driven from `App.svelte`'s single capture-phase `keydown` listener,
-and everything it can do is spelled out in the status bar at the bottom of the
-window. `ctrl` below is `cmd` on a Mac.
+Everything is driven from `App.svelte`'s single capture-phase `keydown`
+listener, and everything it can do is spelled out in the status bar at the
+bottom of the window. `ctrl` below is `cmd` on a Mac.
 
 ## Chords
 
-Three tmux-style prefixes. Press one to arm a mode — the status bar swaps to that
-mode's key list — then press a key. A mode exits on `esc`, on any key it does not
-recognise, or after 2s idle. Pressing another prefix while one is armed switches
-modes rather than counting as an unrecognised key.
+Three tmux-style prefixes. Press one to arm a mode — the status bar swaps to
+that mode's key list — then press a key. A mode exits on `esc`, on any key it
+does not recognise, or after 2s idle. Pressing another prefix while one is armed
+switches modes rather than counting as an unrecognised key.
 
-| Prefix | Mode | Keys |
-| --- | --- | --- |
-| `ctrl+h` | view | `n` new · `w` close · `h`/`l` previous/next · `enter` focus |
-| `ctrl+j` | workspace | `n` new · `o` open a folder · `w` close · `k`/`j` up/down · `enter` focus |
-| `ctrl+t` | pane | `e` editor · `t` terminal · `g` git diff · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
+| Prefix   | Mode      | Keys                                                                                                                                         |
+| -------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctrl+h` | view      | `n` new · `w` close · `h`/`l` previous/next · `enter` focus                                                                                  |
+| `ctrl+j` | workspace | `n` new · `o` open a folder · `w` close · `k`/`j` up/down · `enter` focus                                                                    |
+| `ctrl+t` | pane      | `e` editor · `t` terminal · `g` git diff · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
 
 The pane chord's letters are the module rail's rows, one letter each, and they
 **show** a row rather than adding to it: `ctrl+t g` twice is still one Git Diff.
-`n` is what adds — one more of whatever row you are on, so `ctrl+t n` is a second
-terminal. Only a row that may hold more than one answers it.
+`n` is what adds — one more of whatever row you are on, so `ctrl+t n` is a
+second terminal. Only a row that may hold more than one answers it.
 
-A module of your own has a rail row but no letter: the chord is a fixed namespace,
-and a module claiming a letter could shadow a built-in. The rail moves on
-`↑`/`↓` rather than `j`/`k` because every built-in row has a letter, so the
-arrows are a convenience rather than the way in — and the one way in to a module
-of your own.
+A module of your own has a rail row but no letter: the chord is a fixed
+namespace, and a module claiming a letter could shadow a built-in. The rail
+moves on `↑`/`↓` rather than `j`/`k` because every built-in row has a letter, so
+the arrows are a convenience rather than the way in — and the one way in to a
+module of your own.
 
 ### Sticky and one-shot
 
 Navigation keys are **sticky**: they re-arm the mode, so `ctrl+t h h h` walks
 three tabs left, `ctrl+t ↓ ↓` moves two rail rows down, and `ctrl+j j j` moves
-down two workspaces. Keys that *show or open* something are **one-shot** — the
+down two workspaces. Keys that _show or open_ something are **one-shot** — the
 mode drops immediately, so the first thing you type into what you just opened is
 not eaten by the chord handler.
 
-`ctrl+t w` closes without confirming; `ctrl+j w` asks first. A tab is one module,
-a workspace takes every view and tab in it. Closing a row's last tab leaves that
-row selected, showing the key that would open another — it does not move you
-somewhere else.
+`ctrl+t w` closes without confirming; `ctrl+j w` asks first. A tab is one
+module, a workspace takes every view and tab in it. Closing a row's last tab
+leaves that row selected, showing the key that would open another — it does not
+move you somewhere else.
 
 Only two rows have tabs to close: **terminal**, which can hold several, and
-**editor**, whose tabs are the files you opened from the tree. A singleton row
-— Git Diff, or a module of your own that does not ask for more — *is* its module: it has no tab strip,
-no close button, and `ctrl+t w` does nothing there. It mounts the first time you
-visit it and stays for the life of the view, the way the file tree does.
+**editor**, whose tabs are the files you opened from the tree. A singleton row —
+Git Diff, or a module of your own that does not ask for more — _is_ its module:
+it has no tab strip, no close button, and `ctrl+t w` does nothing there. It
+mounts the first time you visit it and stays for the life of the view, the way
+the file tree does.
 
 ### Focus
 
@@ -63,15 +64,16 @@ Terminals only, on the way in. The helper focuses a pane's first focusable
 element, which for a terminal is xterm's textarea but for another module is
 whatever control happens to come first — so focusing every module would hand a
 stray keystroke after `ctrl+t` to that control. Everything else keeps focus
-where it already was. `ctrl+t` additionally reveals the right pane if it was collapsed.
+where it already was. `ctrl+t` additionally reveals the right pane if it was
+collapsed.
 
 `ctrl+t e` is the one exception that focuses something else: it selects the
-editor row and puts the caret in the file tree, which is an explicit step in
-its handler rather than anything `settleFocus` does.
+editor row and puts the caret in the file tree, which is an explicit step in its
+handler rather than anything `settleFocus` does.
 
 `enter` means "take me to what is on screen now": settle focus, leave the mode.
 It earns an explicit case for a reason worth remembering — a key a mode does
-*not* recognise exits **without swallowing the stroke**, which then lands
+_not_ recognise exits **without swallowing the stroke**, which then lands
 wherever focus is. Since focus after a chord is so often a terminal, a
 fall-through `enter` would run whatever was sitting on its command line.
 
@@ -79,35 +81,35 @@ fall-through `enter` would run whatever was sitting on its command line.
 
 No prefix, no mode.
 
-| Key | Action |
-| --- | --- |
-| `ctrl+b` | show/hide the workspace rail |
-| `ctrl+shift+b` | collapse/expand the right pane |
-| `ctrl+shift+e` | file tree ⇄ the file open beside it |
-| `ctrl+shift+m` | put the caret in the chat's message box |
-| `ctrl+,` | settings |
-| `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in, out, reset |
+| Key                            | Action                                  |
+| ------------------------------ | --------------------------------------- |
+| `ctrl+b`                       | show/hide the workspace rail            |
+| `ctrl+shift+b`                 | collapse/expand the right pane          |
+| `ctrl+shift+e`                 | file tree ⇄ the file open beside it     |
+| `ctrl+shift+m`                 | put the caret in the chat's message box |
+| `ctrl+,`                       | settings                                |
+| `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in, out, reset                     |
 
 `ctrl+shift+e` is the editing round trip. Opening a file from the tree already
-puts the caret in it — `addEditorTab` sets `autoFocus` — so this is the way back,
-and pressing it again from the tree returns you to the tab you left. From any
-other row it selects the editor row and focuses the tree, the same as
+puts the caret in it — `addEditorTab` sets `autoFocus` — so this is the way
+back, and pressing it again from the tree returns you to the tab you left. From
+any other row it selects the editor row and focuses the tree, the same as
 `ctrl+t e`; with nothing open beside the tree there is nothing to go back to and
 the caret stays where it is.
 
-It is a plain shortcut rather than a fourth `ctrl+t` stroke because it is meant to
-be pressed mid-edit, where a prefix is three keys and a pause. It is **shifted**
-because an editor tab is `$EDITOR` running in a terminal and the capture-phase
-listener swallows whatever it binds: a bare `ctrl+e` would take vim's
-scroll-one-line away in exactly the place this shortcut exists to serve. `ctrl+e`
-stays unbound.
+It is a plain shortcut rather than a fourth `ctrl+t` stroke because it is meant
+to be pressed mid-edit, where a prefix is three keys and a pause. It is
+**shifted** because an editor tab is `$EDITOR` running in a terminal and the
+capture-phase listener swallows whatever it binds: a bare `ctrl+e` would take
+vim's scroll-one-line away in exactly the place this shortcut exists to serve.
+`ctrl+e` stays unbound.
 
 `ctrl+shift+m` reaches the message box from anywhere, for the moment mid-command
 when you want to ask instead of type. It is one-way, unlike `ctrl+shift+e`: the
 way back is whatever you came from, and the chat column is on screen in every
 view, so there is nothing to reveal first.
 
-`m` is for the box's own *Message…*, and the letter matters twice over. It is
+`m` is for the box's own _Message…_, and the letter matters twice over. It is
 **shifted** for the reason the editing shortcut is — the capture-phase listener
 swallows whatever it binds, and a bare `ctrl+m` is the return key (`^M`) to
 anything running in a terminal. And it is not `c`, the obvious first choice: the
@@ -124,16 +126,16 @@ and `=` on another.
 
 ## Not implemented: moving tabs
 
-`shift+h` / `shift+l` inside the tab chord to drag the active tab along the strip
-is the obvious next key, and the chord has room for it. It is deliberately not
-built.
+`shift+h` / `shift+l` inside the tab chord to drag the active tab along the
+strip is the obvious next key, and the chord has room for it. It is deliberately
+not built.
 
 Every other pane chord key is a keyboard path to something the mouse can already
 do — the rail opens modules, `+` adds one more, the `×` closes them, clicking a
-tab selects it.
-Reordering is not: the tab strip has no drag handles and no context menu, so
-`shift+h`/`shift+l` would be the *only* way to reorder, and a capability that
-exists on exactly one input is a capability most users never find.
+tab selects it. Reordering is not: the tab strip has no drag handles and no
+context menu, so `shift+h`/`shift+l` would be the _only_ way to reorder, and a
+capability that exists on exactly one input is a capability most users never
+find.
 
 Building it properly means a `moveTab(v, dir)` reducer beside `focusAdjacentTab`
 in `layout.ts` **and** drag-reordering in `TabStrip.svelte`. That is a tab-strip

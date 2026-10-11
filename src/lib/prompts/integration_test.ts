@@ -28,7 +28,10 @@ Deno.test("a saved template is loaded by pi, and its hint survives the round tri
       body: "Review `git diff --cached`, focusing on $@",
     });
 
-    const loader = new DefaultResourceLoader({ cwd: home, agentDir: agentDir() });
+    const loader = new DefaultResourceLoader({
+      cwd: home,
+      agentDir: agentDir(),
+    });
     await loader.reload();
     const loaded = [...loader.getPrompts().prompts];
     assertEquals(loaded.map((t) => t.name), ["review"]);

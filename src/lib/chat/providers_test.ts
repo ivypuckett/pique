@@ -16,15 +16,18 @@ Deno.test("toProviderInfo projects id/name/flags", () => {
     name: "Anthropic",
     auth: { apiKey: { login: () => {} } },
   };
-  assertEquals(toProviderInfo(p, { configured: true, source: "stored" }, false), {
-    id: "anthropic",
-    name: "Anthropic",
-    configured: true,
-    canApiKey: true,
-    isCustom: false,
-    source: "stored",
-    sourceLabel: undefined,
-  });
+  assertEquals(
+    toProviderInfo(p, { configured: true, source: "stored" }, false),
+    {
+      id: "anthropic",
+      name: "Anthropic",
+      configured: true,
+      canApiKey: true,
+      isCustom: false,
+      source: "stored",
+      sourceLabel: undefined,
+    },
+  );
 });
 
 Deno.test("toProviderInfo falls back to id when name is missing, and canApiKey false without login", () => {
@@ -51,7 +54,11 @@ Deno.test("toProviderInfo falls back to id when name is missing, and canApiKey f
 // Disconnect that does nothing visible.
 Deno.test("toProviderInfo carries the environment source and its variable name", () => {
   const info = toProviderInfo(
-    { id: "amazon-bedrock", name: "Amazon Bedrock", auth: { apiKey: { login: () => {} } } },
+    {
+      id: "amazon-bedrock",
+      name: "Amazon Bedrock",
+      auth: { apiKey: { login: () => {} } },
+    },
     { configured: true, source: "environment", label: "AWS_PROFILE" },
     false,
   );

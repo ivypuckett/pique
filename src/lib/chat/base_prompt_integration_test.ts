@@ -12,7 +12,7 @@ import {
   stopAgent,
   systemPromptOf,
 } from "./agent.ts";
-import { promptFilePath, type PromptFileKind } from "../prompts/system.ts";
+import { type PromptFileKind, promptFilePath } from "../prompts/system.ts";
 import { agentDir } from "../paths.ts";
 
 const PI_PREAMBLE = "coding assistant operating inside pi";

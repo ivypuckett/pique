@@ -23,7 +23,13 @@ Deno.test("keys a definition no longer uses are ignored", () => {
     capabilities: { storage: true },
   });
   assertEquals(r.ok, true);
-  if (r.ok) assertEquals(r.def, { kind: "notes", label: "Notes", duplicable: undefined });
+  if (r.ok) {
+    assertEquals(r.def, {
+      kind: "notes",
+      label: "Notes",
+      duplicable: undefined,
+    });
+  }
 });
 
 Deno.test("junk is an error, not a throw", () => {

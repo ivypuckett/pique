@@ -1,7 +1,7 @@
 // Local extensions: loose `.ts` modules in pi's extensions dir, written by the user or by
 // an agent. Being there is what makes one run — pi loads every one at session start —
 // so there is no state to track beyond the file itself. Runs Deno-side only.
-import { livePath, liveDir } from "./paths.ts";
+import { liveDir, livePath } from "./paths.ts";
 
 export type LocalExtension = { name: string };
 

@@ -9,6 +9,14 @@ Deno.test("openUrlCommand uses the platform opener", () => {
 
 Deno.test("openUrlCommand refuses anything but https", () => {
   // The opener acts on whatever scheme the desktop knows — file://, and worse.
-  assertThrows(() => openUrlCommand("linux", "file:///etc/passwd"), Error, "not an https");
-  assertThrows(() => openUrlCommand("linux", "http://daisyui.com"), Error, "not an https");
+  assertThrows(
+    () => openUrlCommand("linux", "file:///etc/passwd"),
+    Error,
+    "not an https",
+  );
+  assertThrows(
+    () => openUrlCommand("linux", "http://daisyui.com"),
+    Error,
+    "not an https",
+  );
 });

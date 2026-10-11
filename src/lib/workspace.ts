@@ -1,8 +1,4 @@
-import {
-  createInitialView,
-  isViewState,
-  type ViewState,
-} from "./layout.ts";
+import { createInitialView, isViewState, type ViewState } from "./layout.ts";
 
 // A workspace is an ordered set of views tiled horizontally with equal width. Exactly
 // one view is "active" (the presented view); keyboard navigation moves the active id
@@ -98,4 +94,3 @@ export function isWorkspaceState(w: unknown): w is WorkspaceState {
   return typeof obj.activeId === "string" &&
     (obj.views as ViewState[]).some((v) => v.id === obj.activeId);
 }
-

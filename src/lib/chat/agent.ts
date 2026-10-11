@@ -542,7 +542,8 @@ export function listCommands(id: string): CommandInfo[] {
   // store intercepts these before they ever get that far.
   const pique: CommandInfo[] = [{
     name: "new",
-    description: "Start a new chat, leaving this conversation behind (also /clear)",
+    description:
+      "Start a new chat, leaving this conversation behind (also /clear)",
     source: "pique",
   }, {
     name: "reload",

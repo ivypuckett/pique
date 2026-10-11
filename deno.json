@@ -29,6 +29,9 @@
     "@git-diff-view/svelte": "npm:@git-diff-view/svelte@^0.1.7",
     "@git-diff-view/core": "npm:@git-diff-view/core@^0.1.7"
   },
+  "fmt": {
+    "exclude": ["assets/"]
+  },
   "compilerOptions": {
     "types": ["svelte"]
   },

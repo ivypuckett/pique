@@ -16,7 +16,8 @@ function stubBindings(files: Record<string, unknown>): void {
 // The store module keeps a module-level `hydrated` flag and a debounced write timer,
 // so this tolerates the pending timer.
 Deno.test({
-  name: "hydrating a layout whose selected row is gone falls back to an offered one",
+  name:
+    "hydrating a layout whose selected row is gone falls back to an offered one",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
