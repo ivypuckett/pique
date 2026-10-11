@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { PROMPT_FILE_NAMES, type PromptFileDraft } from "./prompt-items.ts";
+  import { PROMPT_FILE_NAMES, type PromptFileDraft } from "./system-items.ts";
 
   // One form for both kinds and for both creating and editing — there is exactly one
-  // file of each kind per scope, so `kind` is the identity and there is nothing to name.
+  // file of each kind, so `kind` is the identity and there is nothing to name.
   //
-  // `draft` is bindable rather than owned here so the shell can discard it on a scope
-  // switch — a draft belongs to the scope it was started in.
+  // `draft` is bindable rather than owned here so the shell can discard it.
   let {
     draft = $bindable(),
     busy,
@@ -18,7 +17,7 @@
     oncancel: () => void;
   } = $props();
 
-  // Saving nothing DELETES the file (scope/prompt.ts says why), so the button has to say
+  // Saving nothing DELETES the file (prompts/system.ts says why), so the button has to say
   // so — otherwise clearing the box and pressing Save looks like it failed to write.
   const clearing = $derived(draft.body.trim() === "");
 </script>
@@ -29,22 +28,22 @@
     <span class="font-mono text-xs">{PROMPT_FILE_NAMES[draft.kind]}</span>
     <span class="text-[0.65rem] opacity-60">
       {draft.kind === "system"
-        ? "Replaces pi's preamble; the nearest one on the chain wins."
-        : "Added on top; every one on the chain applies, root's first."}
+        ? "Replaces pi's own preamble."
+        : "Added on top of whichever base prompt applies."}
     </span>
   </div>
   <textarea
     class="textarea textarea-bordered mt-2 h-48 w-full font-mono text-xs leading-relaxed"
     placeholder={draft.kind === "system"
-      ? "The whole system prompt for agents in this scope."
-      : "Added to every agent in this scope — house rules, or this workspace's archetype."}
+      ? "The whole system prompt, in place of pi's own."
+      : "Added to every agent — house rules."}
     aria-label={PROMPT_FILE_NAMES[draft.kind]}
     bind:value={draft.body}
   ></textarea>
   <div class="mt-2 flex items-center justify-end gap-2">
     {#if clearing}
       <span class="text-[0.65rem] opacity-60">
-        Empty — saving deletes the file and falls back down the chain.
+        Empty — saving deletes the file.
       </span>
     {/if}
     <button type="button" class="btn btn-ghost btn-xs" onclick={oncancel}>Cancel</button>

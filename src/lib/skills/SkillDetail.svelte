@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SkillInfo } from "./bindings.ts";
 
-  // A skill's expanded row. There is nothing to enable, revoke or quarantine — only to
+  // A skill's expanded row. There is nothing to enable or edit here — only to
   // see and to name — so this shows the one thing the collapsed row cannot: where the
   // file actually is, which is what you need in order to edit it.
   let { skill }: { skill: SkillInfo } = $props();

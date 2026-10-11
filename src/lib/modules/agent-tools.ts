@@ -1,5 +1,5 @@
 // The agent half of module authoring: one pi tool that lets an agent write a panel for
-// the user to look at. It writes straight into the scope's extensions dir, so the
+// the user to look at. It writes straight into pi's extensions dir, so the
 // module is in use as soon as the rail refreshes — the chat refreshes it when this tool
 // succeeds (chat/store.ts).
 //
@@ -14,7 +14,6 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { ensureExtensionDirs, liveDir } from "../extensions/paths.ts";
-import { ROOT, type ScopeId } from "../scope/paths.ts";
 import { parseDefinition } from "./definition.ts";
 
 // The module server serves the one document and nothing beside it, so a relative
@@ -32,13 +31,7 @@ function relativeReference(html: string): string | undefined {
   return undefined;
 }
 
-// Bound to the scope its chat agent runs in: a module an agent writes lands in that
-// scope. An agent in root writes a module every workspace inherits — the description
-// says so, since the agent should know how far its panel will reach.
-export function moduleAuthoringTools(scope: ScopeId): ToolDefinition[] {
-  const reach = scope === ROOT
-    ? "This agent runs in the ROOT workspace, so the module appears in every workspace."
-    : "This agent runs in a single workspace, so the module appears only there.";
+export function moduleAuthoringTools(): ToolDefinition[] {
   return [
     defineTool({
       name: "define_module",
@@ -49,8 +42,8 @@ export function moduleAuthoringTools(scope: ScopeId): ToolDefinition[] {
         "nothing beside it is served; absolute URLs (a CDN) do load. It talks to pique " +
         "over a MessagePort posted to it on load; see docs/modules.md for the protocol " +
         "and its methods (its own saved JSON, and reading and writing files). The module " +
-        "is usable as soon as this returns. Calling it again with the same name " +
-        "replaces the module. " + reach,
+        "is usable as soon as this returns, in every workspace. Calling it again with " +
+        "the same name replaces the module.",
       parameters: Type.Object({
         name: Type.String({
           description:
@@ -84,8 +77,8 @@ export function moduleAuthoringTools(scope: ScopeId): ToolDefinition[] {
         const parsed = parseDefinition(p.name, JSON.stringify(definition));
         if (!parsed.ok) throw new Error(parsed.error);
 
-        await ensureExtensionDirs(scope);
-        const dir = liveDir(scope);
+        await ensureExtensionDirs();
+        const dir = liveDir();
         // The document first: a definition without one is listed as an error, so the
         // rail never sees a module whose document has not landed yet.
         await Deno.writeTextFile(`${dir}/${p.name}.ui.html`, p.html);

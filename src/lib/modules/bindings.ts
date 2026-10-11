@@ -20,23 +20,21 @@ export type InstalledModule = {
   kind: string;
   label: string;
   duplicable?: boolean;
-  scope: string;
 };
 
 export interface ModuleBindings {
-  // Everything the Library shows for one scope: what it has installed, and what it
-  // inherits.
-  moduleList(arg: { scope: string }): Promise<InstalledModule[]>;
+  // What the Library shows: every installed module.
+  moduleList(): Promise<InstalledModule[]>;
   // Deletes the module's definition and document.
-  moduleRemove(arg: { scope: string; name: string }): Promise<unknown>;
-  // Where to point a module's iframe, plus what this scope has installed. The port is
-  // the module file server's (modules/server.ts), assigned at boot.
+  moduleRemove(arg: { name: string }): Promise<unknown>;
+  // Where to point a module's iframe, plus what is installed. The port is the module
+  // file server's (modules/server.ts), assigned at boot.
   moduleManifest(): Promise<{ port: number; modules: unknown[] }>;
-  // One door for everything a module asks for (modules/handlers.ts). `moduleId` and
-  // `scope` are supplied by the HOST component, never by the frame. Rejects with the
-  // handler's error, or when `method` is not one a module can call.
+  // One door for everything a module asks for (modules/handlers.ts). `moduleId` is
+  // supplied by the HOST component, never by the frame. Rejects with the handler's
+  // error, or when `method` is not one a module can call.
   moduleCall(
-    arg: { moduleId: string; scope: string; method: string; payload: unknown },
+    arg: { moduleId: string; method: string; payload: unknown },
   ): Promise<unknown>;
 }
 

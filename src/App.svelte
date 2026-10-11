@@ -9,7 +9,6 @@
   import ConfirmDialog from "./lib/ConfirmDialog.svelte";
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
-  import { ROOT } from "./lib/scope/paths.ts";
   import { activeTabId, EDITOR } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
@@ -33,9 +32,9 @@
   import { MODULES } from "./lib/modules/manifest.ts";
 
   // ctrl+j o: open a new workspace and put the caret in its directory box (TopBar's
-  // PathInput), which starts at the directory the workspace inherits from root. The
-  // picker IS that box, so there is nothing to cancel — esc just leaves the new
-  // workspace on the inherited directory. Found by aria-label for the same reason
+  // PathInput), which starts empty — the home directory. The picker IS that box, so
+  // there is nothing to cancel — esc just leaves the new workspace in the home
+  // directory. Found by aria-label for the same reason
   // visibleChatInput below is: the box lives in a component this one doesn't reach into.
   async function openWorkspaceFromPicker(): Promise<void> {
     addWorkspace();
@@ -123,14 +122,12 @@
   }
 
   // ctrl+j w: closing a workspace unmounts it — its views, tabs and running modules go
-  // with it, and nothing brings them back — so it asks first. Root is never closable
-  // (store's closeWorkspace no-ops on it), so it never prompts. The armed chord is
+  // with it, and nothing brings them back — so it asks first. The armed chord is
   // dropped on open: while the dialog is up every key belongs to it, not the mode.
   let pendingClose = $state<WorkspaceState | null>(null);
 
   function askCloseWorkspace() {
     const w = get(activeWorkspace);
-    if (w.id === ROOT) return;
     clearChord();
     pendingClose = w;
   }

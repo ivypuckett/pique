@@ -17,9 +17,6 @@ export type Prompt = {
   // Shown in the `/` menu after the name, e.g. "<file-path>". pi reads this from the
   // `argument-hint` key; the camelCase name here mirrors pi's PromptTemplate field.
   argumentHint?: string;
-  // Rationale recorded by define_prompt. Shown to the reviewer; never part of the
-  // expanded prompt, which is why it lives here rather than in the body.
-  rationale?: string;
   body: string;
   // Set when the frontmatter could not be used. The template is still returned (with its
   // body) so the UI can show what is wrong instead of silently hiding the file.
@@ -66,21 +63,19 @@ export function parsePrompt(name: string, text: string): Prompt {
     name,
     description: str(attrs.description) ?? firstLine(body),
     argumentHint: str(attrs["argument-hint"]),
-    rationale: str(attrs.rationale),
     body: body.trim(),
     error,
   };
 }
 
 // Serialize back to the on-disk format. Frontmatter is emitted by hand rather than with a
-// YAML writer: the schema is three keys wide, and JSON's encoding of a string is valid
+// YAML writer: the schema is two keys wide, and JSON's encoding of a string is valid
 // YAML flow syntax — which is also what contains the text, so a description holding `---`
 // or a newline stays inside its quoted scalar.
 export function promptFile(
   p: {
     description: string;
     argumentHint?: string;
-    rationale?: string;
     body: string;
   },
 ): string {
@@ -88,6 +83,5 @@ export function promptFile(
   if (p.argumentHint) {
     lines.push(`argument-hint: ${JSON.stringify(p.argumentHint)}`);
   }
-  if (p.rationale) lines.push(`rationale: ${JSON.stringify(p.rationale)}`);
   return `---\n${lines.join("\n")}\n---\n\n${p.body.trim()}\n`;
 }

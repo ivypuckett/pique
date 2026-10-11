@@ -37,7 +37,7 @@ export const registry: Record<
 
 // Which component renders `kind`: the built-in for it, or the iframe host for a module
 // an installed extension contributed. A kind that is neither — read back from a layout
-// written by another build, or by a scope that has since revoked the module — returns
+// written by another build, or naming a module that has since been deleted — returns
 // undefined, and Column.svelte renders its "Unknown module" branch for it.
 export function componentFor(kind: string) {
   return registry[kind] ?? (moduleDef(kind) ? UserModule : undefined);

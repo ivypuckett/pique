@@ -5,29 +5,21 @@
   // the module server's own port, so it is a different origin from this window and
   // cannot reach `globalThis.bindings` directly; it asks through the port below.
   //
-  // `moduleId` and `scope` travel with the CALL, from this component's props. The frame
-  // never sends them and is never asked, so its calls are always its own.
+  // `moduleId` travels with the CALL, from this component's props. The frame never sends
+  // it and is never asked, so its calls are always its own.
   import { moduleBindings, moduleUiPort } from "./bindings.ts";
-  import { moduleDef } from "./manifest.ts";
   import { type CallMessage, HANDSHAKE, type ResultMessage } from "./contract.ts";
 
-  let { title, kind, workspaceId }: {
-    title: string;
-    kind?: string;
-    workspaceId?: string;
-  } = $props();
+  let { title, kind }: { title: string; kind?: string } = $props();
 
   const b = moduleBindings();
   const moduleId = $derived(kind ?? "");
-  // The scope that OWNS the module, from the table — not the workspace this view
-  // belongs to. A workspace showing one of root's modules addresses root's copy.
-  const scope = $derived(moduleDef(moduleId)?.scope ?? workspaceId ?? "root");
 
   let frame: HTMLIFrameElement | undefined = $state();
   // The port was read at hydration (bindings.ts), so the frame has an address on its
   // first render rather than after a round trip.
   const src = $derived(
-    moduleUiPort() ? `http://127.0.0.1:${moduleUiPort()}/ui/${scope}/${moduleId}` : "",
+    moduleUiPort() ? `http://127.0.0.1:${moduleUiPort()}/ui/${moduleId}` : "",
   );
 
   // Hand the frame its port once its document has loaded. Everything it says arrives on
@@ -47,10 +39,9 @@
       port.postMessage({ t: "result", id: call.id, ok, value } satisfies ResultMessage);
     if (!b) return reply(false, "no backend");
     try {
-      // moduleId and scope come from props, NOT from `call` — see note 3 above.
+      // moduleId comes from props, NOT from `call` — see the note above.
       reply(true, await b.moduleCall({
         moduleId,
-        scope,
         method: call.method,
         payload: call.payload,
       }));

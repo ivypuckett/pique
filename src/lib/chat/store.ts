@@ -1,9 +1,8 @@
 // One chat conversation per view: a workspace's views each hold their own thread, so
 // two views side by side are two contexts rather than one transcript shown twice.
-// Sessions are keyed by workspace AND view here; what the view does NOT get its own of
-// is the scope — tools, model defaults and cwd all still resolve against the
-// workspace (see scope/paths.ts). The backend agent starts on the pane's retain() and
-// stops when it releases (i.e. the view or its workspace closes).
+// Sessions are keyed by workspace AND view here; the cwd is the workspace's. The backend
+// agent starts on the pane's retain() and stops when it releases (i.e. the view or its
+// workspace closes).
 import { get, type Writable, writable } from "svelte/store";
 import {
   chatBindings,
@@ -14,9 +13,7 @@ import {
   type ReloadSummary,
   type ThinkingLevel,
 } from "./bindings.ts";
-import { scopeBindings } from "../scope/bindings.ts";
-import { patchScopeChat } from "../scope/store.ts";
-import { ROOT } from "../scope/paths.ts";
+import { readConfig, writeConfig } from "../settings/bindings.ts";
 import { hydrateModules } from "../modules/bindings.ts";
 
 // Defined next to ChatEvent in chat/agent.ts: the backend rebuilds the same Items for a
@@ -49,6 +46,20 @@ export function formatReloadNotice(summary: ReloadSummary): string {
   return `Reloaded — ${parts.join("; ")}`;
 }
 
+// The chat defaults, ~/.pique/chat.json: the model and thinking level a new conversation
+// starts on (chat/agent.ts resolveChatDefaults). A pick in any chat becomes the default
+// for the next one.
+type ChatDefaults = {
+  defaultProvider?: string;
+  defaultModel?: string;
+  defaultThinkingLevel?: ThinkingLevel;
+};
+
+async function patchChatDefaults(patch: ChatDefaults): Promise<void> {
+  const own = (await readConfig("chat") ?? {}) as ChatDefaults;
+  await writeConfig("chat", { ...own, ...patch });
+}
+
 export interface ChatSession {
   items: Writable<Item[]>;
   input: Writable<string>;
@@ -75,22 +86,17 @@ function createSession(
   viewId: string | undefined,
 ): ChatSession {
   const b = chatBindings();
-  // The scope this conversation runs in — what its defaults are read from and
-  // written back to. A pane with no workspace id falls back to root.
-  const scope = workspaceId ?? ROOT;
   const items = writable<Item[]>([]);
   const input = writable("");
   const ready = writable(false);
   const streaming = writable(false);
   const models = writable<ModelInfo[]>([]);
   const commands = writable<CommandInfo[]>([]);
-  // Starts at "off" and is corrected once the scope's resolved config loads — the
-  // read is async now that defaults are per-scope files rather than one settings
-  // object already in memory. The backend applies the same resolved value to the
-  // agent itself, so this only keeps the picker's label honest.
+  // Starts at "off" and is corrected once the chat defaults load. The backend applies
+  // the same value to the agent itself, so this only keeps the picker's label honest.
   const level = writable<ThinkingLevel>("off");
-  scopeBindings()?.scopeConfigResolve({ scope }).then((c) => {
-    const l = c?.chat?.defaultThinkingLevel;
+  readConfig("chat").then((c) => {
+    const l = (c as ChatDefaults | null)?.defaultThinkingLevel;
     if (l) level.set(l);
   });
 
@@ -204,7 +210,7 @@ function createSession(
     (async () => {
       const started = await b.chatStart({
         cwd,
-        scope: workspaceId,
+        workspace: workspaceId,
         view: viewId,
         fresh,
       });
@@ -295,10 +301,8 @@ function createSession(
       const m = get(models).find((x) => `${x.provider}/${x.id}` === value);
       if (b && m && id) {
         await b.chatSetModel({ id, provider: m.provider, model: m.id });
-        // The pick becomes THIS scope's default, not the app's — a workspace that
-        // picks a model stops inheriting root's, and every other workspace is
-        // unaffected.
-        patchScopeChat(scope, {
+        // The pick becomes the default for the next conversation, wherever it starts.
+        patchChatDefaults({
           defaultProvider: m.provider,
           defaultModel: m.id,
         });
@@ -308,7 +312,7 @@ function createSession(
     pickLevel(value: ThinkingLevel) {
       level.set(value);
       if (id) b?.chatSetThinking({ id, level: value });
-      patchScopeChat(scope, { defaultThinkingLevel: value });
+      patchChatDefaults({ defaultThinkingLevel: value });
     },
     // Put the saved conversation behind us and begin another. The old session file stays
     // on disk; it is simply no longer the most recent one. Reached from the chat by
@@ -336,7 +340,7 @@ function createSession(
 const sessions = new Map<string, ChatSession>();
 
 // Re-list the `/` menu of every live conversation. the Library module edits prompt
-// templates for a scope, not for one pane, and it holds no chat session of its own —
+// templates for every pane, not for one, and it holds no chat session of its own —
 // so it calls this rather than reaching for a session and accidentally creating one.
 export function refreshChatCommands(): void {
   for (const s of sessions.values()) s.refreshCommands().catch(() => {});

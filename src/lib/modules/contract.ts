@@ -4,7 +4,7 @@
 //
 // The channel is a MessagePort the host transfers into the frame, not
 // `postMessage(…, "*")` on the window. That matters for one reason: the host holds the
-// port together with the `moduleId` and scope it was issued for, so a frame has nothing
+// port together with the `moduleId` it was issued for, so a frame has nothing
 // to forge — it cannot name a module other than itself, because it never names one at
 // all.
 

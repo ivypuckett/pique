@@ -1,8 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { listModules, removeModule } from "./service.ts";
 
-// A throwaway HOME, mirroring extensions/local_test.ts: every path in scope/paths.ts is
-// built from home(), so pointing HOME at a temp dir isolates the whole tree.
+// A throwaway HOME, mirroring extensions/local_test.ts: every path in paths.ts is built
+// from home(), so pointing HOME at a temp dir isolates the whole tree.
 async function withScope(
   fn: (
     write: (name: string, ext: string, body: string) => Promise<void>,
@@ -11,7 +11,7 @@ async function withScope(
   const dir = await Deno.makeTempDir();
   const prev = Deno.env.get("HOME");
   Deno.env.set("HOME", dir);
-  const live = `${dir}/.pique/scopes/root/agent/extensions`;
+  const live = `${dir}/.pi/agent/extensions`;
   await Deno.mkdir(live, { recursive: true });
   try {
     await fn((name, ext, body) =>
@@ -31,11 +31,10 @@ Deno.test("a definition with its document is a module", async () => {
   await withScope(async (write) => {
     await write("notes", "module.json", definition("Notes"));
     await write("notes", "ui.html", "<p>hi</p>");
-    const { modules, errors } = await listModules("root");
+    const { modules, errors } = await listModules();
     assertEquals(errors, []);
     assertEquals(modules.length, 1);
     assertEquals(modules[0].kind, "notes");
-    assertEquals(modules[0].scope, "root");
   });
 });
 
@@ -44,7 +43,7 @@ Deno.test("a definition with its document is a module", async () => {
 Deno.test("a definition with no document is an error, not a module", async () => {
   await withScope(async (write) => {
     await write("notes", "module.json", definition("Notes"));
-    const { modules, errors } = await listModules("root");
+    const { modules, errors } = await listModules();
     assertEquals(modules, []);
     assertEquals(errors.length, 1);
     assertEquals(errors[0].error.includes("ui.html"), true);
@@ -58,7 +57,7 @@ Deno.test("a junk definition is reported beside the modules that did parse", asy
     await write("good", "ui.html", "<p>ok</p>");
     await write("bad", "module.json", "{not json");
     await write("bad", "ui.html", "<p>ok</p>");
-    const { modules, errors } = await listModules("root");
+    const { modules, errors } = await listModules();
     assertEquals(modules.map((m) => m.kind), ["good"]);
     assertEquals(errors.map((e) => e.name), ["bad"]);
   });
@@ -70,14 +69,17 @@ Deno.test("a module needs no extension .ts beside it", async () => {
   await withScope(async (write) => {
     await write("notes", "module.json", definition("Notes"));
     await write("notes", "ui.html", "<p>hi</p>");
-    const { modules } = await listModules("root");
+    const { modules } = await listModules();
     assertEquals(modules.length, 1);
   });
 });
 
-Deno.test("a scope with no extensions dir has no modules and no errors", async () => {
+Deno.test("no extensions dir means no modules and no errors", async () => {
   await withScope(async () => {
-    const { modules, errors } = await listModules("ws-9");
+    await Deno.remove(`${Deno.env.get("HOME")}/.pi/agent/extensions`, {
+      recursive: true,
+    });
+    const { modules, errors } = await listModules();
     assertEquals(modules, []);
     assertEquals(errors, []);
   });
@@ -87,8 +89,8 @@ Deno.test("removing a module deletes its definition and its document", async () 
   await withScope(async (write) => {
     await write("notes", "module.json", definition("Notes"));
     await write("notes", "ui.html", "<p>hi</p>");
-    await removeModule("root", "notes");
-    const { modules, errors } = await listModules("root");
+    await removeModule("notes");
+    const { modules, errors } = await listModules();
     assertEquals(modules, []);
     assertEquals(errors, []);
   });
@@ -98,13 +100,13 @@ Deno.test("removing a module deletes its definition and its document", async () 
 Deno.test("removing a module with its document already gone still succeeds", async () => {
   await withScope(async (write) => {
     await write("notes", "module.json", definition("Notes"));
-    await removeModule("root", "notes");
-    assertEquals((await listModules("root")).errors, []);
+    await removeModule("notes");
+    assertEquals((await listModules()).errors, []);
   });
 });
 
 Deno.test("removing refuses a name that could escape the directory", async () => {
   await withScope(async () => {
-    await assertRejects(() => removeModule("root", "../x"));
+    await assertRejects(() => removeModule("../x"));
   });
 });

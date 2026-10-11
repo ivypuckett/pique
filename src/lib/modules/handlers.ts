@@ -2,28 +2,27 @@
 // these are ordinary functions rather than bind callbacks. Nothing here is gated: a
 // module is trusted the way an extension is, and sandboxing one is left to whoever
 // wants it (docs/modules.md). Runs Deno-side.
-//
-// Every handler takes the scope from its first argument: the host component that
-// mounted the frame supplies it, never the frame.
-import { scopeDir } from "../scope/paths.ts";
+import { assertExtensionName } from "../extensions/paths.ts";
+import { piqueDir } from "../paths.ts";
 
-export type Handler = (scope: string, payload: unknown) => Promise<unknown>;
+export type Handler = (payload: unknown) => Promise<unknown>;
 export type Handlers = Record<string, Handler>;
 
-// A module's private JSON blob, one file per module per scope. Under the scope dir
-// rather than the agent dir: this is the module's own state, not something pi loads.
-function storagePath(scope: string, moduleId: string): string {
-  return `${scopeDir(scope)}/modules/${moduleId}.json`;
+// A module's private JSON blob, one file per module. Under ~/.pique rather than the
+// agent dir: this is the module's own state, not something pi loads.
+function storageDir(): string {
+  return `${piqueDir()}/modules`;
 }
 
 // The handler set for one module. Bound to the module's id because storage is per
-// module — everything else needs only the scope.
+// module — and the id becomes a filename, so it is held to the extension-name rule.
 export function handlersFor(moduleId: string): Handlers {
+  assertExtensionName(moduleId);
   return {
-    storageGet: async (scope) => {
+    storageGet: async () => {
       try {
         return JSON.parse(
-          await Deno.readTextFile(storagePath(scope, moduleId)),
+          await Deno.readTextFile(`${storageDir()}/${moduleId}.json`),
         );
       } catch (err) {
         // A module that has never written has no file; that is empty, not an error.
@@ -32,19 +31,21 @@ export function handlersFor(moduleId: string): Handlers {
       }
     },
 
-    storageSet: async (scope, payload) => {
-      const path = storagePath(scope, moduleId);
-      await Deno.mkdir(`${scopeDir(scope)}/modules`, { recursive: true });
-      await Deno.writeTextFile(path, JSON.stringify(payload ?? null));
+    storageSet: async (payload) => {
+      await Deno.mkdir(storageDir(), { recursive: true });
+      await Deno.writeTextFile(
+        `${storageDir()}/${moduleId}.json`,
+        JSON.stringify(payload ?? null),
+      );
       return true;
     },
 
-    fsRead: async (_scope, payload) => {
+    fsRead: async (payload) => {
       const { path } = payload as { path: string };
       return await Deno.readTextFile(path);
     },
 
-    fsWrite: async (_scope, payload) => {
+    fsWrite: async (payload) => {
       const { path, contents } = payload as {
         path: string;
         contents?: unknown;

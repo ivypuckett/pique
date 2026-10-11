@@ -14,11 +14,7 @@
 //    Uint8Array on the frontend.
 
 import { handlersFor } from "./lib/modules/handlers.ts";
-import {
-  listAllModules,
-  listModules,
-  removeModule,
-} from "./lib/modules/service.ts";
+import { listModules, removeModule } from "./lib/modules/service.ts";
 
 const win = new Deno.BrowserWindow({
   title: "pique",
@@ -36,15 +32,13 @@ let git: typeof import("./lib/gitdiff/git.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
-let scopeConfig: typeof import("./lib/scope/config.ts");
-let scopePrompt: typeof import("./lib/scope/prompt.ts");
+let systemPrompts: typeof import("./lib/prompts/system.ts");
 // Assigned when the module file server starts, at the very bottom of this file.
 let modulesPort = 0;
 
-// A module with no cwd of its own inherits the root workspace's, which lives in the
-// layout tree — so working-directory resolution reads "layout", not "settings".
-async function moduleDir(override?: string): Promise<string> {
-  return settings.resolveModuleDir(override, await settings.readJson("layout"));
+// A module runs in its workspace's directory, else $HOME.
+function moduleDir(override?: string): string {
+  return settings.resolveModuleDir(override);
 }
 
 // deno desktop has no maximize API — the window options and BrowserWindow expose only
@@ -58,16 +52,17 @@ win.bind("windowSetSize", async (arg) => {
   return true;
 });
 
-win.bind("termStart", async (arg) => {
+// Not `async`: there is nothing to await (see moduleManifest below).
+win.bind("termStart", (arg) => {
   const { cols, rows, cwd: override, argv } = arg as {
     cols: number;
     rows: number;
     cwd?: string;
     argv?: string[];
   };
-  return {
-    id: term.startSession({ cols, rows, cwd: await moduleDir(override), argv }),
-  };
+  return Promise.resolve({
+    id: term.startSession({ cols, rows, cwd: moduleDir(override), argv }),
+  });
 });
 
 win.bind("termWrite", async (arg) => {
@@ -109,52 +104,42 @@ win.bind("termKill", async (arg) => {
 // Not `async`: there is nothing to await, and the lint rule that catches a pointless
 // async is worth more than matching the shape of its neighbours.
 win.bind("moduleManifest", () => {
-  // Every scope's modules in one list: the rail is per-window, not per-scope, and a
-  // module carries the scope that owns it so the frame can be addressed there.
-  return listAllModules().then((defs) => ({
+  return listModules().then(({ modules }) => ({
     port: modulesPort,
-    modules: defs,
+    modules,
   }));
 });
 
-win.bind("moduleList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  // What the scope inherits: root's modules are visible from every workspace, and are
-  // managed in root, never here.
-  const own = (await listModules(scope)).modules;
-  const inherited = scope === "root" ? [] : (await listModules("root")).modules;
-  return [...own, ...inherited];
-});
+win.bind("moduleList", async () => (await listModules()).modules);
 
 win.bind("moduleRemove", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await removeModule(scope, name);
+  const { name } = arg as { name: string };
+  await removeModule(name);
   return true;
 });
 
-// The one door for everything a user module asks for. `moduleId` and `scope` come from
-// the host component that mounted the frame (modules/UserModule.svelte), never from the
-// frame itself.
+// The one door for everything a user module asks for. `moduleId` comes from the host
+// component that mounted the frame (modules/UserModule.svelte), never from the frame
+// itself.
 win.bind("moduleCall", async (arg) => {
-  const { moduleId, scope, method, payload } = arg as {
+  const { moduleId, method, payload } = arg as {
     moduleId: string;
-    scope: string;
     method: string;
     payload: unknown;
   };
   const handler = handlersFor(moduleId)[method];
   if (!handler) throw new Error(`${method} is not a module method`);
-  return await handler(scope, payload);
+  return await handler(payload);
 });
 
 win.bind("chatStart", async (arg) => {
-  const { cwd, scope, view, fresh } = arg as {
+  const { cwd, workspace, view, fresh } = arg as {
     cwd?: string;
-    scope?: string;
+    workspace?: string;
     view?: string;
     fresh?: boolean;
   };
-  return { id: await chat.startAgent({ cwd, scope, view, fresh }) };
+  return { id: await chat.startAgent({ cwd, workspace, view, fresh }) };
 });
 
 win.bind("chatHistory", async (arg) => {
@@ -195,8 +180,8 @@ win.bind("chatListCommands", async (arg) => {
   return chat.listCommands(id);
 });
 
-// Re-read prompt templates from disk into a running agent, so a template saved or
-// approved in the Library module can be invoked without restarting the conversation.
+// Re-read prompt templates from disk into a running agent, so a template saved in the
+// Library can be invoked without restarting the conversation.
 win.bind("chatReloadPrompts", async (arg) => {
   const { id } = arg as { id: string };
   await chat.reloadPrompts(id);
@@ -280,7 +265,8 @@ win.bind("providerRemoveCustom", async (arg) => {
   return true;
 });
 
-// Named JSON config under ~/.pique/ — settings (prefs) and layout (the tree).
+// Named JSON config under ~/.pique/ — settings (prefs), layout (the tree) and chat (the
+// chat defaults).
 win.bind("configRead", async (arg) => {
   const { name } = arg as { name: string };
   // Stored value is JSON we wrote; the frontend re-types it (settings/bindings.ts).
@@ -293,33 +279,6 @@ win.bind("configWrite", async (arg) => {
   return true;
 });
 
-// Scoped config — chat defaults, per scope. Read returns a scope's OWN values (what
-// the settings UI edits); Resolve returns them layered onto root's (what an agent
-// there actually sees).
-win.bind("scopeConfigRead", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await scopeConfig.readScopeConfig(scope);
-});
-
-win.bind("scopeConfigWrite", async (arg) => {
-  const { scope, data } = arg as { scope: string; data: unknown };
-  await scopeConfig.writeScopeConfig(scope, data);
-  return true;
-});
-
-win.bind("scopeConfigResolve", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await scopeConfig.resolveScopeConfig(scope);
-});
-
-// What a scope's agents ACTUALLY use when nothing overrides them: the resolved config
-// with the compiled-in fallbacks filled in. Separate from scopeConfigResolve because
-// the frontend cannot fill those in itself — the fallback model lives in chat/agent.ts.
-win.bind("scopeChatDefaults", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return chat.resolveChatDefaults(await scopeConfig.resolveScopeConfig(scope));
-});
-
 win.bind("openExternal", async (arg) => {
   const { url } = arg as { url: string };
   await dialog.openUrl(url);
@@ -329,7 +288,7 @@ win.bind("openExternal", async (arg) => {
 win.bind("listDir", async (arg) => {
   const { path } = arg as { path?: string };
   // path undefined → the workspace default; an absolute child path resolves to itself.
-  return await fs.listDir(await moduleDir(path));
+  return await fs.listDir(moduleDir(path));
 });
 
 // File-tree edits. Same path convention as listDir: a parent of undefined means the
@@ -338,7 +297,7 @@ win.bind("listDir", async (arg) => {
 // and recursive — the frontend gates it behind a confirmation unless it's turned off.
 win.bind("createEntry", async (arg) => {
   const { parent, name } = arg as { parent?: string; name: string };
-  return { path: await fs.createEntry(await moduleDir(parent), name) };
+  return { path: await fs.createEntry(moduleDir(parent), name) };
 });
 
 win.bind("renameEntry", async (arg) => {
@@ -363,7 +322,7 @@ win.bind("gitDiff", async (arg) => {
   );
   return {
     diff: await git.gitDiff(
-      await moduleDir(override),
+      moduleDir(override),
       staged ?? false,
       path,
       depth,
@@ -376,74 +335,35 @@ win.bind("gitChanges", async (arg) => {
   const depth = settings.resolveGitScanDepth(
     await settings.readJson("settings"),
   );
-  return { changes: await git.changedPaths(await moduleDir(path), depth) };
+  return { changes: await git.changedPaths(moduleDir(path), depth) };
 });
 
-// Extensions — one concept covering both origins: loose `.ts` modules written by the
-// user or by an agent, and installed pi packages. An extension runs iff it is in pi's
-// own loading set for the scope (the extensions/ dir, or settings.json); it awaits
-// review iff there is a file for it in pending/. Agents can only write into their
-// scope's quarantine dir (extensions/agent-tools.ts), and extensionsFetch downloads a
-// package WITHOUT enabling it, so enabling is always the human step and goes through
-// here. extensionsList returns the scope's own; extensionsVisible adds what it
-// inherits from root (local modules only — packages are not inherited).
-win.bind("extensionsList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await extensions.listExtensions(scope);
-});
-
-win.bind("extensionsVisible", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await extensions.listVisibleExtensions(scope);
-});
+// Extensions — one concept covering both origins: loose `.ts` modules in pi's
+// extensions dir, and installed pi packages. An extension runs iff it is in pi's own
+// loading set (the extensions/ dir, or settings.json).
+win.bind("extensionsList", async () => await extensions.listExtensions());
 
 win.bind("extensionsRead", async (arg) => {
-  const { scope, id, state } = arg as {
-    scope: string;
-    id: string;
-    state: "pending" | "enabled";
-  };
-  return await extensions.readExtension(scope, id, state);
+  const { id } = arg as { id: string };
+  return await extensions.readExtension(id);
 });
 
-win.bind("extensionsEnable", async (arg) => {
-  const { scope, id, expectDigest } = arg as {
-    scope: string;
-    id: string;
-    expectDigest: string;
-  };
-  await extensions.enableExtension(scope, id, expectDigest);
-  return true;
-});
-
-// Enabled-but-unloadable extensions, for Library to mark. Builds a loader per call
-// rather than caching: the answer is only interesting right after something changed.
-win.bind("extensionsLoadErrors", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await extensions.extensionLoadErrors(scope);
-});
-
-win.bind("extensionsRevoke", async (arg) => {
-  const { scope, id } = arg as { scope: string; id: string };
-  await extensions.revokeExtension(scope, id);
-  return true;
-});
+// Extensions pi could not load, for Library to mark. Builds a loader per call rather
+// than caching: the answer is only interesting right after something changed.
+win.bind(
+  "extensionsLoadErrors",
+  async () => await extensions.extensionLoadErrors(),
+);
 
 win.bind("extensionsRemove", async (arg) => {
-  const { scope, id, state } = arg as {
-    scope: string;
-    id: string;
-    state: "pending" | "enabled";
-  };
-  await extensions.removeExtension(scope, id, state);
+  const { id } = arg as { id: string };
+  await extensions.removeExtension(id);
   return true;
 });
 
-// Fetches the bytes into quarantine. Deliberately does NOT reach the loading set —
-// the user reviews the resolved entry files first, same as for a local module.
-win.bind("extensionsFetch", async (arg) => {
-  const { scope, source } = arg as { scope: string; source: string };
-  await extensions.fetchPackage(scope, source);
+win.bind("extensionsInstall", async (arg) => {
+  const { source } = arg as { source: string };
+  await extensions.installPackage(source);
   return true;
 });
 
@@ -455,85 +375,49 @@ win.bind("extensionsSearch", async (arg) => {
   return await extensions.searchExtensions(query, type);
 });
 
-// Prompt templates — reusable messages invoked as `/name` in a Chat module, per scope.
-// A human editing one here writes straight to live; agents can only write into the
-// scope's quarantine dir (prompts/agent-tools.ts), so promptsApprove is what makes an
-// agent-written template invocable. promptsList returns the scope's own templates; what a
-// Chat module can actually invoke (its own plus root's) comes from pi via chatListCommands.
-win.bind("promptsList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await prompts.listPrompts(scope);
-});
+// Prompt templates — reusable messages invoked as `/name` in a Chat module. What a Chat
+// module can actually invoke comes from pi via chatListCommands.
+win.bind("promptsList", async () => await prompts.listPrompts());
 
 win.bind("promptsSave", async (arg) => {
-  const { scope, name, description, argumentHint, body } = arg as {
-    scope: string;
+  const { name, description, argumentHint, body } = arg as {
     name: string;
     description: string;
     argumentHint?: string;
     body: string;
   };
-  await prompts.savePrompt(scope, name, { description, argumentHint, body });
-  return true;
-});
-
-win.bind("promptsApprove", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await prompts.approvePrompt(scope, name);
-  return true;
-});
-
-win.bind("promptsReject", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await prompts.rejectPrompt(scope, name);
+  await prompts.savePrompt(name, { description, argumentHint, body });
   return true;
 });
 
 win.bind("promptsDelete", async (arg) => {
-  const { scope, name, state } = arg as {
-    scope: string;
-    name: string;
-    state: "live" | "pending";
-  };
-  await prompts.deletePrompt(scope, name, state);
+  const { name } = arg as { name: string };
+  await prompts.deletePrompt(name);
   return true;
 });
 
-// Skills — read-only listing; the Library sub-tab shows this list.
-win.bind("skillsVisible", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await skills.listVisibleSkills(scope);
-});
+// Skills — read-only listing; the Library shows this list.
+win.bind("skillsList", async () => await skills.listSkills());
 
-// The scope's two prompt files, SYSTEM.md and APPEND_SYSTEM.md (docs/scopes.md). Unlike
-// every other Library kind these are singletons addressed by KIND, not by name — there
-// is one of each per scope — and the human half is the only half: no agent tool writes
-// them, so there is no quarantine and no approve/reject pair. systemPromptsList returns
-// the scope's OWN two, present or not; what an agent there actually runs with is
-// resolved per session by scope/prompt.ts.
-win.bind("systemPromptsList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await scopePrompt.listPromptFiles(scope);
-});
+// SYSTEM.md and APPEND_SYSTEM.md in pi's agent dir. Unlike every other Library kind
+// these are singletons addressed by KIND, not by name. systemPromptsList returns both,
+// present or not.
+win.bind(
+  "systemPromptsList",
+  async () => await systemPrompts.listPromptFiles(),
+);
 
-// An empty body deletes rather than writes — scope/prompt.ts records why, and the
+// An empty body deletes rather than writes — prompts/system.ts records why, and the
 // Library's Save button relabels itself to say so.
 win.bind("systemPromptsSave", async (arg) => {
-  const { scope, kind, body } = arg as {
-    scope: string;
-    kind: "system" | "appendix";
-    body: string;
-  };
-  await scopePrompt.savePromptFile(scope, kind, body);
+  const { kind, body } = arg as { kind: "system" | "appendix"; body: string };
+  await systemPrompts.savePromptFile(kind, body);
   return true;
 });
 
 win.bind("systemPromptsDelete", async (arg) => {
-  const { scope, kind } = arg as {
-    scope: string;
-    kind: "system" | "appendix";
-  };
-  await scopePrompt.deletePromptFile(scope, kind);
+  const { kind } = arg as { kind: "system" | "appendix" };
+  await systemPrompts.deletePromptFile(kind);
   return true;
 });
 
@@ -562,8 +446,7 @@ git = await import("./lib/gitdiff/git.ts");
 extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
 skills = await import("./lib/skills/service.ts");
-scopeConfig = await import("./lib/scope/config.ts");
-scopePrompt = await import("./lib/scope/prompt.ts");
+systemPrompts = await import("./lib/prompts/system.ts");
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const { fromFileUrl } = await import("@std/path");
 // Resolved off this module rather than the cwd: `--include dist` embeds the build one

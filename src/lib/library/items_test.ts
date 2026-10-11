@@ -1,125 +1,70 @@
 import { assertEquals } from "@std/assert";
-import { groupItems, type LibraryItem, type LibraryState } from "./items.ts";
+import { type LibraryItem, sortItems } from "./items.ts";
 
 // Minimal fixtures. The per-kind payloads are only carried, never read, by this module,
 // so they hold just enough to satisfy the types.
-function ext(title: string, state: LibraryState): LibraryItem {
+function ext(title: string): LibraryItem {
   return {
     kind: "extension",
-    key: `extension/root/${title}`,
-    scope: "root",
-    state,
+    key: `extension/${title}`,
     title,
-    ext: {
-      id: title,
-      name: title,
-      origin: "local",
-      state: state === "pending" ? "pending" : "enabled",
-      scope: "root",
-    },
+    ext: { id: title, name: title, origin: "local" },
   };
 }
 
-function prompt(title: string, state: LibraryState): LibraryItem {
+function prompt(title: string): LibraryItem {
   return {
     kind: "prompt",
-    key: `prompt/root/${title}`,
-    scope: "root",
-    state,
+    key: `prompt/${title}`,
     title,
-    prompt: {
-      name: title,
-      description: "",
-      body: "",
-      scope: "root",
-      state: state === "pending" ? "pending" : "live",
-    },
+    prompt: { name: title, description: "", body: "" },
   };
 }
 
-function skill(title: string, state: LibraryState): LibraryItem {
+function skill(title: string): LibraryItem {
   return {
     kind: "skill",
-    key: `skill/root/${title}`,
-    scope: "root",
-    state,
+    key: `skill/${title}`,
     title,
-    skill: {
-      name: title,
-      description: "",
-      path: `/tmp/${title}`,
-      scope: "root",
-    },
+    skill: { name: title, description: "", path: `/tmp/${title}` },
   };
 }
 
-function promptFile(
-  kind: "system" | "appendix",
-  title: string,
-  state: LibraryState,
-): LibraryItem {
+function promptFile(kind: "system" | "appendix", title: string): LibraryItem {
   return {
     kind,
-    key: `${kind}/root/${title}`,
-    scope: "root",
-    state,
+    key: `${kind}/${title}`,
     title,
-    file: { scope: "root", kind, path: `/tmp/${title}` },
+    file: { kind, path: `/tmp/${title}` },
   };
 }
 
 const titles = (items: LibraryItem[]): string[] => items.map((i) => i.title);
 
-// The whole point of unifying: a pending prompt and a pending extension are one queue,
-// not two lists you have to switch tabs between to see.
-Deno.test("groups by state, mixing kinds within a group", () => {
-  const groups = groupItems([
-    skill("alpha", "active"),
-    prompt("beta", "pending"),
-    ext("gamma", "pending"),
-    ext("delta", "inherited"),
+// Kind-first ordering keeps a row's neighbours stable as items come and go, which a pure
+// alphabetical sort would not. The two prompt files lead: they steer everything below
+// them, and they are the only rows that are always present, so they must not drift down
+// a long extension list.
+Deno.test("the prompt files lead, then extensions, prompts, skills", () => {
+  const sorted = sortItems([
+    skill("bbb"),
+    prompt("ccc"),
+    ext("ddd"),
+    promptFile("appendix", "eee"),
+    promptFile("system", "fff"),
   ]);
-  assertEquals(titles(groups.pending), ["gamma", "beta"]);
-  assertEquals(titles(groups.active), ["alpha"]);
-  assertEquals(titles(groups.inherited), ["delta"]);
-});
-
-// Kind-first ordering keeps a row's neighbours stable as items come and go, which a
-// pure alphabetical sort would not.
-// The two prompt files lead: they steer everything below them, and they are the only
-// rows that are always present, so they must not drift down a long extension list.
-Deno.test("within a group, the prompt files lead, then extensions, prompts, skills", () => {
-  const groups = groupItems([
-    skill("bbb", "active"),
-    prompt("ccc", "active"),
-    ext("ddd", "active"),
-    promptFile("appendix", "eee", "active"),
-    promptFile("system", "fff", "active"),
-  ]);
-  assertEquals(titles(groups.active), ["fff", "eee", "ddd", "ccc", "bbb"]);
+  assertEquals(titles(sorted), ["fff", "eee", "ddd", "ccc", "bbb"]);
 });
 
 Deno.test("ties within a kind break by title", () => {
-  const groups = groupItems([
-    ext("zebra", "active"),
-    ext("apple", "active"),
-    ext("mango", "active"),
-  ]);
-  assertEquals(titles(groups.active), ["apple", "mango", "zebra"]);
+  assertEquals(
+    titles(sortItems([ext("zebra"), ext("apple"), ext("mango")])),
+    ["apple", "mango", "zebra"],
+  );
 });
 
-Deno.test("an empty library yields three empty groups", () => {
-  const groups = groupItems([]);
-  assertEquals(groups.pending, []);
-  assertEquals(groups.active, []);
-  assertEquals(groups.inherited, []);
-});
-
-// groupItems must not reorder its input in place: Library.svelte holds `items` in
-// $state and derives the groups from it, so a mutating sort would shuffle the source
-// of truth on every render.
-Deno.test("grouping does not mutate the input array", () => {
-  const input = [ext("zebra", "active"), ext("apple", "active")];
-  groupItems(input);
-  assertEquals(titles(input), ["zebra", "apple"]);
+Deno.test("sorting leaves its input alone", () => {
+  const items = [ext("b"), ext("a")];
+  sortItems(items);
+  assertEquals(titles(items), ["b", "a"]);
 });

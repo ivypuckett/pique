@@ -3,11 +3,9 @@
 // keep arg/return shapes in sync by hand (separate module graphs).
 import type { Entry } from "../fs.ts";
 
-// App-level user prefs — the ones that are NOT per-scope. Chat defaults used to live
-// here; they are now per-scope and inherited, so they sit in
-// ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
-// working directory moved too: it is the root workspace's cwd, in the layout tree.
-// The layout tree persists separately under the "layout" config (see ../store.ts).
+// App-level user prefs. Chat defaults are kept apart, under the "chat" config (see
+// ../chat/store.ts), and each workspace's working directory is in the layout tree,
+// which persists separately under the "layout" config (see ../store.ts).
 export interface Settings {
   version: number;
   // zoom: the UI scale factor, applied as the root font size (main.ts) — every

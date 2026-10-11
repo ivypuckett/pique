@@ -10,38 +10,35 @@
 // did not write, and a different origin keeps it out of the app's window — it cannot
 // reach `globalThis.bindings` there, only the methods its host relays.
 import { assertExtensionName, liveDir } from "../extensions/paths.ts";
-import { assertScopeId, type ScopeId } from "../scope/paths.ts";
 
 // Where a module's document lives: beside the extension file it belongs to, because pi
 // auto-discovers `extensions/*.ts` by basename and would not load a directory as an
 // extension at all. `namesIn` (extensions/local.ts) lists only `.ts`, so this sibling is
 // invisible to the extension listing.
 //
-// Both ids are asserted rather than sanitised: this is the only function that turns a
+// The name is asserted rather than sanitised: this is the only function that turns a
 // value from the webview into a path, and a name that does not match is a bug or an
 // attack, never something to coerce into a nearby valid one.
-export function uiPathFor(scope: ScopeId, name: string): string {
-  assertScopeId(scope);
+export function uiPathFor(name: string): string {
   assertExtensionName(name);
-  return `${liveDir(scope)}/${name}.ui.html`;
+  return `${liveDir()}/${name}.ui.html`;
 }
 
 // The request handler. One route, one file, no directory listing and no fallthrough to
 // disk: everything else a module needs arrives over the RPC port.
 export async function serveModuleUi(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  // /ui/<scope>/<name>
-  const [, prefix, scope, name] = url.pathname.split("/");
-  if (prefix !== "ui" || !scope || !name) {
+  // /ui/<name>
+  const [, prefix, name, ...rest] = url.pathname.split("/");
+  if (prefix !== "ui" || !name || rest.length > 0) {
     return new Response("not found", { status: 404 });
   }
 
   let path: string;
   try {
-    path = uiPathFor(scope, name);
+    path = uiPathFor(name);
   } catch {
-    // A refused id is a 404 rather than a 400: the distinction would tell a caller
-    // which of the two ids it got wrong.
+    // A refused name is a 404 rather than a 400, like any other path that is not here.
     return new Response("not found", { status: 404 });
   }
 

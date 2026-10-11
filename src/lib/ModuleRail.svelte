@@ -6,7 +6,7 @@
 
   let { viewId, right }: { viewId: string; right: RightState } = $props();
 
-  // Rebuilt whenever the module table is refilled — enabling or revoking a module in the
+  // Rebuilt whenever the module table is refilled — installing or deleting a module in the
   // Library changes which rows exist, and the table it reads is a plain array that
   // nothing reacts to on its own.
   const groups = $derived(($modulesVersion, railGroups()));

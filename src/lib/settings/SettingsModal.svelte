@@ -590,9 +590,8 @@
       <div>
         <div class="text-sm">Default working directory</div>
         <div class="mt-0.5 text-xs opacity-70">
-          Set per workspace from the path button in the top bar. The Root workspace's
-          directory is the default every other workspace falls back to when it has
-          none of its own; empty means your home directory.
+          Set per workspace from the path button in the top bar; a workspace with none
+          of its own uses your home directory.
         </div>
       </div>
 

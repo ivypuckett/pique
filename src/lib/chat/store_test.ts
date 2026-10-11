@@ -14,7 +14,7 @@ import { chatSession, formatReloadNotice } from "./store.ts";
 function fakeBindings(resumed: Item[] = []) {
   const started: {
     id: string;
-    scope?: string;
+    workspace?: string;
     view?: string;
     fresh?: boolean;
   }[] = [];
@@ -32,7 +32,12 @@ function fakeBindings(resumed: Item[] = []) {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
       const id = `agent-${next++}`;
-      started.push({ id, scope: arg.scope, view: arg.view, fresh: arg.fresh });
+      started.push({
+        id,
+        workspace: arg.workspace,
+        view: arg.view,
+        fresh: arg.fresh,
+      });
       queues.set(id, []);
       histories.set(id, arg.fresh ? [] : resumed);
       return Promise.resolve({ id });
@@ -73,9 +78,8 @@ function fakeBindings(resumed: Item[] = []) {
     },
     chatSetModel: () => Promise.resolve(true),
     chatSetThinking: () => Promise.resolve(true),
-    scopeConfigRead: () => Promise.resolve({}),
-    scopeConfigWrite: () => Promise.resolve(true),
-    scopeConfigResolve: () => Promise.resolve({}),
+    configRead: () => Promise.resolve(null),
+    configWrite: () => Promise.resolve(true),
     moduleManifest: () => {
       moduleTableReads++;
       return Promise.resolve({ port: 0, modules: [] });
@@ -255,9 +259,9 @@ Deno.test("two views of one workspace hold separate conversations", async () => 
     await settle();
 
     assertEquals(
-      f.started.map((x) => [x.scope, x.view]),
+      f.started.map((x) => [x.workspace, x.view]),
       [["ws-views", "view-1"], ["ws-views", "view-2"]],
-      "each view starts its own agent, in the same scope",
+      "each view starts its own agent, in the same workspace",
     );
 
     f.emit("agent-1", { kind: "text", delta: " — left only" });
@@ -462,7 +466,7 @@ Deno.test("formatReloadNotice names failures first, then the tool changes", () =
 // The two things a reload does that are NOT tool changes. Saying "no tool changes" and
 // stopping is what made a `/reload` after editing SYSTEM.md look like a no-op, when the
 // edit had in fact been applied.
-Deno.test("formatReloadNotice reports the system prompt and the scope's model", () => {
+Deno.test("formatReloadNotice reports the system prompt and the default model", () => {
   assertEquals(
     formatReloadNotice({
       added: [],

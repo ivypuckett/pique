@@ -49,25 +49,6 @@ function expandTilde(dir: string): string {
   return trimmed;
 }
 
-// Effective working directory for spawned shells and chat agents when a workspace
-// has no override of its own: the ROOT workspace's cwd, else $HOME. This is what the
-// old global workspace.defaultDir setting became — root's cwd is the value every
-// other workspace falls back to. A leading `~` is expanded (`~` or `~/...`); `~user`
-// and non-leading `~` are left as-is. `layout` is whatever readJson("layout")
-// returned — possibly null, pre-root, or malformed — so every field is guarded.
-export function resolveWorkspaceDir(layout: Json): string {
-  if (layout && typeof layout === "object" && !Array.isArray(layout)) {
-    const root = (layout as { [k: string]: Json }).root;
-    if (root && typeof root === "object" && !Array.isArray(root)) {
-      const dir = (root as { [k: string]: Json }).cwd;
-      if (typeof dir === "string" && dir.trim() !== "") {
-        return expandTilde(dir);
-      }
-    }
-  }
-  return home();
-}
-
 // How many directory levels to descend, when the workspace root is not itself a git
 // repo, looking for the repos inside so their changed folders can be highlighted.
 // Reads workspace.gitScanDepth, clamped to [0, 10] (0 = don't descend). Any missing,
@@ -86,16 +67,10 @@ export function resolveGitScanDepth(settings: Json): number {
   return fallback;
 }
 
-// Working directory for one spawned module: its own workspace's override when set
-// (leading `~` expanded), else the root workspace's, else $HOME — the cwd half of
-// the scope inheritance chain. The override is a raw string threaded down from the
-// workspace state; a blank or absent one means "inherit".
-export function resolveModuleDir(
-  override: string | undefined,
-  layout: Json,
-): string {
-  if (typeof override === "string" && override.trim() !== "") {
-    return expandTilde(override);
-  }
-  return resolveWorkspaceDir(layout);
+// Working directory for one spawned module: its workspace's own directory when set
+// (leading `~` expanded), else $HOME. The override is a raw string threaded down from the
+// workspace state; a blank or absent one means "none set".
+export function resolveModuleDir(override: string | undefined): string {
+  const dir = typeof override === "string" ? expandTilde(override) : "";
+  return dir === "" ? home() : dir;
 }

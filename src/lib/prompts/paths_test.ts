@@ -1,12 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import {
-  assertPromptName,
-  pendingDir,
-  pendingPromptPath,
-  promptPath,
-  promptsDir,
-} from "./paths.ts";
-import { ROOT } from "../scope/paths.ts";
+import { assertPromptName, promptPath, promptsDir } from "./paths.ts";
 
 function withHome(home: string, fn: () => void): void {
   const prev = Deno.env.get("HOME");
@@ -18,18 +11,11 @@ function withHome(home: string, fn: () => void): void {
   }
 }
 
-// The live dir is INSIDE the scope's agentDir: pi auto-discovers <agentDir>/prompts,
-// and here that discovery is the whole point.
-Deno.test("prompts live in the scope's agent dir, where pi looks for them", () => {
+// pi auto-discovers <agentDir>/prompts, and here that discovery is the whole point.
+Deno.test("prompts live in pi's agent dir, where pi looks for them", () => {
   withHome("/tmp/home", () => {
-    assertEquals(
-      promptsDir(ROOT),
-      "/tmp/home/.pique/scopes/root/agent/prompts",
-    );
-    assertEquals(
-      pendingDir("ws-2"),
-      "/tmp/home/.pique/scopes/ws-2/agent/prompts/pending",
-    );
+    assertEquals(promptsDir(), "/tmp/home/.pi/agent/prompts");
+    assertEquals(promptPath("ship"), "/tmp/home/.pi/agent/prompts/ship.md");
   });
 });
 
@@ -44,7 +30,6 @@ Deno.test("a name that could escape its directory is rejected", () => {
 
 Deno.test("path builders enforce the name rule", () => {
   withHome("/tmp/home", () => {
-    assertThrows(() => promptPath(ROOT, "../escape"));
-    assertThrows(() => pendingPromptPath(ROOT, "../escape"));
+    assertThrows(() => promptPath("../escape"));
   });
 });

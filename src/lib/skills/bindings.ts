@@ -5,8 +5,7 @@ import type { SkillInfo } from "./service.ts";
 export type { SkillInfo };
 
 export interface SkillBindings {
-  // Every skill nameable in this scope: its own plus inherited, nearest winning.
-  skillsVisible(arg: { scope: string }): Promise<SkillInfo[]>;
+  skillsList(): Promise<SkillInfo[]>;
 }
 
 // Null in web-dev (deno task web), where there's no desktop backend.

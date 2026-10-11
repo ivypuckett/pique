@@ -21,7 +21,7 @@ Deno.test({
   sanitizeResources: false,
   async fn() {
     const saved = createInitialSession();
-    const view = saved.root.views[0];
+    const view = saved.workspaces[0].views[0];
     view.right = {
       activeGroup: "notes", // a module that is no longer installed
       tabs: [
@@ -34,7 +34,7 @@ Deno.test({
 
     await hydrateSession();
 
-    const right = get(session).root.views[0].right;
+    const right = get(session).workspaces[0].views[0].right;
     assertEquals(right.activeGroup, "terminal");
     assertEquals(right.tabs.map((t) => t.id), ["right-1", "right-9"]);
   },

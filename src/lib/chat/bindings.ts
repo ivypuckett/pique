@@ -23,15 +23,14 @@ export type {
 };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
-// returns; every other call carries that id. `scope` is the workspace the module
-// lives in — it decides which tools and defaults the agent gets. `view` is
-// the view inside it, and decides which conversation is resumed: one per view.
+// returns; every other call carries that id. `workspace` and `view` name the pane the
+// module lives in, and decide which conversation is resumed: one per view.
 //
 // `fresh` abandons the view's saved conversation and starts a new one instead of
 // resuming it.
 export interface ChatBindings {
   chatStart(
-    arg: { cwd?: string; scope?: string; view?: string; fresh?: boolean },
+    arg: { cwd?: string; workspace?: string; view?: string; fresh?: boolean },
   ): Promise<{ id: string }>;
   chatHistory(arg: { id: string }): Promise<Item[]>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;

@@ -65,14 +65,14 @@ export async function hydrateSession(): Promise<void> {
   hydrated = true;
 }
 
-// Every workspace in rail order, root first — what the rail and Session.svelte render.
+// Every workspace in rail order — what the rail and Session.svelte render.
 export const workspaces = derived(session, allWorkspaces);
 
 // The shown workspace: the rail's selection, and what view-level actions target.
-// Falls back to root, which is the one workspace guaranteed to exist.
+// Falls back to the first, since there is always at least one.
 export const activeWorkspace = derived(
   session,
-  (s) => workspaceById(s, s.activeId) ?? s.root,
+  (s) => workspaceById(s, s.activeId) ?? s.workspaces[0],
 );
 
 // The presented view of the shown workspace: keyboard nav and the top bar act on this.

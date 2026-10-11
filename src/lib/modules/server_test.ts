@@ -5,28 +5,20 @@ import { uiPathFor } from "./server.ts";
 // `extensions/*.ts` by basename, so a directory would not load as an extension at all.
 Deno.test("a ui path is a sibling of the extension file it belongs to", () => {
   assertEquals(
-    uiPathFor("ws-1", "notes").endsWith(
-      "/scopes/ws-1/agent/extensions/notes.ui.html",
-    ),
+    uiPathFor("notes").endsWith("/.pi/agent/extensions/notes.ui.html"),
     true,
   );
 });
 
-Deno.test("a bad scope or module name is refused, not resolved", () => {
-  const cases: [string, string][] = [
-    ["../root", "notes"],
-    ["ws-1", "../../etc/passwd"],
-    ["ws-1", "a/b"],
-    ["ws-1", "Notes"], // the extension name regex is lowercase-only
-    ["ws-1", ""],
-    ["", "notes"],
-  ];
-  for (const [scope, name] of cases) {
-    assertThrows(
-      () => uiPathFor(scope, name),
-      Error,
-      undefined,
-      `${scope} ${name}`,
-    );
+Deno.test("a bad module name is refused, not resolved", () => {
+  for (
+    const name of [
+      "../../etc/passwd",
+      "a/b",
+      "Notes", // the extension name regex is lowercase-only
+      "",
+    ]
+  ) {
+    assertThrows(() => uiPathFor(name), Error, undefined, name);
   }
 });

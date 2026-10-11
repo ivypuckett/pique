@@ -1,9 +1,8 @@
-// Backend service for skills: what a scope has, and where a named one lives.
+// Backend service for skills: what pi's agent dir holds.
 // Read-only — the Library sub-tab shows this list, and never installs or edits a skill.
 // Runs Deno-side only.
 import { extract } from "@std/front-matter/yaml";
 import { assertSkillName, skillsDir } from "./paths.ts";
-import { chain, type ScopeId } from "../scope/paths.ts";
 
 // A type alias, not an interface, so it keeps TypeScript's implicit index signature
 // and can cross the win.bind boundary as a JSON value.
@@ -13,7 +12,6 @@ export type SkillInfo = {
   description: string;
   // Absolute path to the skill dir or file, ready for pi's additionalSkillPaths.
   path: string;
-  scope: ScopeId;
   // The frontmatter `name:` when it disagrees with the basename. Shown in the UI so
   // the divergence is visible rather than mysterious; never used for resolution.
   frontmatterName?: string;
@@ -62,11 +60,11 @@ async function readMeta(path: string): Promise<Meta> {
   }
 }
 
-// One scope's own skills. pi's two shapes: `<name>/SKILL.md` and a loose `<name>.md`.
+// pi's two shapes: `<name>/SKILL.md` and a loose `<name>.md`.
 // A missing dir means "none yet", not an error. A basename that is not a legal name
 // is skipped rather than raising.
-export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
-  const dir = skillsDir(scope);
+export async function listSkills(): Promise<SkillInfo[]> {
+  const dir = skillsDir();
   const entries: Deno.DirEntry[] = [];
   try {
     for await (const entry of Deno.readDir(dir)) entries.push(entry);
@@ -112,7 +110,7 @@ export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
     } catch {
       continue;
     }
-    target.set(name, { name, path, scope, ...await readMeta(metaPath) });
+    target.set(name, { name, path, ...await readMeta(metaPath) });
   }
 
   for (const [name, info] of files) {
@@ -120,15 +118,3 @@ export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
   }
   return [...dirs.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
-
-// Every skill nameable in `scope`: its own plus each ancestor's, nearest winning. The
-// de-duplication matters — pi collapses a name collision itself and takes the first
-// path, so listing a shadowed twin would offer something that can never be selected.
-export async function listVisibleSkills(scope: ScopeId): Promise<SkillInfo[]> {
-  const byName = new Map<string, SkillInfo>();
-  for (const s of chain(scope)) {
-    for (const skill of await listSkills(s)) byName.set(skill.name, skill);
-  }
-  return [...byName.values()];
-}
-
