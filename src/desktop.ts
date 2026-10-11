@@ -1,4 +1,6 @@
 /// <reference lib="deno.desktop" />
+// deno-lint-ignore-file prefer-const -- the deps are declared up here for the handlers
+// and assigned once below the bindings; see constraint 1.
 // deno desktop backend entry.
 //
 // Two hard-won constraints (both verified end-to-end, both silent when violated):
@@ -48,10 +50,10 @@ function moduleDir(override?: string): string {
 // calling this once at boot (settings/bindings.ts). Done from there rather than here
 // because screen.availWidth/availHeight is the work area, already minus the menu bar,
 // dock, and panels, and nothing on this side knows those.
-win.bind("windowSetSize", async (arg) => {
+win.bind("windowSetSize", (arg) => {
   const { width, height } = arg as { width: number; height: number };
   win.setSize(width, height);
-  return true;
+  return Promise.resolve(true);
 });
 
 // Not `async`: there is nothing to await (see moduleManifest below).
@@ -67,6 +69,7 @@ win.bind("termStart", (arg) => {
   });
 });
 
+// deno-lint-ignore require-await -- async so an unknown id's throw rejects
 win.bind("termWrite", async (arg) => {
   const { id, data } = arg as { id: string; data: string };
   term.writeSession(id, data);
@@ -88,16 +91,17 @@ win.bind("termRead", async (arg) => {
   return { data: [] as number[], done: false };
 });
 
+// deno-lint-ignore require-await -- async so an unknown id's throw rejects
 win.bind("termResize", async (arg) => {
   const { id, cols, rows } = arg as { id: string; cols: number; rows: number };
   term.resizeSession(id, cols, rows);
   return true;
 });
 
-win.bind("termKill", async (arg) => {
+win.bind("termKill", (arg) => {
   const { id } = arg as { id: string };
   term.killSession(id);
-  return true;
+  return Promise.resolve(true);
 });
 
 // Where the webview should point a user module's iframe. The port is assigned after the
@@ -145,11 +149,12 @@ win.bind("chatStart", async (arg) => {
   return { id, thinking: chat.thinkingLevelOf(id) };
 });
 
-win.bind("chatHistory", async (arg) => {
+win.bind("chatHistory", (arg) => {
   const { id } = arg as { id: string };
-  return chat.historyOf(id);
+  return Promise.resolve(chat.historyOf(id));
 });
 
+// deno-lint-ignore require-await -- async so an unknown id's throw rejects
 win.bind("chatPrompt", async (arg) => {
   const { id, text } = arg as { id: string; text: string };
   chat.promptAgent(id, text);
@@ -167,10 +172,10 @@ win.bind("chatAbort", async (arg) => {
   return true;
 });
 
-win.bind("chatStop", async (arg) => {
+win.bind("chatStop", (arg) => {
   const { id } = arg as { id: string };
   chat.stopAgent(id);
-  return true;
+  return Promise.resolve(true);
 });
 
 win.bind("chatListModels", async (arg) => {
@@ -178,9 +183,9 @@ win.bind("chatListModels", async (arg) => {
   return await chat.listModels(id);
 });
 
-win.bind("chatListCommands", async (arg) => {
+win.bind("chatListCommands", (arg) => {
   const { id } = arg as { id: string };
-  return chat.listCommands(id);
+  return Promise.resolve(chat.listCommands(id));
 });
 
 // Re-read prompt templates from disk into a running agent, so a template saved in the
@@ -209,11 +214,11 @@ win.bind("chatSetModel", async (arg) => {
   return true;
 });
 
-win.bind("chatSetThinking", async (arg) => {
+win.bind("chatSetThinking", (arg) => {
   const { id, level } = arg as { id: string; level: string };
   // deno-lint-ignore no-explicit-any
   chat.setThinkingLevel(id, level as any);
-  return true;
+  return Promise.resolve(true);
 });
 
 // Model-provider management — connect any provider pi supports (see chat/providers.ts).
@@ -426,8 +431,9 @@ win.bind("systemPromptsDelete", async (arg) => {
 
 // The agent dir this process runs against, and pi's own — the setting can differ from
 // the first until the next launch, and Settings says so.
-win.bind("agentDir", () =>
-  Promise.resolve({ dir: paths.agentDir(), pi: paths.piAgentDir() })
+win.bind(
+  "agentDir",
+  () => Promise.resolve({ dir: paths.agentDir(), pi: paths.piAgentDir() }),
 );
 
 // Copy the `pi` CLI's setup in (lib/import.ts). It may have replaced auth.json,
@@ -472,7 +478,7 @@ paths = await import("./lib/paths.ts");
 paths.configureAgentDir(
   settings.resolveAgentDir(await settings.readJson("settings")),
 );
-const { serveDir } = await import("jsr:@std/http@^1/file-server");
+const { serveDir } = await import("@std/http/file-server");
 const { fromFileUrl } = await import("@std/path");
 // Resolved off this module rather than the cwd: `--include dist` embeds the build one
 // level above src/ in the packaged app's virtual filesystem, and the app is started from

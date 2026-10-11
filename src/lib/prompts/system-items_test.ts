@@ -18,7 +18,9 @@ Deno.test("both rows are listed, present or not", () => {
 });
 
 Deno.test("a set file previews its first non-blank line", () => {
-  const [item] = promptFileItems([file("system", "\n\n  You are terse.\nMore.")]);
+  const [item] = promptFileItems([
+    file("system", "\n\n  You are terse.\nMore."),
+  ]);
   assertEquals(item.subtitle, "You are terse.");
 });
 

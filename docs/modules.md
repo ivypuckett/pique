@@ -10,11 +10,11 @@ ship: when you want a Kanban board, ask the agent for one.
 
 ## Where a module comes from
 
-**Ask the agent.** `define_module` writes the panel and its definition into
-pi's extensions dir, and the module is on the rail as soon as the call returns —
-the chat re-reads the module table when the tool succeeds. The tool exists for
-what its description carries: the agent holds `write` and could put the files
-there itself, but this is where it learns what a module is.
+**Ask the agent.** `define_module` writes the panel and its definition into pi's
+extensions dir, and the module is on the rail as soon as the call returns — the
+chat re-reads the module table when the tool succeeds. The tool exists for what
+its description carries: the agent holds `write` and could put the files there
+itself, but this is where it learns what a module is.
 
 **Write the files yourself.** Drop them in the same dir, then reopen the app (or
 let any `define_module` call refresh the rail).
@@ -104,12 +104,12 @@ so a call is always the calling module's own.
 
 ## What you may call
 
-| Method       | Payload              | Does                                                     |
-| ------------ | -------------------- | -------------------------------------------------------- |
-| `storageGet` | —                    | your own JSON blob, `null` until you have written one    |
-| `storageSet` | any JSON value       | replaces it (`~/.pique/modules/<name>.json`)             |
-| `fsRead`     | `{ path }`           | the text of a file                                       |
-| `fsWrite`    | `{ path, contents }` | writes a file                                            |
+| Method       | Payload              | Does                                                  |
+| ------------ | -------------------- | ----------------------------------------------------- |
+| `storageGet` | —                    | your own JSON blob, `null` until you have written one |
+| `storageSet` | any JSON value       | replaces it (`~/.pique/modules/<name>.json`)          |
+| `fsRead`     | `{ path }`           | the text of a file                                    |
+| `fsWrite`    | `{ path, contents }` | writes a file                                         |
 
 Anything else is refused as "not a module method". Paths are not restricted.
 
@@ -130,8 +130,8 @@ boundaries.
 
 Settings → Library lists every module beside the extensions; Delete removes both
 files. A view that had the module open falls back to another row on the next
-launch, and its tab is kept but unreachable — writing the module again brings the
-row back with the tab where you left it.
+launch, and its tab is kept but unreachable — writing the module again brings
+the row back with the tab where you left it.
 
 ## Deliberately absent
 
@@ -143,5 +143,5 @@ row back with the tab where you left it.
 - **Hot-add from disk.** A module written by hand appears after the rail is
   re-read; it does not materialise into an open view on its own.
 - **Tailwind, daisyUI and the app's theme.** A module brings its own styling.
-  Tying every module to our build's class set is exactly the coupling a
-  separate document avoids.
+  Tying every module to our build's class set is exactly the coupling a separate
+  document avoids.

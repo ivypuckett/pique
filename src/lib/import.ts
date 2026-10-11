@@ -100,7 +100,9 @@ export async function importFromPi(
   to = agentDir(),
 ): Promise<ImportResult> {
   if (resolve(from) === resolve(to)) {
-    throw new Error(`${to} is already pi's own folder — there is nothing to import.`);
+    throw new Error(
+      `${to} is already pi's own folder — there is nothing to import.`,
+    );
   }
   if (!(await exists(from))) {
     throw new Error(`No pi setup found at ${from}.`);

@@ -154,7 +154,10 @@ Deno.test("rejects a property that is not a custom property", () => {
 });
 
 Deno.test("peekThemeName reads a name from unfinished text", () => {
-  assertEquals(peekThemeName(`@plugin "daisyui/theme" {\n  name: "nord";\n  --c`), "nord");
+  assertEquals(
+    peekThemeName(`@plugin "daisyui/theme" {\n  name: "nord";\n  --c`),
+    "nord",
+  );
   assertEquals(peekThemeName(`@plugin "daisyui/theme" {`), null);
   assertEquals(peekThemeName(`name: "not a name";`), null);
 });
@@ -178,7 +181,10 @@ Deno.test("every seeded theme parses and has unique name", () => {
   // Each carries daisyui's full token set — 20 colors, 3 radii, 2 sizes, border,
   // depth, noise. A short one means the copy dropped something.
   for (const t of seeds) {
-    assert(t.vars.length >= 28, `${t.name} has only ${t.vars.length} properties`);
+    assert(
+      t.vars.length >= 28,
+      `${t.name} has only ${t.vars.length} properties`,
+    );
     assert(t.colorScheme === "light" || t.colorScheme === "dark", t.name);
     assert(t.vars.some((v) => v.name === "--color-base-100"), t.name);
   }

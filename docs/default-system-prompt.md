@@ -3,15 +3,15 @@
 **Status: proposal. Nothing here is shipped, seeded, or written to `~/.pique`.**
 Card `717e160f` asks what should go in a default prompt; this is the answer for
 you to approve, reject or edit. If you approve it, the text in §5 gets pasted
-into `APPEND_SYSTEM.md` in the agent folder from Settings → Library — by you, once,
-deliberately.
+into `APPEND_SYSTEM.md` in the agent folder from Settings → Library — by you,
+once, deliberately.
 
 ---
 
 ## 1. The constraint this has to respect
 
-Decision 2 in the README: *"System prompts can do more harm than good. Not
-specifying one within pique removes it entirely."* A default that pique writes
+Decision 2 in the README: _"System prompts can do more harm than good. Not
+specifying one within pique removes it entirely."_ A default that pique writes
 onto your disk at first run contradicts that — it is a system prompt pique
 specified, and one you would have to go find in order to disagree with.
 
@@ -46,7 +46,7 @@ The card names these as a must. They are:
 4. **Goal-driven execution** — define verifiable success criteria and loop until
    they are met.
 
-They target *reasoning* failures — wrong assumptions, over-engineering, scope
+They target _reasoning_ failures — wrong assumptions, over-engineering, scope
 creep, weak success criteria — rather than formatting or tone. That is why they
 survive a model change, and it is the reason to prefer them over anything mined
 from a vendor prompt.
@@ -72,20 +72,20 @@ coincidence to note and move past — it changes the proposal, see §4.
 ## 4. Finding: `CLAUDE.md` and an appendix are not the same lever
 
 pi loads `AGENTS.md` / `CLAUDE.md` from the working directory as a **project
-context file**. So an agent working in *this* repo already gets the four rules,
+context file**. So an agent working in _this_ repo already gets the four rules,
 and the proposed default would be redundant here.
 
 The difference is reach and ownership:
 
-|                   | `CLAUDE.md`                     | `~/.pique/agent/APPEND_SYSTEM.md`     |
-| ----------------- | ------------------------------- | ------------------------------------- |
-| Applies to        | one project directory           | every conversation, every project     |
-| Lives in          | the repo, shared with the team  | your machine, yours alone             |
-| Present when      | someone put one there           | always                                |
-| Survives a `cwd`  | no — a different project, gone  | yes                                   |
+|                  | `CLAUDE.md`                    | `~/.pique/agent/APPEND_SYSTEM.md` |
+| ---------------- | ------------------------------ | --------------------------------- |
+| Applies to       | one project directory          | every conversation, every project |
+| Lives in         | the repo, shared with the team | your machine, yours alone         |
+| Present when     | someone put one there          | always                            |
+| Survives a `cwd` | no — a different project, gone | yes                               |
 
-The appendix is the answer to *"I want this in every conversation regardless of
-which repo I am sitting in and whether its authors wrote a `CLAUDE.md`."* That
+The appendix is the answer to _"I want this in every conversation regardless of
+which repo I am sitting in and whether its authors wrote a `CLAUDE.md`."_ That
 is the actual gap, and it is worth filling even though this one repo covers
 itself.
 
@@ -138,8 +138,8 @@ I looked at the
 for Cursor, Windsurf, VSCode Agent, Devin, Replit and others — ~27 tools. Taking
 Cursor's agent prompt as representative, it breaks down roughly:
 
-| Portion | What it is                                                    | Transferable? |
-| ------- | ------------------------------------------------------------- | ------------- |
+| Portion | What it is                                                     | Transferable? |
+| ------- | -------------------------------------------------------------- | ------------- |
 | ~5%     | identity, model, IDE framing                                   | no            |
 | ~45%    | tool schemas, calling rules, when-to-use-which-tool            | **no**        |
 | ~50%    | behavioral steering: edits, communication, search thoroughness | partly        |
@@ -153,23 +153,23 @@ the moment pi changes, and cost tokens on every turn to do so.
 Of the behavioral half, the recurring patterns across tools are:
 
 - **Leave the code runnable.** Imports, dependencies and wiring included, not
-  left as an exercise. — *Reasonable, but it is a restatement of "verify"; a
-  model that actually runs the check catches this without being told.*
-- **Do not print code at the user; edit the file.** — *Product-shaped. It exists
+  left as an exercise. — _Reasonable, but it is a restatement of "verify"; a
+  model that actually runs the check catches this without being told._
+- **Do not print code at the user; edit the file.** — _Product-shaped. It exists
   because those tools have a diff UI to push you toward. pique has an editor
-  module and a chat, and which one you want depends on what you asked for.*
-- **Bias toward finding the answer rather than asking.** — *Genuinely useful and
+  module and a chat, and which one you want depends on what you asked for._
+- **Bias toward finding the answer rather than asking.** — _Genuinely useful and
   genuinely dangerous, and it is the one place these prompts and Karpathy's rule
   1 openly disagree. §5 takes the middle: do the independent work first, ask
-  only where the answer changes the output.*
+  only where the answer changes the output._
 - **Cap the retry loop** (Cursor: stop after ~3 linter-fix iterations). —
-  *Concrete and worth having, but it belongs to a specific toolchain. A
-  project's own `.pi/APPEND_SYSTEM.md` is the right place for it.*
-- **Do not name your tools to the user.** — *Tone, and wrong for pique: the
+  _Concrete and worth having, but it belongs to a specific toolchain. A
+  project's own `.pi/APPEND_SYSTEM.md` is the right place for it._
+- **Do not name your tools to the user.** — _Tone, and wrong for pique: the
   transcript already shows the tool calls, so hiding them in prose would
-  contradict what is on screen.*
-- **Search broad, then narrow; re-search with different wording.** — *Good, and
-  already close to what pi's own preamble says. Adding it would be restating.*
+  contradict what is on screen._
+- **Search broad, then narrow; re-search with different wording.** — _Good, and
+  already close to what pi's own preamble says. Adding it would be restating._
 
 **Net: nothing from the leaks makes the cut on its own.** One idea — the
 independence/asking tradeoff — is folded into §5's first rule because it

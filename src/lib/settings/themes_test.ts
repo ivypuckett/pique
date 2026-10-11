@@ -5,9 +5,9 @@ import {
   restoreDefaults,
   saveTheme,
   seedThemes,
+  type StoredTheme,
   themesFromStored,
   themesStyleText,
-  type StoredTheme,
 } from "./themes.ts";
 import { DEFAULT_SETTINGS } from "./bindings.ts";
 import { parseThemeCss } from "./theme_css.ts";
@@ -31,7 +31,9 @@ Deno.test("seeds carry every theme pique ships, in picker order", () => {
 
 Deno.test("the default theme setting names a seeded theme", () => {
   // A default naming a theme nobody seeds would leave a fresh install unthemed.
-  assert(seedThemes().some((t) => t.name === DEFAULT_SETTINGS.appearance.theme));
+  assert(
+    seedThemes().some((t) => t.name === DEFAULT_SETTINGS.appearance.theme),
+  );
 });
 
 Deno.test("saving a new theme appends it", () => {
@@ -40,7 +42,8 @@ Deno.test("saving a new theme appends it", () => {
 });
 
 Deno.test("saving an edit keeps the theme in place", () => {
-  const edited = `@plugin "daisyui/theme" {\n  name: "b";\n  --color-primary: blue;\n}`;
+  const edited =
+    `@plugin "daisyui/theme" {\n  name: "b";\n  --color-primary: blue;\n}`;
   const next = saveTheme(list("a", "b", "c"), "b", edited);
   assertEquals(next.map((t) => t.name), ["a", "b", "c"]);
   assertEquals(next[1].css, edited);
@@ -60,7 +63,10 @@ Deno.test("a name collision is rejected rather than shadowing the existing theme
     `a theme named "light" already exists`,
   );
   // Renaming onto another theme's name collides too.
-  assertThrows(() => saveTheme(list("light", "dark"), "dark", css("light")), Error);
+  assertThrows(
+    () => saveTheme(list("light", "dark"), "dark", css("light")),
+    Error,
+  );
 });
 
 Deno.test("saving a theme under its own name is not a collision", () => {
@@ -107,12 +113,18 @@ Deno.test("a duplicate is renamed text, not a saved theme", () => {
 });
 
 Deno.test("a duplicate avoids the name of an existing copy", () => {
-  const saved = saveTheme(list("nord"), null, duplicateCss(list("nord"), "nord"));
+  const saved = saveTheme(
+    list("nord"),
+    null,
+    duplicateCss(list("nord"), "nord"),
+  );
   assertEquals(parseThemeCss(duplicateCss(saved, "nord")).name, "nord-copy-2");
 });
 
 Deno.test("duplicating a seeded theme keeps its comments", () => {
-  assert(duplicateCss(seedThemes(), "catppuccin-frappe").includes("/* mantle */"));
+  assert(
+    duplicateCss(seedThemes(), "catppuccin-frappe").includes("/* mantle */"),
+  );
 });
 
 Deno.test("style text carries one rule per theme", () => {

@@ -58,7 +58,8 @@ export function moduleAuthoringTools(): ToolDefinition[] {
             "The complete HTML document, its own script and style inlined.",
         }),
         duplicable: Type.Optional(Type.Boolean({
-          description: "May a view hold more than one tab of it? Default false.",
+          description:
+            "May a view hold more than one tab of it? Default false.",
         })),
       }),
       async execute(_id, p) {
@@ -90,7 +91,8 @@ export function moduleAuthoringTools(): ToolDefinition[] {
         return {
           content: [{
             type: "text",
-            text: `Wrote ${p.name}. It is in the right pane's rail as ${p.label}.`,
+            text:
+              `Wrote ${p.name}. It is in the right pane's rail as ${p.label}.`,
           }],
           details: null,
         };

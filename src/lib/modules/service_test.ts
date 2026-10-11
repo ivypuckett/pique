@@ -24,8 +24,7 @@ async function withScope(
   }
 }
 
-const definition = (label: string) =>
-  JSON.stringify({ label });
+const definition = (label: string) => JSON.stringify({ label });
 
 Deno.test("a definition with its document is a module", async () => {
   await withScope(async (write) => {

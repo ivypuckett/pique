@@ -93,7 +93,9 @@ export async function renameEntry(path: string, name: string): Promise<string> {
 // Windows collision that is not case-only has different letters, not different case.
 async function isSameEntry(a: string, b: string): Promise<boolean> {
   const [x, y] = await Promise.all([Deno.lstat(a), Deno.lstat(b)]);
-  if (x.dev !== null && x.ino !== null) return x.dev === y.dev && x.ino === y.ino;
+  if (x.dev !== null && x.ino !== null) {
+    return x.dev === y.dev && x.ino === y.ino;
+  }
   return a.toLowerCase() === b.toLowerCase();
 }
 

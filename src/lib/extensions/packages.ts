@@ -216,4 +216,3 @@ export async function searchExtensions(
   }
   return mergeSearchResults(ok);
 }
-

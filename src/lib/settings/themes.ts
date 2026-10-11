@@ -13,7 +13,6 @@ import { settings } from "./store.ts";
 import { SEED_THEMES } from "./seeds.ts";
 import {
   parseThemeCss,
-  peekThemeName,
   splitThemeSheet,
   type Theme,
   themeRule,

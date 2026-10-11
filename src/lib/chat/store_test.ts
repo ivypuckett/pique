@@ -309,7 +309,11 @@ for (const cmd of ["/new", "/clear"]) {
       assertEquals(get(s.items), [], "the new chat is an empty one");
       assertEquals(f.stopped, ["agent-1"], "the old agent is stopped");
       assertEquals(f.started.map((x) => x.fresh), [undefined, true]);
-      assertEquals(get(s.input), "", "the input is cleared like any other send");
+      assertEquals(
+        get(s.input),
+        "",
+        "the input is cleared like any other send",
+      );
 
       s.release();
     }, SAVED);

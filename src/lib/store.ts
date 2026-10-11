@@ -27,12 +27,12 @@ import {
 } from "./workspace.ts";
 import {
   addWorkspace as addWorkspaceFn,
+  adoptSession,
   allWorkspaces,
   closeWorkspace as closeWorkspaceFn,
   createInitialSession,
   focusAdjacent as focusAdjacentWorkspaceFn,
   focusWorkspace as focusWorkspaceFn,
-  adoptSession,
   isSessionState,
   type SessionState,
   updateWorkspace,

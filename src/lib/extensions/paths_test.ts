@@ -15,7 +15,10 @@ function withHome(home: string, fn: () => void): void {
 Deno.test("local extensions live in pi's agent dir", () => {
   withHome("/home/x", () => {
     assertEquals(liveDir(), "/home/x/.pique/agent/extensions");
-    assertEquals(livePath("my_ext"), "/home/x/.pique/agent/extensions/my_ext.ts");
+    assertEquals(
+      livePath("my_ext"),
+      "/home/x/.pique/agent/extensions/my_ext.ts",
+    );
   });
 });
 

@@ -112,7 +112,9 @@ export function parseThemeCss(css: string): Theme {
       `invalid name "${theme.name}" — letters, digits, - and _ only`,
     );
   }
-  if (theme.colorScheme !== undefined && !/^(light|dark)$/.test(theme.colorScheme)) {
+  if (
+    theme.colorScheme !== undefined && !/^(light|dark)$/.test(theme.colorScheme)
+  ) {
     throw new Error(`color-scheme must be "light" or "dark"`);
   }
   if (theme.vars.length === 0) {

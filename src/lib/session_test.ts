@@ -14,7 +14,10 @@ import { addView } from "./workspace.ts";
 
 Deno.test("createInitialSession is one workspace, active", () => {
   const s = createInitialSession();
-  assertEquals(s.workspaces.map((w) => [w.id, w.title]), [["ws-1", "Workspace 1"]]);
+  assertEquals(s.workspaces.map((w) => [w.id, w.title]), [[
+    "ws-1",
+    "Workspace 1",
+  ]]);
   assertEquals(s.activeId, "ws-1");
 });
 
@@ -122,5 +125,8 @@ Deno.test("adoptSession keeps only what a session has", () => {
   const s = createInitialSession();
   const old = { ...s, root: s.workspaces[0] } as typeof s;
   assertEquals(isSessionState(old), true);
-  assertEquals(Object.keys(adoptSession(old)).sort(), ["activeId", "workspaces"]);
+  assertEquals(Object.keys(adoptSession(old)).sort(), [
+    "activeId",
+    "workspaces",
+  ]);
 });
