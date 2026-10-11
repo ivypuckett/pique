@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { ROOT } from "../scope/paths.ts";
-  import type { PromoteResult } from "../scope/promote.ts";
   import {
     extensionBindings,
     type ExtensionSource,
@@ -10,66 +8,69 @@
   } from "../extensions/bindings.ts";
   import { promptBindings } from "../prompts/bindings.ts";
   import { skillBindings } from "../skills/bindings.ts";
-  import { agentBindings } from "../agents/bindings.ts";
-  import { systemPromptBindings } from "../scope/prompt-bindings.ts";
+  import { systemPromptBindings } from "../prompts/system-bindings.ts";
   import { extensionItems } from "../extensions/items.ts";
   import { moduleItems } from "../modules/items.ts";
   import { hydrateModules, moduleBindings } from "../modules/bindings.ts";
-  import ModuleConsent from "../modules/ModuleConsent.svelte";
   import { type Draft, promptItems } from "../prompts/items.ts";
   import { skillItems } from "../skills/items.ts";
-  import { agentItems, type Draft as AgentDraft } from "../agents/items.ts";
   import {
     PROMPT_FILE_NAMES,
     promptFileItems,
     type PromptFileDraft,
-  } from "../scope/prompt-items.ts";
-  import { groupItems, type LibraryItem, type LibraryKind } from "./items.ts";
-  import { refreshChatCommands } from "../chat/store.ts";
+  } from "../prompts/system-items.ts";
+  import { type LibraryItem, type LibraryKind, sortItems } from "./items.ts";
+  import { refreshChatCommands, refreshChatModels } from "../chat/store.ts";
+  import { settings } from "../settings/store.ts";
+  import { agentDirBindings } from "../settings/bindings.ts";
   import ExtensionReview from "../extensions/ExtensionReview.svelte";
   import PromptDetail from "../prompts/PromptDetail.svelte";
   import PromptEditor from "../prompts/PromptEditor.svelte";
   import SkillDetail from "../skills/SkillDetail.svelte";
-  import AgentDetail from "../agents/AgentDetail.svelte";
-  import AgentEditor from "../agents/AgentEditor.svelte";
-  import SystemPromptDetail from "../scope/SystemPromptDetail.svelte";
-  import SystemPromptEditor from "../scope/SystemPromptEditor.svelte";
+  import SystemPromptDetail from "../prompts/SystemPromptDetail.svelte";
+  import SystemPromptEditor from "../prompts/SystemPromptEditor.svelte";
 
-  let { workspaceId }: { title: string; workspaceId?: string; viewId?: string; tabId?: string } =
-    $props();
-
-  // Which scope this module acts on: its own workspace's, or the shared root one it
-  // inherits from. Root itself has nothing else to switch to, so the toggle is hidden
-  // there — same shape as Kanban's board switcher.
+  // Settings → Library. Everything in pi's agent dir (~/.pique/agent unless moved, see
+  // lib/paths.ts): the two prompt files, extensions and the modules beside them, prompt
+  // templates and skills. One list, because pi loads all of it the same way — by finding
+  // it there.
   //
-  // `workspaceId` is optional only because Column threads it through as optional; every
-  // real workspace has an id, and root's IS `ROOT` (session.ts).
-  const workspace = $derived(workspaceId ?? ROOT);
-  const isRootWorkspace = $derived(workspace === ROOT);
-  let showRoot = $state(false);
-  const scope = $derived(showRoot ? ROOT : workspace);
-  // NOT the same as isRootWorkspace: a workspace viewing root's list is editing root.
-  // This is what decides whether enabling here reaches every workspace.
-  const scopeIsRoot = $derived(scope === ROOT);
-
-  // A module tab stays mounted when it is not active (Column.svelte hides it with a
-  // class), so nothing re-lists on its own — bumping this counter is how the user asks.
+  // Mounted when the section is opened, so it lists afresh each time; bumping this
+  // counter is how the user asks for a re-read without leaving it.
   let refreshKey = $state(0);
 
   const ext = extensionBindings();
   const mods = moduleBindings();
   const prompts = promptBindings();
   const skills = skillBindings();
-  const agents = agentBindings();
   const sysPrompts = systemPromptBindings();
-  // All five factories read the same `globalThis.bindings`, so one check covers the
-  // lot: in web mode there is no desktop backend at all.
+  const dirs = agentDirBindings();
+
+  // The agent dir this launch runs against, and the `pi` CLI's own — what an import
+  // copies from. The setting can differ from `inUse` until pique restarts.
+  let inUse = $state("");
+  let piDir = $state("");
+  let importing = $state(false);
+  // The import's own report, shown beside the button that asked for it — the shared
+  // notice line sits under the whole list, out of view.
+  let imported = $state("");
+  let importError = $state("");
+  dirs?.agentDir().then((d) => {
+    inUse = d.dir;
+    piDir = d.pi;
+  });
+  const pending = $derived(
+    inUse !== "" && $settings.agent.dir.trim() !== "" &&
+      $settings.agent.dir.trim() !== inUse,
+  );
+  // All the factories read the same `globalThis.bindings`, so one check covers the lot:
+  // in web mode there is no desktop backend at all.
   const desktop = ext !== null && prompts !== null && skills !== null &&
-    agents !== null && sysPrompts !== null;
+    sysPrompts !== null;
 
   let items = $state<LibraryItem[]>([]);
   let loadErrors = $state<Array<{ name: string; error: string }>>([]);
-  const groups = $derived(groupItems(items));
+  const sorted = $derived(sortItems(items));
 
   let busy = $state(false);
   let notice = $state("");
@@ -77,11 +78,10 @@
 
   // The expanded row, by LibraryItem.key, and the extension source read for it.
   let openKey = $state<string | null>(null);
-  let reviewed = $state<ExtensionSource | null>(null);
+  let source = $state<ExtensionSource | null>(null);
 
-  // Browse the pi catalog, and add a source by hand. Both land in the same confirm gate:
-  // downloading an npm package runs its install scripts, which happens before any review
-  // is possible (docs/extensions.md).
+  // Browse the pi catalog, and add a source by hand. Both land in the same confirm:
+  // downloading an npm package runs its install scripts (docs/extensions.md).
   let query = $state("");
   // Which kind of package to browse for, or null for all — the catalog's own facet
   // (pi.dev/packages?type=skill), not a filter over what is already installed.
@@ -89,84 +89,45 @@
   let results = $state<ExtSearchResult[]>([]);
   let searched = $state(false);
   let searching = $state(false);
-  let source = $state("");
+  let installSource = $state("");
   let sourceOpen = $state(false);
   let confirming = $state(false);
 
-  // The row whose promote hit a name root already holds, waiting on the user's answer.
-  // Held by item rather than by key so the confirm can name what it is replacing.
-  let promoting = $state<LibraryItem | null>(null);
-
-  // Two independent drafts rather than one union: the two forms share no field, and
-  // opening either closes the other, so the shell never has to ask which one is showing.
+  // Independent drafts rather than one union: the forms share no field, and opening
+  // either closes the other, so the shell never has to ask which one is showing.
   let draft = $state<Draft | null>(null);
-  let agentDraft = $state<AgentDraft | null>(null);
   let fileDraft = $state<PromptFileDraft | null>(null);
 
   const KIND_LABEL: Record<LibraryKind, string> = {
     extension: "ext",
+    module: "module",
     prompt: "prompt",
     skill: "skill",
-    subagent: "subagent",
     system: "system",
     appendix: "appendix",
   };
 
-  // One read for the whole module. Every call is fired together and discarded together:
-  // a scope switch that lands mid-flight must not paint one scope's extensions beside
-  // another's templates.
   async function refresh(): Promise<void> {
-    if (!ext || !prompts || !skills || !agents || !sysPrompts) return;
-    const forScope = scope;
-    // Captured, not re-read after the await: reading the prop again would mix one
-    // scope's list with the other's answer to "does this scope inherit".
-    const forIsRoot = scopeIsRoot;
+    if (!ext || !prompts || !skills || !sysPrompts) return;
     try {
-      const [
-        visibleExts,
-        failures,
-        ownPrompts,
-        rootPrompts,
-        visibleSkills,
-        ownAgents,
-        rootAgents,
-        ownFiles,
-        rootFiles,
-        moduleList,
-      ] = await Promise
-        .all([
-          ext.extensionsVisible({ scope: forScope }),
-          ext.extensionsLoadErrors({ scope: forScope }).catch(() => []),
-          prompts.promptsList({ scope: forScope }),
-          // Root inherits from nothing; passing its own list here would list every one
-          // of its templates twice.
-          forIsRoot ? Promise.resolve([]) : prompts.promptsList({ scope: ROOT }),
-          skills.skillsVisible({ scope: forScope }),
-          agents.agentsList({ scope: forScope }),
-          // Same rule as the templates above, for the same reason.
-          forIsRoot ? Promise.resolve([]) : agents.agentsList({ scope: ROOT }),
-          sysPrompts.systemPromptsList({ scope: forScope }),
-          mods
-            ? mods.moduleList({ scope: forScope })
-            : Promise.resolve({ installed: [], pending: [] }),
-          // And again: root's own two files are its `ownFiles`, so asking twice would
-          // list SYSTEM.md as both active and inherited from itself.
-          forIsRoot
-            ? Promise.resolve([])
-            : sysPrompts.systemPromptsList({ scope: ROOT }),
+      const [exts, failures, promptList, skillList, files, moduleList] =
+        await Promise.all([
+          ext.extensionsList(),
+          ext.extensionsLoadErrors().catch(() => []),
+          prompts.promptsList(),
+          skills.skillsList(),
+          sysPrompts.systemPromptsList(),
+          mods ? mods.moduleList() : Promise.resolve([]),
         ]);
-      if (forScope !== scope) return;
       items = [
-        ...promptFileItems(ownFiles, rootFiles, forScope),
-        ...extensionItems(visibleExts, forScope),
-        ...moduleItems(moduleList.installed, moduleList.pending, forScope),
-        ...promptItems(ownPrompts, rootPrompts, forScope),
-        ...skillItems(visibleSkills, forScope),
-        ...agentItems(ownAgents, rootAgents, forScope),
+        ...promptFileItems(files),
+        ...extensionItems(exts),
+        ...moduleItems(moduleList),
+        ...promptItems(promptList),
+        ...skillItems(skillList),
       ];
       loadErrors = failures;
     } catch (e) {
-      if (forScope !== scope) return;
       error = e instanceof Error ? e.message : String(e);
     }
   }
@@ -179,7 +140,6 @@
     message: string,
     touchesPrompts = false,
   ): Promise<void> {
-    const forScope = scope;
     busy = true;
     error = "";
     notice = "";
@@ -187,15 +147,12 @@
       await run();
       openKey = null;
       draft = null;
-      agentDraft = null;
       fileDraft = null;
       await refresh();
       if (touchesPrompts) refreshChatCommands();
-      // A scope switch during the mutation would otherwise report "Enabled X" over a
-      // list that no longer contains X.
-      if (forScope === scope) notice = message;
+      notice = message;
     } catch (e) {
-      if (forScope === scope) error = e instanceof Error ? e.message : String(e);
+      error = e instanceof Error ? e.message : String(e);
     }
     busy = false;
   }
@@ -209,14 +166,7 @@
     if (item.kind === "extension") {
       if (!ext) return;
       try {
-        // Read here rather than in ExtensionReview: the digest handed to
-        // extensionsEnable must be the one THIS read produced, or the gate proves
-        // nothing about the bytes that were on screen.
-        reviewed = await ext.extensionsRead({
-          scope: item.scope,
-          id: item.ext.id,
-          state: item.ext.state,
-        });
+        source = await ext.extensionsRead({ id: item.ext.id });
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
         return;
@@ -229,143 +179,33 @@
   // narrows a `const` inside a closure but not a parameter, so reaching for `item.ext`
   // from inside the callback would lose the narrowing that the `item.kind` check just
   // established.
-  //
-  // One verb over two backends: enabling an extension lets code run, approving a
-  // template lets text be sent — the same act of letting something out of quarantine,
-  // which is why the button says the same word and the badge carries the difference.
-  function enable(item: LibraryItem): void {
-    if (item.kind === "extension" && ext) {
-      const { id, name } = item.ext;
-      // What was actually read. The backend refuses the enable if the bytes changed
-      // since, however long this tab has been open.
-      const expectDigest = reviewed?.digest;
-      act(
-        () => ext.extensionsEnable({ scope, id, expectDigest }),
-        `Enabled ${name}. Type /reload in a Chat module to load it there.`,
-      );
-    } else if (item.kind === "prompt" && prompts) {
-      const { name } = item.prompt;
-      act(
-        () => prompts.promptsApprove({ scope, name }),
-        `Enabled ${item.title}. Type ${item.title} in a chat to use it.`,
-        true,
-      );
-    } else if (item.kind === "module" && item.pending && mods) {
-      const { name } = item.pending;
-      act(
-        () => mods.moduleEnable({ scope, name }).then(hydrateModules),
-        `Enabled ${item.title}. Open it from the + menu; a view already open needs a Refresh.`,
-      );
-    }
-  }
-
-  function revoke(item: LibraryItem): void {
-    if (item.kind === "module" && item.module && mods) {
-      const { kind } = item.module;
-      act(
-        () => mods.moduleRevoke({ scope, name: kind }).then(hydrateModules),
-        `Revoked ${item.title}. An open tab of it now reads "Unknown module".`,
-      );
-      return;
-    }
-    if (item.kind !== "extension" || !ext) return;
-    const { id, name } = item.ext;
-    act(
-      () => ext.extensionsRevoke({ scope, id }),
-      `Revoked ${name}. It is back in Awaiting review; /reload a Chat module to apply.`,
-    );
-  }
-
   function remove(item: LibraryItem): void {
     if ((item.kind === "system" || item.kind === "appendix") && sysPrompts) {
       const { kind } = item;
       act(
-        () => sysPrompts.systemPromptsDelete({ scope, kind }),
+        () => sysPrompts.systemPromptsDelete({ kind }),
         `Deleted ${item.title}. Type /reload in a Chat module to apply.`,
       );
-    } else if (item.kind === "subagent" && agents) {
-      const { name } = item.agent;
+    } else if (item.kind === "module" && mods) {
+      const { kind } = item.module;
       act(
-        () => agents.agentsDelete({ scope, name }),
-        `Deleted ${name}. run_subagent can no longer reach it.`,
+        () => mods.moduleRemove({ name: kind }).then(hydrateModules),
+        `Deleted ${item.title}. An open tab of it now reads "Unknown module".`,
       );
     } else if (item.kind === "extension" && ext) {
-      const { id, name, state } = item.ext;
+      const { id, name } = item.ext;
       act(
-        () => ext.extensionsRemove({ scope, id, state }),
-        `Deleted ${name}.${item.state === "active" ? " /reload a Chat module to apply." : ""}`,
+        () => ext.extensionsRemove({ id }),
+        `Deleted ${name}. /reload a Chat module to apply.`,
       );
     } else if (item.kind === "prompt" && prompts) {
       const { name } = item.prompt;
-      const pending = item.state === "pending";
-      // One label over two bindings: reject takes a pending template out of quarantine,
-      // delete removes a live one. Both remove the file; only the directories differ.
       act(
-        () =>
-          pending
-            ? prompts.promptsReject({ scope, name })
-            : prompts.promptsDelete({ scope, name, state: "live" }),
+        () => prompts.promptsDelete({ name }),
         `Deleted ${item.title}.`,
         true,
       );
     }
-  }
-
-  // Which backend call moves this kind, or null for the kinds that cannot be promoted:
-  // SYSTEM.md and APPEND_SYSTEM.md are singletons whose merge rules differ per scope
-  // (nearest-wins vs concatenate), so moving one is a rewrite of root's, not a move.
-  function promoteCall(
-    item: LibraryItem,
-  ): ((overwrite: boolean) => Promise<PromoteResult>) | null {
-    if (item.kind === "extension" && ext) {
-      const { id, state } = item.ext;
-      return (overwrite) => ext.extensionsPromote({ scope, id, state, overwrite });
-    }
-    if (item.kind === "prompt" && prompts) {
-      const { name, state } = item.prompt;
-      return (overwrite) => prompts.promptsPromote({ scope, name, state, overwrite });
-    }
-    if (item.kind === "skill" && skills) {
-      const { name } = item.skill;
-      return (overwrite) => skills.skillsPromote({ scope, name, overwrite });
-    }
-    if (item.kind === "subagent" && agents) {
-      const { name } = item.agent;
-      return (overwrite) => agents.agentsPromote({ scope, name, overwrite });
-    }
-    return null;
-  }
-
-  // Promote = move this item up to Root, where every workspace inherits it. A move
-  // rather than a copy, because a copy left here would shadow the one up there
-  // (scope/promote.ts). Not act(): the backend can answer with a question — root
-  // already has this name — and that answer is neither a success nor an error.
-  async function promote(item: LibraryItem, overwrite = false): Promise<void> {
-    const call = promoteCall(item);
-    if (!call) return;
-    const forScope = scope;
-    busy = true;
-    error = "";
-    notice = "";
-    try {
-      const result = await call(overwrite);
-      if ("conflict" in result) {
-        if (forScope === scope) promoting = item;
-      } else {
-        promoting = null;
-        openKey = null;
-        await refresh();
-        if (item.kind === "prompt") refreshChatCommands();
-        if (forScope === scope) {
-          notice = item.kind === "extension"
-            ? `Promoted ${item.title} to Root, where it is awaiting review — promoting never carries an approval across.`
-            : `Promoted ${item.title} to Root. Every workspace inherits it now.`;
-        }
-      }
-    } catch (e) {
-      if (forScope === scope) error = e instanceof Error ? e.message : String(e);
-    }
-    busy = false;
   }
 
   function edit(item: LibraryItem): void {
@@ -374,21 +214,6 @@
       // which is what makes "create" and "edit" one button here.
       fileDraft = { kind: item.kind, body: item.file.body ?? "" };
       draft = null;
-      agentDraft = null;
-      return;
-    }
-    if (item.kind === "subagent") {
-      agentDraft = {
-        name: item.agent.name,
-        description: item.agent.description,
-        // Joined back into the one string the field holds; the save splits it again.
-        tools: (item.agent.tools ?? []).join(", "),
-        model: item.agent.model ?? "",
-        systemPrompt: item.agent.systemPrompt,
-        creating: false,
-      };
-      draft = null;
-      fileDraft = null;
       return;
     }
     if (item.kind !== "prompt") return;
@@ -399,26 +224,11 @@
       body: item.prompt.body,
       creating: false,
     };
-    agentDraft = null;
     fileDraft = null;
   }
 
   function newPrompt(): void {
     draft = { name: "", description: "", argumentHint: "", body: "", creating: true };
-    agentDraft = null;
-    fileDraft = null;
-  }
-
-  function newAgent(): void {
-    agentDraft = {
-      name: "",
-      description: "",
-      tools: "",
-      model: "",
-      systemPrompt: "",
-      creating: true,
-    };
-    draft = null;
     fileDraft = null;
   }
 
@@ -426,33 +236,13 @@
     const d = fileDraft;
     if (!sysPrompts || !d) return;
     const name = PROMPT_FILE_NAMES[d.kind];
-    // An empty body deletes the file rather than writing one (scope/prompt.ts), so the
-    // notice has to say which of the two just happened.
+    // An empty body deletes the file rather than writing one (prompts/system.ts), so
+    // the notice has to say which of the two just happened.
     act(
-      () => sysPrompts.systemPromptsSave({ scope, kind: d.kind, body: d.body }),
+      () => sysPrompts.systemPromptsSave({ kind: d.kind, body: d.body }),
       d.body.trim() === ""
         ? `Deleted ${name}. Type /reload in a Chat module to apply.`
         : `Saved ${name}. Type /reload in a Chat module to apply it to a running chat.`,
-    );
-  }
-
-  function saveAgentDraft(): void {
-    const d = agentDraft;
-    if (!agents || !d) return;
-    const tools = d.tools.split(",").map((t) => t.trim()).filter(Boolean);
-    act(
-      () =>
-        agents.agentsSave({
-          scope,
-          name: d.name.trim(),
-          description: d.description.trim(),
-          // Absent and empty mean the same thing for both of these — an empty tools list
-          // is pi's base set, an empty model is the parent's — so neither is written.
-          tools: tools.length > 0 ? tools : undefined,
-          model: d.model.trim() || undefined,
-          systemPrompt: d.systemPrompt,
-        }),
-      `Saved ${d.name.trim()}. The agent can delegate to it on its next tool call.`,
     );
   }
 
@@ -462,7 +252,6 @@
     act(
       () =>
         prompts.promptsSave({
-          scope,
           name: d.name.trim(),
           description: d.description.trim(),
           // Absent and empty mean the same thing for a hint, so "" is not written.
@@ -498,92 +287,76 @@
     if (searched || query.trim() !== "") search();
   }
 
-  // Fetch the bytes into quarantine. This does NOT enable anything — it lands in
-  // Awaiting review alongside agent-written modules, and you read its code first.
-  async function confirmFetch(): Promise<void> {
+  async function confirmImport(): Promise<void> {
+    importing = false;
+    imported = "";
+    importError = "";
+    if (!dirs) return;
+    busy = true;
+    try {
+      const { copied, kept } = await dirs.importFromPi();
+      imported = `Imported ${copied} file${copied === 1 ? "" : "s"} from ${piDir}` +
+        (kept ? `; kept ${kept} you already had here.` : ".") +
+        " Type /reload in a Chat module to load them there.";
+      await refresh();
+      refreshChatCommands();
+      // Its providers may be new to the model pickers.
+      refreshChatModels();
+    } catch (e) {
+      importError = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
+  }
+
+  async function confirmInstall(): Promise<void> {
     confirming = false;
     if (!ext) return;
-    const wanted = source.trim();
+    const wanted = installSource.trim();
     await act(
-      () => ext.extensionsFetch({ scope, source: wanted }),
-      "Downloaded. Review it under Awaiting review, then Enable it.",
+      () => ext.extensionsInstall({ source: wanted }),
+      `Installed ${wanted}. Type /reload in a Chat module to load it there.`,
     );
     if (!error) {
-      source = "";
+      installSource = "";
       sourceOpen = false;
     }
   }
 
-  // Re-list when the scope changes or Refresh is pressed — both change what this shows.
-  // Clears stale notices and collapses any open row.
+  // Re-list when Refresh is pressed. Clears stale notices and collapses any open row,
+  // but never discards a draft: that button sits directly above the editor, and a draft
+  // is unsaved user input.
   $effect(() => {
     void refreshKey;
-    if (desktop && scope) {
+    if (desktop) {
       error = "";
       notice = "";
       confirming = false;
-      promoting = null;
       openKey = null;
       refresh();
     }
   });
-
-  // A draft belongs to the scope it was started in — saving it after a switch would
-  // write it into the wrong one. Refresh must NOT discard it: that button sits directly
-  // above the editor, and a draft is unsaved user input.
-  $effect(() => {
-    void scope;
-    draft = null;
-    agentDraft = null;
-    fileDraft = null;
-  });
 </script>
 
 <!-- One row for every kind. What differs between kinds is which buttons it carries and
-     what expanding it shows; everything else — badge, title, subtitle — is common, which
-     is the whole reason these three lists became one. -->
+     what expanding it shows; everything else — badge, title, subtitle — is common. -->
 {#snippet row(item: LibraryItem)}
   <li class="px-3 py-2">
     <div class="flex items-center justify-between gap-2">
       <span class="flex min-w-0 items-center gap-1.5">
         <span class="badge badge-ghost badge-xs shrink-0">{KIND_LABEL[item.kind]}</span>
-        {#if item.badge}
+        {#if item.badge && item.badge !== KIND_LABEL[item.kind]}
           <span class="badge badge-ghost badge-xs shrink-0 opacity-70">{item.badge}</span>
         {/if}
-        <span
-          class="truncate font-mono text-xs"
-          class:opacity-70={item.state === "inherited"}
-          title={item.subtitle ?? item.title}
+        <span class="truncate font-mono text-xs" title={item.subtitle ?? item.title}
         >{item.title}</span>
         {#if item.subtitle}
           <span class="truncate text-[0.65rem] opacity-60">{item.subtitle}</span>
         {/if}
       </span>
       <div class="flex shrink-0 gap-1">
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs"
-          onclick={() => toggle(item)}
-        >{openKey === item.key ? "Hide" : item.state === "pending" ? "Review" : "View"}</button>
-        {#if item.state === "pending"}
-          <!-- Disabled until the row is expanded. Approving without looking is the
-               failure the whole gate exists to prevent, and that is as true of text
-               that becomes your message as of code that executes. -->
-          <button
-            type="button"
-            class="btn btn-warning btn-xs"
-            disabled={busy || openKey !== item.key}
-            title={openKey === item.key ? "" : "Read it first"}
-            onclick={() => enable(item)}
-          >Enable</button>
-        {:else if item.state === "active" && (item.kind === "extension" || item.kind === "module")}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            disabled={busy}
-            onclick={() => revoke(item)}
-          >Revoke</button>
-        {:else if item.state === "active" && (item.kind === "prompt" || item.kind === "subagent" || item.kind === "system" || item.kind === "appendix")}
+        <button type="button" class="btn btn-ghost btn-xs" onclick={() => toggle(item)}
+        >{openKey === item.key ? "Hide" : "View"}</button>
+        {#if item.kind === "prompt" || item.kind === "system" || item.kind === "appendix"}
           <button
             type="button"
             class="btn btn-ghost btn-xs"
@@ -594,7 +367,7 @@
         <!-- A prompt-file row exists whether or not the file does, so Delete has to
              check the payload rather than the row: there is nothing to delete when it
              says "not set". -->
-        {#if item.state !== "inherited" && item.kind !== "skill" && !((item.kind === "system" || item.kind === "appendix") && item.file.body === undefined)}
+        {#if item.kind !== "skill" && !((item.kind === "system" || item.kind === "appendix") && item.file.body === undefined)}
           <button
             type="button"
             class="btn btn-ghost btn-xs"
@@ -602,73 +375,18 @@
             onclick={() => remove(item)}
           >Delete</button>
         {/if}
-        <!-- Only from a workspace's own list: root has nowhere to promote to, and an
-             inherited row is already up there. The two prompt files are excluded
-             because they merge per scope rather than resolve to one file (promoteCall). -->
-        {#if !scopeIsRoot && item.state !== "inherited" && item.kind !== "system" && item.kind !== "appendix"}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            disabled={busy}
-            title="Move this to the Root workspace, where every workspace inherits it"
-            onclick={() => promote(item)}
-          >Promote</button>
-        {/if}
       </div>
     </div>
 
-    {#if promoting?.key === item.key}
-      <div class="mt-2 rounded border border-warning/50 bg-warning/10 p-2">
-        <div class="text-xs font-medium text-warning">
-          Root already has a {KIND_LABEL[item.kind]} called {item.title}.
-        </div>
-        <div class="mt-1 text-xs opacity-80">
-          Replacing it changes what every workspace inherits, including the ones not open
-          here. Root's copy is deleted, not kept.
-        </div>
-        <div class="mt-2 flex gap-2">
-          <button
-            type="button"
-            class="btn btn-warning btn-xs"
-            disabled={busy}
-            onclick={() => promote(item, true)}
-          >Replace Root's</button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            disabled={busy}
-            onclick={() => (promoting = null)}
-          >Cancel</button>
-        </div>
-      </div>
-    {/if}
-
     {#if openKey === item.key}
-      {#if item.state === "pending"}
-        <div class="mt-2 text-xs opacity-80">
-          {#if item.kind === "extension"}
-            This code runs with full system access once enabled. Read it before enabling.
-          {:else}
-            This text is sent as your message when you invoke it.
-          {/if}
-          {#if scopeIsRoot}Enabling here reaches every workspace.{/if}
-        </div>
-      {/if}
       {#if item.kind === "extension"}
-        {#if reviewed}<ExtensionReview source={reviewed} />{/if}
+        {#if source}<ExtensionReview {source} />{/if}
       {:else if item.kind === "module"}
-        {@const def = item.module ?? item.pending?.def}
-        {#if def}
-          <ModuleConsent
-            capabilities={def.capabilities}
-            name={item.subtitle ?? def.label}
-            rationale={def.rationale}
-          />
-        {/if}
+        <div class="mt-2 break-all font-mono text-[0.65rem] opacity-60">
+          {item.module.kind}.module.json · {item.module.kind}.ui.html
+        </div>
       {:else if item.kind === "prompt"}
         <PromptDetail prompt={item.prompt} />
-      {:else if item.kind === "subagent"}
-        <AgentDetail agent={item.agent} />
       {:else if item.kind === "system" || item.kind === "appendix"}
         <SystemPromptDetail file={item.file} />
       {:else}
@@ -685,43 +403,77 @@
   </li>
 {/snippet}
 
-<div class="flex h-full min-h-0 flex-col">
-  <div class="flex shrink-0 items-center gap-1 border-b border-base-300 px-3 py-1.5">
-    {#if !isRootWorkspace}
-      <div class="flex items-center gap-1" role="group" aria-label="Scope">
-        <span class="mr-1 text-[0.65rem] font-semibold uppercase tracking-wide opacity-60">Scope</span>
-        <button
-          class="btn btn-ghost btn-xs"
-          class:btn-active={!showRoot}
-          aria-pressed={!showRoot}
-          onclick={() => (showRoot = false)}
-        >Workspace</button>
-        <button
-          class="btn btn-ghost btn-xs"
-          class:btn-active={showRoot}
-          aria-pressed={showRoot}
-          onclick={() => (showRoot = true)}
-        >Root</button>
-        <span class="ml-2 text-xs opacity-60">
-          {showRoot
-            ? "Shared with every workspace."
-            : "This workspace only; adds to what it inherits from root."}
-        </span>
-      </div>
+<div>
+  <div class="mb-3 flex items-center gap-1">
+    <span class="text-xs uppercase tracking-wide text-primary">Library</span>
+    {#if desktop}
+      <button
+        class="btn btn-ghost btn-xs ml-auto"
+        aria-label="Refresh"
+        title="Re-read the prompt files, extensions, modules, templates and skills"
+        onclick={() => refreshKey++}
+      >↻</button>
     {/if}
-
-    <button
-      class="btn btn-ghost btn-xs ml-auto"
-      aria-label="Refresh"
-      title="Re-read this scope's prompt files, extensions, templates, skills and subagents"
-      onclick={() => refreshKey++}
-    >↻</button>
   </div>
 
   {#if !desktop}
-    <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
+    <div class="text-xs opacity-70">Available in the desktop app only.</div>
   {:else}
-    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+    <!-- Where all of it lives. A path rather than a picker: it may not exist yet, and
+         it is read once at launch, so there is nothing to browse or apply here. -->
+    <div class="mb-4">
+      <div class="text-sm">Agent folder</div>
+      <div class="mt-0.5 text-xs opacity-70">
+        pi's agent dir: extensions, modules, prompt templates, skills, the prompt files
+        and provider credentials. Point it at <code>~/.pi/agent</code> to share it with
+        the <code>pi</code> CLI. Takes effect when pique restarts.
+      </div>
+      <div class="mt-2 flex gap-2">
+        <input
+          class="input input-bordered input-sm flex-1 font-mono"
+          placeholder="~/.pique/agent"
+          aria-label="Agent folder"
+          bind:value={$settings.agent.dir}
+        />
+        <button
+          type="button"
+          class="btn btn-sm"
+          disabled={busy || importing || piDir === "" || piDir === inUse}
+          title={`Copy the pi CLI's setup from ${piDir} into this folder`}
+          onclick={() => (importing = true)}
+        >Import from pi…</button>
+      </div>
+      {#if imported}<div class="mt-1 text-xs text-success">{imported}</div>{/if}
+      {#if importError}
+        <div class="mt-1 break-all text-xs text-error">{importError}</div>
+      {/if}
+      {#if pending}
+        <div class="mt-1 text-[0.65rem] text-warning">
+          In use until restart: <code>{inUse}</code>
+        </div>
+      {/if}
+      {#if importing}
+        <div class="mt-3 rounded border border-warning/50 bg-warning/10 p-3">
+          <div class="text-sm font-medium text-warning">Import pi's setup?</div>
+          <div class="mt-1.5 text-xs opacity-80">
+            Copies <code>{piDir}</code> into <code>{inUse}</code>: extensions,
+            packages, prompt templates, skills, the prompt files and provider
+            credentials. Anything already here is kept, and pi's chat history is left
+            behind.
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button type="button" class="btn btn-warning btn-sm" onclick={confirmImport}
+            >Import</button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onclick={() => (importing = false)}
+            >Cancel</button>
+          </div>
+        </div>
+      {/if}
+    </div>
+    <div>
       <!-- The Add bar. The catalog searches pi PACKAGES, which is the install path for
            extensions, templates and skills alike — which is why it sits above the whole
            library rather than under one part of it. -->
@@ -739,9 +491,6 @@
         </button>
         <button type="button" class="btn btn-sm" disabled={busy} onclick={newPrompt}>
           New prompt
-        </button>
-        <button type="button" class="btn btn-sm" disabled={busy} onclick={newAgent}>
-          New subagent
         </button>
         <button
           type="button"
@@ -786,17 +535,6 @@
         </div>
       {/if}
 
-      {#if agentDraft}
-        <div class="mt-3">
-          <AgentEditor
-            bind:draft={agentDraft}
-            {busy}
-            onsave={saveAgentDraft}
-            oncancel={() => (agentDraft = null)}
-          />
-        </div>
-      {/if}
-
       {#if fileDraft}
         <div class="mt-3">
           <SystemPromptEditor
@@ -810,14 +548,15 @@
 
       {#if confirming}
         <div class="mt-3 rounded border border-warning/50 bg-warning/10 p-3">
-          <div class="text-sm font-medium text-warning">Download this package?</div>
-          <div class="mt-1 break-all font-mono text-xs">{source.trim()}</div>
+          <div class="text-sm font-medium text-warning">Install this package?</div>
+          <div class="mt-1 break-all font-mono text-xs">{installSource.trim()}</div>
           <div class="mt-1.5 text-xs opacity-80">
-            It will be fetched into quarantine for review, not enabled. Downloading an
-            npm package runs its install scripts, so only fetch sources you trust.
+            Its code runs with full system access in every chat, and downloading an npm
+            package runs its install scripts. Only install sources you trust.
           </div>
           <div class="mt-2 flex gap-2">
-            <button type="button" class="btn btn-warning btn-sm" onclick={confirmFetch}>Download</button>
+            <button type="button" class="btn btn-warning btn-sm" onclick={confirmInstall}
+            >Install</button>
             <button
               type="button"
               class="btn btn-ghost btn-sm"
@@ -831,13 +570,13 @@
             class="input input-bordered input-sm flex-1 font-mono"
             placeholder="npm:@scope/pkg  ·  git:github.com/user/repo"
             aria-label="Extension source"
-            bind:value={source}
+            bind:value={installSource}
             disabled={busy}
           />
           <button
             type="button"
             class="btn btn-sm"
-            disabled={busy || source.trim() === ""}
+            disabled={busy || installSource.trim() === ""}
             onclick={() => (confirming = true)}
           >Add</button>
         </div>
@@ -869,7 +608,7 @@
                 class="btn btn-ghost btn-xs shrink-0"
                 disabled={busy}
                 onclick={() => {
-                  source = r.source;
+                  installSource = r.source;
                   confirming = true;
                 }}
               >Add</button>
@@ -882,13 +621,13 @@
         </div>
       {/if}
 
-      <!-- Enabled but unloadable. Kept out of the rows on purpose: a failure names a
+      <!-- Installed but unloadable. Kept out of the rows on purpose: a failure names a
            file inside an install tree, not the source string a row shows, so matching
            them up would silently miss. -->
       {#if loadErrors.length > 0}
         <div class="mt-4 rounded border border-error/50 p-2">
           <div class="text-xs text-error">
-            Enabled, but {loadErrors.length === 1 ? "one extension" : "these extensions"}
+            {loadErrors.length === 1 ? "One extension" : "These extensions"}
             failed to load — the agent does not get {loadErrors.length === 1
             ? "its"
             : "their"} tools:
@@ -904,49 +643,18 @@
         </div>
       {/if}
 
-      <div class="mt-4 mb-2 text-xs opacity-70">Awaiting review:</div>
-      {#if groups.pending.length > 0}
-        <ul class="divide-y divide-base-300 rounded border border-warning/50">
-          {#each groups.pending as item (item.key)}{@render row(item)}{/each}
-        </ul>
-      {:else}
-        <div class="text-xs opacity-60">Nothing awaiting review.</div>
-      {/if}
-
-      <div class="mt-4 mb-2 text-xs opacity-70">Active:</div>
-      {#if groups.active.length > 0}
-        <ul class="divide-y divide-base-300 rounded border border-base-300">
-          {#each groups.active as item (item.key)}{@render row(item)}{/each}
-        </ul>
-      {:else}
-        <div class="text-xs opacity-60">Nothing yet.</div>
-      {/if}
-
-      {#if groups.inherited.length > 0}
-        <div class="mt-4 mb-2 text-xs opacity-70">
-          Inherited from Root <span class="opacity-60">— managed there, not here</span>:
-        </div>
-        <ul class="divide-y divide-base-300 rounded border border-dashed border-base-300">
-          {#each groups.inherited as item (item.key)}{@render row(item)}{/each}
-        </ul>
-      {/if}
+      <ul class="mt-4 divide-y divide-base-300 rounded border border-base-300">
+        {#each sorted as item (item.key)}{@render row(item)}{/each}
+      </ul>
 
       <div class="mt-4 text-[0.65rem] opacity-50">
-        <code>SYSTEM.md</code> replaces pi's own preamble, and the nearest one on the
-        chain wins — a workspace's shadows root's, so only one ever applies.
-        <code>APPEND_SYSTEM.md</code> is added on top of whatever the base turned out to
-        be, and every one on the chain applies, root's first — which is how root holds
-        house rules while each workspace adds its own archetype. Both reach a running
-        chat on <code>/reload</code>. Extensions add tools to Chat and load into sessions
-        started afterwards, or on
-        <code>/reload</code>. A template is sent by typing <code>/name</code>. A subagent
-        is a system prompt the chat agent hands a task to with
-        <code>run_subagent</code>, and is reachable as soon as it is saved — no
-        <code>/reload</code>. Skills are read-only here — add one by putting a
-        <code>&lt;name&gt;/SKILL.md</code> directory or a <code>&lt;name&gt;.md</code>
-        file in this scope's <code>agent/skills/</code>. <b>Promote</b> moves a row into
-        Root, where every workspace inherits it — the workspace keeps no copy, and an
-        extension arrives there awaiting review rather than enabled.
+        <code>SYSTEM.md</code> replaces pi's own preamble; <code>APPEND_SYSTEM.md</code> is
+        added on top of whichever base applies. Both reach a running chat on
+        <code>/reload</code>. Extensions add tools to Chat and load into sessions started
+        afterwards, or on <code>/reload</code>; a module appears in the right pane's rail.
+        A template is sent by typing <code>/name</code>. Skills are read-only here — add
+        one by putting a <code>&lt;name&gt;/SKILL.md</code> directory or a
+        <code>&lt;name&gt;.md</code> file in the agent folder's <code>skills/</code>.
       </div>
 
       {#if notice}<div class="mt-2 text-xs text-success">{notice}</div>{/if}

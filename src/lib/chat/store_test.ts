@@ -14,7 +14,7 @@ import { chatSession, formatReloadNotice } from "./store.ts";
 function fakeBindings(resumed: Item[] = []) {
   const started: {
     id: string;
-    scope?: string;
+    workspace?: string;
     view?: string;
     fresh?: boolean;
   }[] = [];
@@ -26,15 +26,21 @@ function fakeBindings(resumed: Item[] = []) {
   let next = 1;
   let reloads = 0;
   let listedCommands = 0;
+  let moduleTableReads = 0;
   let reloadSummary: ReloadSummary = { added: [], removed: [], failed: [] };
   const bindings = {
     // deno-lint-ignore no-explicit-any
     chatStart(arg: any) {
       const id = `agent-${next++}`;
-      started.push({ id, scope: arg.scope, view: arg.view, fresh: arg.fresh });
+      started.push({
+        id,
+        workspace: arg.workspace,
+        view: arg.view,
+        fresh: arg.fresh,
+      });
       queues.set(id, []);
       histories.set(id, arg.fresh ? [] : resumed);
-      return Promise.resolve({ id });
+      return Promise.resolve({ id, thinking: "off" });
     },
     // deno-lint-ignore no-explicit-any
     chatHistory(arg: any) {
@@ -72,9 +78,10 @@ function fakeBindings(resumed: Item[] = []) {
     },
     chatSetModel: () => Promise.resolve(true),
     chatSetThinking: () => Promise.resolve(true),
-    scopeConfigRead: () => Promise.resolve({}),
-    scopeConfigWrite: () => Promise.resolve(true),
-    scopeConfigResolve: () => Promise.resolve({}),
+    moduleManifest: () => {
+      moduleTableReads++;
+      return Promise.resolve({ port: 0, modules: [] });
+    },
   };
   return {
     bindings,
@@ -86,6 +93,7 @@ function fakeBindings(resumed: Item[] = []) {
     },
     reloadCount: () => reloads,
     listedCommandsCount: () => listedCommands,
+    moduleTableReads: () => moduleTableReads,
     setReloadSummary(s: ReloadSummary) {
       reloadSummary = s;
     },
@@ -249,9 +257,9 @@ Deno.test("two views of one workspace hold separate conversations", async () => 
     await settle();
 
     assertEquals(
-      f.started.map((x) => [x.scope, x.view]),
+      f.started.map((x) => [x.workspace, x.view]),
       [["ws-views", "view-1"], ["ws-views", "view-2"]],
-      "each view starts its own agent, in the same scope",
+      "each view starts its own agent, in the same workspace",
     );
 
     f.emit("agent-1", { kind: "text", delta: " — left only" });
@@ -383,9 +391,8 @@ Deno.test("ordinary text is still sent to the model", async () => {
   });
 });
 
-// What run_subagent's progress rides on: a tool that reports partial results while it
-// is still running. The call must stay open, or the transcript would show a delegation
-// as finished at its first line of progress.
+// A tool that reports partial results while it is still running. The call must stay
+// open, or the transcript would show it as finished at its first line of progress.
 Deno.test("a tool update shows partial output while the call is still running", async () => {
   await withFakeBackend(async (f) => {
     const s = chatSession("ws-tool-update", "view-1");
@@ -395,8 +402,8 @@ Deno.test("a tool update shows partial output while the call is still running", 
     f.emit("agent-1", {
       kind: "tool_start",
       id: "c1",
-      name: "run_subagent",
-      args: '{"agent":"scout"}',
+      name: "long_task",
+      args: '{"task":"scan"}',
     });
     f.emit("agent-1", { kind: "tool_update", id: "c1", result: "ls {}" });
     f.emit("agent-1", {
@@ -409,8 +416,8 @@ Deno.test("a tool update shows partial output while the call is still running", 
     assertEquals(get(s.items), [{
       role: "tool",
       id: "c1",
-      name: "run_subagent",
-      args: '{"agent":"scout"}',
+      name: "long_task",
+      args: '{"task":"scan"}',
       result: 'ls {}\nread {"file":"a.ts"}',
       isError: false,
       done: false,
@@ -419,14 +426,14 @@ Deno.test("a tool update shows partial output while the call is still running", 
     f.emit("agent-1", {
       kind: "tool_end",
       id: "c1",
-      name: "run_subagent",
-      result: "the scout's answer",
+      name: "long_task",
+      result: "the task's answer",
       isError: false,
     });
     await settle();
 
     const done = get(s.items)[0];
-    assertEquals(done.role === "tool" && done.result, "the scout's answer");
+    assertEquals(done.role === "tool" && done.result, "the task's answer");
     assertEquals(done.role === "tool" && done.done, true);
 
     s.release();
@@ -457,7 +464,7 @@ Deno.test("formatReloadNotice names failures first, then the tool changes", () =
 // The two things a reload does that are NOT tool changes. Saying "no tool changes" and
 // stopping is what made a `/reload` after editing SYSTEM.md look like a no-op, when the
 // edit had in fact been applied.
-Deno.test("formatReloadNotice reports the system prompt and the scope's model", () => {
+Deno.test("formatReloadNotice reports the system prompt and the default model", () => {
   assertEquals(
     formatReloadNotice({
       added: [],
@@ -478,4 +485,35 @@ Deno.test("formatReloadNotice reports the system prompt and the scope's model", 
     "Reloaded — +t; model default is now anthropic/claude-opus-5 — new chat to use it",
     "the model is reported, not applied: this conversation keeps the model it has",
   );
+});
+
+// A module the agent writes is in use at once, so the rail is re-read when the tool
+// succeeds — and only then.
+Deno.test("a successful define_module re-reads the module table", async () => {
+  await withFakeBackend(async (f) => {
+    const s = chatSession("ws-define-module", "view-1");
+    s.retain();
+    await settle();
+
+    f.emit("agent-1", {
+      kind: "tool_end",
+      id: "c1",
+      name: "define_module",
+      result: "refused",
+      isError: true,
+    });
+    await settle();
+    assertEquals(f.moduleTableReads(), 0);
+
+    f.emit("agent-1", {
+      kind: "tool_end",
+      id: "c2",
+      name: "define_module",
+      result: "wrote notes",
+      isError: false,
+    });
+    await settle();
+    assertEquals(f.moduleTableReads(), 1);
+    s.release();
+  });
 });

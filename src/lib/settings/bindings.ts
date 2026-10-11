@@ -3,11 +3,9 @@
 // keep arg/return shapes in sync by hand (separate module graphs).
 import type { Entry } from "../fs.ts";
 
-// App-level user prefs — the ones that are NOT per-scope. Chat defaults used to live
-// here; they are now per-scope and inherited, so they sit in
-// ~/.pique/scopes/<id>/config.json instead (see ../scope/bindings.ts). The default
-// working directory moved too: it is the root workspace's cwd, in the layout tree.
-// The layout tree persists separately under the "layout" config (see ../store.ts).
+// App-level user prefs. The default model and thinking level are pi's, in the agent
+// dir's own settings.json (../chat/agent.ts), and each workspace's working directory is
+// in the layout tree, which persists separately under the "layout" config (../store.ts).
 export interface Settings {
   version: number;
   // zoom: the UI scale factor, applied as the root font size (main.ts) — every
@@ -26,6 +24,9 @@ export interface Settings {
   // enabled: per-provider model ids the pickers offer, keyed by provider id. A provider
   // with no entry has its whole catalog enabled (see settings/models.ts).
   models: { enabled: Record<string, string[]> };
+  // dir: where pi's agent dir is — extensions, prompts, skills, credentials. Blank means
+  // ~/.pique/agent. Read once at boot (../paths.ts), so a change applies on restart.
+  agent: { dir: string };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // (separate module graph) — keep the two in sync.
   workspace: { gitScanDepth: 3, confirmDelete: true },
   models: { enabled: {} },
+  agent: { dir: "" },
 };
 
 interface ConfigBindings {
@@ -55,6 +57,19 @@ export async function readConfig(name: string): Promise<unknown | null> {
 
 export async function writeConfig(name: string, data: unknown): Promise<void> {
   await config()?.configWrite({ name, data });
+}
+
+// Where pi's agent dir is (lib/paths.ts), and copying the `pi` CLI's setup into it
+// (lib/import.ts). Settings → Library.
+export interface AgentDirBindings {
+  // `dir` is the one this launch runs against; `pi` is the `pi` CLI's own.
+  agentDir(): Promise<{ dir: string; pi: string }>;
+  importFromPi(): Promise<{ copied: number; kept: number }>;
+}
+
+export function agentDirBindings(): AgentDirBindings | null {
+  const b = (globalThis as unknown as { bindings?: unknown }).bindings;
+  return b ? (b as AgentDirBindings) : null;
 }
 
 interface WindowBindings {

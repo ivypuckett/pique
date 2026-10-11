@@ -49,23 +49,18 @@ function expandTilde(dir: string): string {
   return trimmed;
 }
 
-// Effective working directory for spawned shells and chat agents when a workspace
-// has no override of its own: the ROOT workspace's cwd, else $HOME. This is what the
-// old global workspace.defaultDir setting became — root's cwd is the value every
-// other workspace falls back to. A leading `~` is expanded (`~` or `~/...`); `~user`
-// and non-leading `~` are left as-is. `layout` is whatever readJson("layout")
-// returned — possibly null, pre-root, or malformed — so every field is guarded.
-export function resolveWorkspaceDir(layout: Json): string {
-  if (layout && typeof layout === "object" && !Array.isArray(layout)) {
-    const root = (layout as { [k: string]: Json }).root;
-    if (root && typeof root === "object" && !Array.isArray(root)) {
-      const dir = (root as { [k: string]: Json }).cwd;
-      if (typeof dir === "string" && dir.trim() !== "") {
-        return expandTilde(dir);
-      }
+// The "agent folder" setting (settings.agent.dir), `~` expanded, or undefined for the
+// default. `settings` is whatever readJson("settings") returned, so every field is
+// guarded.
+export function resolveAgentDir(settings: Json): string | undefined {
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    const agent = (settings as { [k: string]: Json }).agent;
+    if (agent && typeof agent === "object" && !Array.isArray(agent)) {
+      const dir = (agent as { [k: string]: Json }).dir;
+      if (typeof dir === "string") return expandTilde(dir) || undefined;
     }
   }
-  return home();
+  return undefined;
 }
 
 // How many directory levels to descend, when the workspace root is not itself a git
@@ -86,43 +81,10 @@ export function resolveGitScanDepth(settings: Json): number {
   return fallback;
 }
 
-// Every scope that currently EXISTS, with its own cwd override — root first, then the
-// numbered workspaces, in rail order. The layout is the session tree (session.ts's
-// SessionState), so this reads the same `id`/`cwd` pair the module launchers already do.
-//
-// It is how the scheduler decides where to look for schedules (automatons/schedule.ts).
-// The layout rather than the scopes directory on disk, deliberately: closing a workspace
-// leaves ~/.pique/scopes/ws-N behind, and a schedule in a workspace the user has closed
-// firing runs into a directory they think is gone is the wrong surprise.
-export function layoutScopes(layout: Json): { id: string; cwd?: string }[] {
-  const obj = (v: Json): { [k: string]: Json } | undefined =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? v as { [k: string]: Json }
-      : undefined;
-  const one = (v: Json): { id: string; cwd?: string } | undefined => {
-    const w = obj(v);
-    const id = w?.id;
-    if (typeof id !== "string" || id === "") return undefined;
-    return { id, cwd: typeof w?.cwd === "string" ? w.cwd : undefined };
-  };
-  const root = obj(layout)?.root;
-  const rest = obj(layout)?.workspaces;
-  return [
-    ...(root === undefined ? [] : [one(root)]),
-    ...(Array.isArray(rest) ? rest.map(one) : []),
-  ].filter((w): w is { id: string; cwd?: string } => w !== undefined);
-}
-
-// Working directory for one spawned module: its own workspace's override when set
-// (leading `~` expanded), else the root workspace's, else $HOME — the cwd half of
-// the scope inheritance chain. The override is a raw string threaded down from the
-// workspace state; a blank or absent one means "inherit".
-export function resolveModuleDir(
-  override: string | undefined,
-  layout: Json,
-): string {
-  if (typeof override === "string" && override.trim() !== "") {
-    return expandTilde(override);
-  }
-  return resolveWorkspaceDir(layout);
+// Working directory for one spawned module: its workspace's own directory when set
+// (leading `~` expanded), else $HOME. The override is a raw string threaded down from the
+// workspace state; a blank or absent one means "none set".
+export function resolveModuleDir(override: string | undefined): string {
+  const dir = typeof override === "string" ? expandTilde(override) : "";
+  return dir === "" ? home() : dir;
 }

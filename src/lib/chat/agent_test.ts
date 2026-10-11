@@ -64,8 +64,8 @@ Deno.test("toFrontendEvent maps a tool update to its text blocks only", () => {
   const out = toFrontendEvent({
     type: "tool_execution_update",
     toolCallId: "c1",
-    toolName: "run_subagent",
-    args: { agent: "scout" },
+    toolName: "long_task",
+    args: { task: "scan" },
     partialResult: {
       content: [{ type: "text", text: 'ls {"path":"."}' }],
       details: null,
@@ -188,13 +188,8 @@ Deno.test("resolveChatDefaults falls back on null", () => {
   });
 });
 
-Deno.test("resolveChatDefaults falls back on empty / missing chat", () => {
+Deno.test("resolveChatDefaults falls back on an empty config", () => {
   assertEquals(resolveChatDefaults({}), {
-    provider: "lmstudio",
-    modelId: "google/gemma-4-e4b",
-    thinking: "off",
-  });
-  assertEquals(resolveChatDefaults({ chat: {} }), {
     provider: "lmstudio",
     modelId: "google/gemma-4-e4b",
     thinking: "off",
@@ -204,11 +199,9 @@ Deno.test("resolveChatDefaults falls back on empty / missing chat", () => {
 Deno.test("resolveChatDefaults reads a full chat config", () => {
   assertEquals(
     resolveChatDefaults({
-      chat: {
-        defaultProvider: "openai",
-        defaultModel: "gpt-x",
-        defaultThinkingLevel: "high",
-      },
+      defaultProvider: "openai",
+      defaultModel: "gpt-x",
+      defaultThinkingLevel: "high",
     }),
     { provider: "openai", modelId: "gpt-x", thinking: "high" },
   );
@@ -216,7 +209,7 @@ Deno.test("resolveChatDefaults reads a full chat config", () => {
 
 Deno.test("resolveChatDefaults fills only the missing fields", () => {
   assertEquals(
-    resolveChatDefaults({ chat: { defaultThinkingLevel: "low" } }),
+    resolveChatDefaults({ defaultThinkingLevel: "low" }),
     { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "low" },
   );
 });
@@ -224,11 +217,9 @@ Deno.test("resolveChatDefaults fills only the missing fields", () => {
 Deno.test("resolveChatDefaults ignores non-string values", () => {
   assertEquals(
     resolveChatDefaults({
-      chat: {
-        defaultProvider: 42,
-        defaultModel: null,
-        defaultThinkingLevel: {},
-      },
+      defaultProvider: 42,
+      defaultModel: null,
+      defaultThinkingLevel: {},
     }),
     { provider: "lmstudio", modelId: "google/gemma-4-e4b", thinking: "off" },
   );

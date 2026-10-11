@@ -62,6 +62,7 @@ export function mergeSettings(raw: StoredSettings): Settings {
     appearance: { ...DEFAULT_SETTINGS.appearance, ...raw.appearance },
     workspace: { ...DEFAULT_SETTINGS.workspace, ...raw.workspace },
     models: { ...DEFAULT_SETTINGS.models, ...raw.models },
+    agent: { ...DEFAULT_SETTINGS.agent, ...raw.agent },
   };
 }
 

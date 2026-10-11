@@ -1,25 +1,10 @@
 // Package extensions: third-party pi packages (npm/git/local path), managed through
-// pi's own DefaultPackageManager. Runs in the desktop process only.
+// pi's own DefaultPackageManager against the agent dir (paths.ts), laid out the way the
+// `pi` CLI lays out its own. Runs in the desktop process only.
 //
-// Packages install into ONE SCOPE's pi config dir (~/.pique/scopes/<id>/agent),
-// SEPARATE from the user's `pi` CLI (~/.pi/agent) — installing here never touches
-// their pi setup. Only extensions/packages/pi-settings are separated; credentials and
-// models.json stay shared with pi via ModelRuntime.create() (see chat/agent.ts).
-//
-// The lifecycle mirrors local.ts, using the split pi already provides (verified
-// 2026-08-03 against pi-coding-agent 0.80.10):
-//
-//   fetch    install(source)               downloads; does NOT register it
-//   pending  pending/<slug>.json           our record that bytes exist, unenabled
-//   review   resolveExtensionSources(...)  the exact entry files that would run
-//   enable   addSourceToSettings(source)   settings.json is pi's own loading set
-//   revoke   removeSourceFromSettings(..)  files stay; back to pending
-//   delete   remove(source)                bytes go
-//
-// Unlike local extensions, packages are NOT inherited from root: pulling root's
-// packages down additionalExtensionPaths is untested here. It was also the operation
-// implicated in the old boot panic, but that was an upstream deno_core bug fixed in
-// Deno 2.9.4 (docs/extensions.md Known broken #5) — see docs/scopes.md Deferred #1.
+//   install  install(source) + addSourceToSettings(source)   downloads and enables
+//   review   resolveExtensionSources(...)                     the entry files that run
+//   delete   removeSourceFromSettings(source) + remove(source)
 
 import { resolve } from "node:path";
 import {
@@ -27,33 +12,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { type PackageType, packageTypes, TYPE_KEYWORDS } from "./catalog.ts";
-import { readJson, resolveWorkspaceDir } from "../settings/file.ts";
-import {
-  ensureScopeDirs,
-  ROOT,
-  scopeAgentDir,
-  type ScopeId,
-} from "../scope/paths.ts";
-import type { PromoteResult } from "../scope/promote.ts";
-import {
-  ensureExtensionDirs,
-  packageSource,
-  pendingDir,
-  pendingPackagePath,
-} from "./paths.ts";
+import { agentDir } from "../paths.ts";
+import { home } from "../home.ts";
 
 // JSON-safe projection of pi's ConfiguredPackage that crosses the win.bind boundary.
 export type ExtInfo = { source: string; scope: string; path?: string };
-
-// Our record of a fetched-but-not-enabled package. `source` is authoritative — the
-// filename is only its encoding — because pi rewrites some sources on the way into
-// settings.json (a local path becomes relative to agentDir), so the string we install
-// with is not always the string we read back.
-export type PendingPackage = {
-  source: string;
-  installedPath?: string;
-  requestedAt: string;
-};
 
 export type { PackageType };
 
@@ -136,24 +99,28 @@ export function toExtInfo(pkg: any): ExtInfo {
   };
 }
 
-// One package manager per scope, cached — each writes to its own scope's
-// settings.json, so they must not be shared. Keyed by the resolved agentDir rather
-// than the scope id, because the dir embeds $HOME: keying by id alone would hand back
-// a manager pointing at a stale tree whenever HOME changes under us (which is exactly
-// what the tests do).
+// The package manager, cached — but keyed by the resolved agent dir rather than held as
+// one, because the dir embeds $HOME: a single cached manager would point at a stale tree
+// whenever HOME changes under us (which is exactly what the tests do).
 // deno-lint-ignore no-explicit-any
 const managers = new Map<string, any>();
-async function manager(scope: ScopeId) {
-  const agentDir = scopeAgentDir(scope);
-  let pm = managers.get(agentDir);
+async function manager() {
+  const dir = agentDir();
+  let pm = managers.get(dir);
   if (!pm) {
-    await ensureScopeDirs(scope);
-    const cwd = resolveWorkspaceDir(await readJson("settings"));
-    const settingsManager = SettingsManager.create(cwd, agentDir);
-    pm = new DefaultPackageManager({ cwd, agentDir, settingsManager });
-    managers.set(agentDir, pm);
+    await Deno.mkdir(dir, { recursive: true });
+    const cwd = home();
+    const settingsManager = SettingsManager.create(cwd, dir);
+    pm = new DefaultPackageManager({ cwd, agentDir: dir, settingsManager });
+    managers.set(dir, pm);
   }
   return pm;
+}
+
+// Forget the cached manager, so the next call re-reads settings.json — after an import
+// has rewritten it underneath the one held here.
+export function resetPackageManager(): void {
+  managers.clear();
 }
 
 // Whether a source is a local path rather than an npm/git spec, by the same rule pi's
@@ -166,91 +133,37 @@ function isLocalSource(source: string): boolean {
 // against cwd (verified 2026-08-03: getSourceMatchKeyForSettings uses
 // getBaseDirForScope("user") === agentDir, getSourceMatchKeyForInput uses resolvePath,
 // which is cwd-based). Handing the stored form straight back therefore matches nothing,
-// and removeSourceFromSettings quietly returns false — a revoke that reports success
+// and removeSourceFromSettings quietly returns false — a delete that reports success
 // and changes nothing. Canonicalizing to an absolute path makes both sides agree, so
 // every source that leaves this module is one pi will match on the way back in.
 function canonical(source: string, agentDir: string): string {
   return isLocalSource(source) ? resolve(agentDir, source) : source;
 }
 
-// Enabled = present in the scope's settings.json, which is pi's own record of what it
-// loads. Nothing here is a pique-side flag.
-export async function listEnabledPackages(scope: ScopeId): Promise<ExtInfo[]> {
-  const agentDir = scopeAgentDir(scope);
-  return (await manager(scope)).listConfiguredPackages().map(toExtInfo).map((
+// Installed = present in settings.json, which is pi's own record of what it loads.
+export async function listPackages(): Promise<ExtInfo[]> {
+  const dir = agentDir();
+  return (await manager()).listConfiguredPackages().map(toExtInfo).map((
     e: ExtInfo,
-  ): ExtInfo => ({ ...e, source: canonical(e.source, agentDir) }));
+  ): ExtInfo => ({ ...e, source: canonical(e.source, dir) }));
 }
 
-// Pending = a `<slug>.json` in the scope's pending dir. A missing dir means none yet.
-// A file that does not parse is skipped rather than raising: the dir is user-visible,
-// and one bad file must not blank the whole list.
-export async function listPendingPackages(
-  scope: ScopeId,
-): Promise<PendingPackage[]> {
-  const out: PendingPackage[] = [];
-  try {
-    for await (const entry of Deno.readDir(pendingDir(scope))) {
-      if (!entry.isFile || !entry.name.endsWith(".json")) continue;
-      try {
-        const rec = JSON.parse(
-          await Deno.readTextFile(`${pendingDir(scope)}/${entry.name}`),
-        );
-        out.push({
-          // Fall back to the filename's own encoding if the record lost its source.
-          source: typeof rec?.source === "string"
-            ? rec.source
-            : packageSource(entry.name.slice(0, -5)),
-          installedPath: typeof rec?.installedPath === "string"
-            ? rec.installedPath
-            : undefined,
-          requestedAt: typeof rec?.requestedAt === "string"
-            ? rec.requestedAt
-            : "",
-        });
-      } catch {
-        continue;
-      }
-    }
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return [];
-    throw err;
-  }
-  return out.sort((a, b) => a.source.localeCompare(b.source));
-}
-
-// Fetch the bytes and quarantine them. install() downloads without registering the
-// source, so this deliberately does NOT reach the loading set — review happens against
-// code on disk rather than against a string the user typed.
-export async function fetchPackage(
-  scope: ScopeId,
-  source: string,
-): Promise<void> {
+// Download the package and add it to settings.json, so pi loads it at the next session
+// start or `/reload`.
+export async function installPackage(source: string): Promise<void> {
   const s = source.trim();
   if (!isValidSource(s)) throw new Error(`invalid extension source: ${source}`);
-  const pm = await manager(scope);
+  const pm = await manager();
   await pm.install(s);
-  await ensureExtensionDirs(scope);
-  const rec: PendingPackage = {
-    source: s,
-    installedPath: pm.getInstalledPath(s, "user"),
-    requestedAt: new Date().toISOString(),
-  };
-  await Deno.writeTextFile(
-    pendingPackagePath(scope, s),
-    JSON.stringify(rec, null, 2),
-  );
+  pm.addSourceToSettings(s);
 }
 
-// The files pi would execute for this source — what the reviewer actually reads.
-// Works on an unenabled package, which is what makes the gate real rather than
-// cosmetic. Skills/prompts/themes are returned too: they are not code, but they do
-// reach the model, so the reviewer should see that they exist.
+// The files pi executes for this source — what the Library shows when its row is
+// expanded. Skills are returned too: they are not code, but they do reach the model.
 export async function resolvePackageFiles(
-  scope: ScopeId,
   source: string,
 ): Promise<{ extensions: string[]; skills: string[] }> {
-  const resolved = await (await manager(scope)).resolveExtensionSources([
+  const resolved = await (await manager()).resolveExtensionSources([
     source,
   ]);
   // deno-lint-ignore no-explicit-any
@@ -261,52 +174,11 @@ export async function resolvePackageFiles(
   };
 }
 
-// Enable = add to settings.json, then drop the quarantine record. The pending file is
-// removed by the slug of the source WE hold, never by matching what came back from
-// settings — pi normalizes some sources on the way in, so a match could miss.
-export async function enablePackage(
-  scope: ScopeId,
-  source: string,
-): Promise<void> {
-  const pm = await manager(scope);
-  pm.addSourceToSettings(source);
-  await Deno.remove(pendingPackagePath(scope, source)).catch(() => {});
-}
-
-// Revoke = drop from settings.json and return to quarantine. The bytes stay, so
-// re-enabling is a re-review rather than a re-download — the same trip revokeLocal
-// makes. The source recorded is the one settings held, which for a local path is pi's
-// normalized form ("../pkg", relative to agentDir). Verified 2026-08-03 that the
-// normalized form round-trips: removeSourceFromSettings, resolveExtensionSources and
-// addSourceToSettings all accept it, so a revoked package re-enables cleanly.
-export async function revokePackage(
-  scope: ScopeId,
-  source: string,
-): Promise<void> {
-  const pm = await manager(scope);
-  const installedPath = pm.getInstalledPath(source, "user");
-  pm.removeSourceFromSettings(source);
-  await ensureExtensionDirs(scope);
-  const rec: PendingPackage = {
-    source,
-    installedPath,
-    requestedAt: new Date().toISOString(),
-  };
-  await Deno.writeTextFile(
-    pendingPackagePath(scope, source),
-    JSON.stringify(rec, null, 2),
-  );
-}
-
-// Delete the bytes and every record of the package, from whichever state it is in.
-export async function removePackage(
-  scope: ScopeId,
-  source: string,
-): Promise<void> {
-  const pm = await manager(scope);
+// Delete the bytes and pi's record of the package.
+export async function removePackage(source: string): Promise<void> {
+  const pm = await manager();
   pm.removeSourceFromSettings(source);
   await pm.remove(source);
-  await Deno.remove(pendingPackagePath(scope, source)).catch(() => {});
 }
 
 async function searchOnce(
@@ -345,29 +217,3 @@ export async function searchExtensions(
   return mergeSearchResults(ok);
 }
 
-// Promote = install the package into root and take it out of the workspace, landing it
-// in root's quarantine for the same reason promoteLocal does. There is no file to move:
-// a package's bytes are an install tree pi manages per scope, so this is a fetch into
-// root followed by a remove here — done in that order, because the workspace's record
-// is where the source string comes from.
-//
-// A package in root is NOT inherited by workspaces the way a local module is
-// (docs/extensions.md), so promoting one moves where it is managed rather than widening
-// what loads it. Enabling it in root is still the step that makes it run there.
-export async function promotePackage(
-  scope: ScopeId,
-  source: string,
-  overwrite: boolean,
-): Promise<PromoteResult> {
-  const inRoot = [
-    ...(await listEnabledPackages(ROOT)).map((e) => e.source),
-    ...(await listPendingPackages(ROOT)).map((p) => p.source),
-  ];
-  if (inRoot.includes(source)) {
-    if (!overwrite) return { conflict: true };
-    await removePackage(ROOT, source);
-  }
-  await fetchPackage(ROOT, source);
-  await removePackage(scope, source);
-  return { ok: true };
-}

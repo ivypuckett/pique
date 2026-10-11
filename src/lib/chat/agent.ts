@@ -36,14 +36,14 @@ export type ReloadSummary = {
   added: string[];
   removed: string[];
   failed: Array<{ name: string; error: string }>;
-  // Whether the scope's SYSTEM.md or APPEND_SYSTEM.md changed under this conversation
-  // and was applied. The comparison is against the text the session last resolved rather
-  // than across the reload, because the edit happened before `/reload` was ever typed;
-  // and it is those files rather than the assembled prompt, which also moves when the
-  // tool set does.
+  // Whether SYSTEM.md or APPEND_SYSTEM.md changed under this conversation and was
+  // applied. The comparison is against the text the session last read rather than across
+  // the reload, because the edit happened before `/reload` was ever typed; and it is
+  // those files rather than the assembled prompt, which also moves when the tool set
+  // does.
   promptChanged?: boolean;
-  // The scope's default model, when this conversation is not running it and a new chat
-  // here would be. Reload reports it and does not apply it: a conversation does not get
+  // The default model, when this conversation is not running it and a new chat would
+  // be. Reload reports it and does not apply it: a conversation does not get
   // its model swapped underneath it. Absent unless the two genuinely differ.
   modelDefault?: { provider: string; id: string };
 };
@@ -75,8 +75,7 @@ export type ChatEvent =
   | { kind: "thinking"; delta: string }
   | { kind: "tool_start"; id: string; name: string; args: string }
   // A partial result from a tool still running (pi's onUpdate), replacing whatever the
-  // last one showed. run_subagent is the only tool that sends these today, streaming
-  // the nested session's tool calls; the call stays open until its tool_end.
+  // last one showed; the call stays open until its tool_end.
   | { kind: "tool_update"; id: string; result: string }
   | {
     kind: "tool_end";
@@ -142,25 +141,10 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
 import { listAvailableModels } from "./available.ts";
-import { readJson, resolveModuleDir } from "../settings/file.ts";
-import { kanbanTools } from "../kanban/agent-tools.ts";
-import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
+import { resolveModuleDir } from "../settings/file.ts";
 import { moduleAuthoringTools } from "../modules/agent-tools.ts";
-import { inheritedExtensionPaths } from "../extensions/service.ts";
-import { promptAuthoringTools } from "../prompts/agent-tools.ts";
-import { inheritedPromptDirs } from "../prompts/service.ts";
-import { subagentTools } from "../agents/agent-tools.ts";
-import { listVisibleAgents } from "../agents/service.ts";
-import { resolveScopeConfig } from "../scope/config.ts";
-import { resolveAppendPrompts, resolveBasePrompt } from "../scope/prompt.ts";
-import {
-  ensureScopeDirs,
-  ROOT,
-  scopeAgentDir,
-  type ScopeId,
-  scopeSessionsDir,
-  scopeViewSessionsDir,
-} from "../scope/paths.ts";
+import { readPromptFiles } from "../prompts/system.ts";
+import { agentDir, piqueDir, viewSessionsDir } from "../paths.ts";
 
 // deno-lint-ignore no-explicit-any
 type Session = any;
@@ -170,16 +154,15 @@ type Session = any;
 const FALLBACK_PROVIDER = "lmstudio";
 const FALLBACK_MODEL = "google/gemma-4-e4b";
 
-// Pure projection of a scope's resolved config → the agent's startup model +
-// thinking. `config` is whatever resolveScopeConfig returned: possibly null, missing
-// `chat`, or holding non-string values, so every field is guarded. Because the config
-// is already merged along the scope chain, a workspace that pins only a model still
-// inherits root's thinking level.
+// Pure projection of pi's settings.json (in the agent dir) → the agent's startup model +
+// thinking. pi keeps them there itself: a session's setModel and setThinkingLevel save
+// the pick as the new default, so the next conversation starts on it. `config` is
+// whatever readAgentSettings returned: possibly null, or
+// holding non-string values, so every field is guarded.
 export function resolveChatDefaults(
   config: unknown,
 ): { provider: string; modelId: string; thinking: ThinkingLevel } {
-  const chat = (config as { chat?: Record<string, unknown> } | null)?.chat ??
-    {};
+  const chat = (config ?? {}) as Record<string, unknown>;
   const str = (
     v: unknown,
     fallback: string,
@@ -203,15 +186,9 @@ interface Agent {
   // (reloadPrompts, below).
   // deno-lint-ignore no-explicit-any
   resourceLoader: any;
-  // What the agent resolves its defaults against, kept so a reload can re-resolve them.
-  scope: ScopeId;
-  // The base prompt this conversation is currently running, so a reload can tell whether
-  // the scope's SYSTEM.md moved under it. Updated by every reload that re-resolves it.
-  basePrompt: string | undefined;
-  // The same, for the chain's APPEND_SYSTEM.md files. Tracked separately rather than
-  // folded into basePrompt because they resolve by different rules and either can move
-  // on its own; `/reload` reports the pair as one "the prompt changed".
-  appendPrompts: string[];
+  // SYSTEM.md and APPEND_SYSTEM.md as this conversation last read them, so a reload can
+  // tell whether either moved under it. Updated by every reload.
+  promptFiles: string;
 }
 const agents = new Map<string, Agent>();
 let nextId = 1;
@@ -221,85 +198,71 @@ let runtime: ModelRuntime | undefined;
 
 // The single shared ModelRuntime, created lazily. Exported so provider
 // management (providers.ts) mutates the same runtime the chat agents stream
-// from — auth/models changes there take effect without a restart.
+// from — auth/models changes there take effect without a restart. Handed the agent
+// dir's two files explicitly rather than left to find pi's own dir.
 export async function ensureRuntime() {
-  if (!runtime) runtime = await ModelRuntime.create();
+  if (!runtime) {
+    runtime = await ModelRuntime.create({
+      authPath: `${agentDir()}/auth.json`,
+      modelsPath: `${agentDir()}/models.json`,
+    });
+  }
   return runtime;
 }
 
-// Start an agent in `scope` and return its id. The scope is the workspace the Chat
-// module lives in (root included); everything the agent can see — tools, model
-// defaults, working directory, Kanban board — is resolved against it. `view` is the
-// view inside that workspace, and it decides one thing only: which conversation this
-// is. By default the agent picks that conversation back up where it was left;
-// `fresh` starts a new one.
+// Drop the runtime so the next caller re-reads auth.json and models.json — after an
+// import has replaced them underneath it. Conversations already running keep the one
+// they started with.
+export function resetRuntime(): void {
+  runtime = undefined;
+}
+
+// pi's settings.json in the agent dir, read rather than written: pi writes it itself.
+// Missing or corrupt → null, and resolveChatDefaults falls back.
+async function readAgentSettings(): Promise<unknown> {
+  try {
+    return JSON.parse(await Deno.readTextFile(`${agentDir()}/settings.json`));
+  } catch {
+    return null;
+  }
+}
+
+// Start an agent and return its id. `workspace` and `view` name the Chat module it
+// belongs to, and decide one thing only: which conversation this is. By default the
+// agent picks that conversation back up where it was left; `fresh` starts a new one.
+// Everything else — tools, templates, skills, prompt files — is whatever pi finds in its
+// agent dir and in `cwd`.
 export async function startAgent(
-  opts: { cwd?: string; scope?: ScopeId; view?: string; fresh?: boolean } = {},
+  opts: {
+    cwd?: string;
+    workspace?: string;
+    view?: string;
+    fresh?: boolean;
+  } = {},
 ): Promise<string> {
-  const scope = opts.scope ?? ROOT;
   const modelRuntime = await ensureRuntime();
-  // Startup model/thinking come from the scope's resolved config (root's, overlaid
-  // with the workspace's); fall back to the consts when unset or when the configured
-  // model isn't available.
-  const config = await resolveScopeConfig(scope);
-  const { provider, modelId, thinking } = resolveChatDefaults(config);
-  const cwd = resolveModuleDir(opts.cwd, await readJson("settings"));
+  // Startup model/thinking come from the chat defaults; fall back to the consts when
+  // unset or when the configured model isn't available.
+  const { provider, modelId, thinking } = resolveChatDefaults(
+    await readAgentSettings(),
+  );
+  const cwd = resolveModuleDir(opts.cwd);
   // The view owns the conversation, so it owns the directory the session files live
   // in. A caller that names no view — the integration tests, which only care about
-  // tools — falls back to the scope's dir and shares one thread there.
-  const sessionDir = opts.view
-    ? scopeViewSessionsDir(scope, opts.view)
-    : scopeSessionsDir(scope);
+  // tools — shares one thread in pique's sessions dir.
+  const sessionDir = opts.workspace && opts.view
+    ? viewSessionsDir(opts.workspace, opts.view)
+    : `${piqueDir()}/sessions`;
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
-  // Tools compiled into pique, all bound to this scope: define_extension and
-  // define_prompt quarantine into it, and the Kanban tools address its board. Tools
-  // from extensions the user has *enabled* don't appear here — those load below.
-  const agentDefs = await listVisibleAgents(scope);
-  const customTools = [
-    ...extensionAuthoringTools(scope),
-    ...moduleAuthoringTools(scope),
-    ...promptAuthoringTools(scope),
-    ...kanbanTools(scope),
-    ...subagentTools(scope, cwd, modelRuntime, model, agentDefs),
-  ];
+  // The one tool compiled into pique. Tools from extensions don't appear here — pi
+  // loads those itself, below.
+  const customTools = moduleAuthoringTools();
 
-  // pi discovers extensions from ONE agentDir, so inheritance is assembled here: the
-  // scope's own dir is the agentDir (its enabled local extensions and its enabled
-  // packages), and every local extension it inherits from an ancestor is passed as an
-  // explicit extra path. additionalExtensionPaths takes FILES — handing it a directory
-  // fails with "Cannot find module" and the inherited extensions silently never load.
-  // Packages are not inherited; see docs/extensions.md.
-  await ensureScopeDirs(scope);
-  const agentDir = scopeAgentDir(scope);
-  const resourceLoader = new DefaultResourceLoader({
-    cwd,
-    agentDir,
-    additionalExtensionPaths: await inheritedExtensionPaths(scope),
-    // Prompt templates inherit the same way, but the option takes DIRECTORIES here (it is
-    // additionalExtensionPaths that insists on files), so ancestors' whole prompts/ dirs
-    // are handed over. pi loads its own agentDir's dir first and its expander takes the
-    // first match, so a workspace template shadows a root one of the same name.
-    additionalPromptTemplatePaths: inheritedPromptDirs(scope),
-    // The scope's base prompt: the nearest SYSTEM.md on the chain (scope/prompt.ts),
-    // undefined when there is none — which is what leaves pi's own preamble in place.
-    // Handed over as the override CALLBACK rather than as `systemPrompt`, because the
-    // loader invokes it afresh inside every reload() while a string is captured once.
-    // That is what lets `/reload` pick up an edited SYSTEM.md, and it re-runs the whole
-    // chain resolution, so a workspace file created later correctly shadows root's. The
-    // base it is handed — the loader's own agentDir discovery — is discarded: it sees one
-    // dir and would miss the inheritance this resolves.
-    systemPromptOverride: () => resolveBasePrompt(scope),
-    // The chain's APPEND_SYSTEM.md files, root's first, added on top of whatever the
-    // base turned out to be — pi's own preamble included, which is what lets a
-    // workspace archetype apply without anyone having to replace pi's preamble first.
-    // A callback for the same reason as above: it re-runs inside every reload().
-    //
-    // The base it is handed is discarded on the same grounds, and here it is not merely
-    // incomplete but a duplicate: pi discovers this scope's OWN APPEND_SYSTEM.md, which
-    // resolveAppendPrompts already includes as the last entry.
-    appendSystemPromptOverride: () => resolveAppendPrompts(scope),
-  });
+  // Built here rather than left to createAgentSession so it can be held: reloadPrompts
+  // and reloadAgent's error report both read it back.
+  const dir = agentDir();
+  const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: dir });
   // createAgentSession only reloads a loader it creates itself, so ours must be
   // reloaded by hand or it yields no extensions at all.
   await resourceLoader.reload();
@@ -308,14 +271,14 @@ export async function startAgent(
     model,
     cwd,
     customTools,
-    // pique's own pi dirs, separate from the user's `pi` CLI. Safe: auth +
-    // models.json still come from ~/.pi/agent via the shared modelRuntime, and the
-    // sessionManager below is given its dir explicitly rather than deriving it here.
-    agentDir,
+    // The agent dir (paths.ts). The sessionManager below
+    // is given its dir explicitly rather than deriving it here, so conversations stay
+    // pique's.
+    agentDir: dir,
     resourceLoader,
-    // The conversation is written to <scope>/sessions/<view> as pi JSONL, appended as
-    // it happens, so quitting mid-stream still leaves everything up to that point on
-    // disk. continueRecent reopens the newest session recorded for THIS cwd — passing
+    // The conversation is written to ~/.pique/sessions/<workspace>/<view> as pi JSONL,
+    // appended as it happens, so quitting mid-stream still leaves everything up to that
+    // point on disk. continueRecent reopens the newest session recorded for THIS cwd — passing
     // an explicit sessionDir is what makes it filter by cwd rather than take the newest
     // file outright — and pi replays its messages into the agent's context. `fresh`
     // is the deliberate reset: a new file, an empty transcript, the old one kept.
@@ -337,9 +300,7 @@ export async function startAgent(
     unsubscribe,
     queue,
     resourceLoader,
-    scope,
-    basePrompt: resolveBasePrompt(scope),
-    appendPrompts: resolveAppendPrompts(scope),
+    promptFiles: readPromptFiles(),
   });
   return id;
 }
@@ -466,7 +427,7 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
     ...m,
     current: m.provider === current?.provider && m.id === current?.id,
   }));
-  // Same narrowing the automaton picker gets (providers.ts listModels): Bedrock's
+  // Same narrowing the Settings checklist gets (providers.ts listModels): Bedrock's
   // static catalog is mostly unusable in any one region. See bedrock.ts.
   return filterBedrockModels(models, await resolveBedrockRegion());
 }
@@ -486,40 +447,42 @@ export function setThinkingLevel(id: string, level: ThinkingLevel): void {
   agents.get(id)?.session.setThinkingLevel(level);
 }
 
+// The level this agent is running at — what the picker shows when it opens.
+export function thinkingLevelOf(id: string): ThinkingLevel {
+  return agents.get(id)?.session.thinkingLevel ?? "off";
+}
+
 // Names of the tools this agent can actually call: pi's builtins, pique's compiled-in
-// tools, and every tool registered by an enabled extension that reached it — its
-// scope's own plus the ones it inherits. The assembled result of the scope chain,
-// readable after the fact.
+// tool, and every tool registered by an extension pi loaded.
 export function activeToolNames(id: string): string[] {
   return agents.get(id)?.session.getActiveToolNames() ?? [];
 }
 
-// The prompt this agent actually runs with: the scope's base — pi's own preamble, or the
-// SYSTEM.md that replaced it — plus what pi appends itself (project context, skills, cwd).
-// Reassembled by every reload, so this tracks an edited SYSTEM.md rather than reporting
-// what the session started with (base_prompt_integration_test.ts).
+// The prompt this agent actually runs with: pi's own preamble or the SYSTEM.md that
+// replaced it, plus what pi appends itself (APPEND_SYSTEM.md, project context, skills,
+// cwd). Reassembled by every reload, so this tracks an edited SYSTEM.md rather than
+// reporting what the session started with (base_prompt_integration_test.ts).
 export function systemPromptOf(id: string): string {
   return agents.get(id)?.session.systemPrompt ?? "";
 }
 
-// Re-read the resource loader so prompt templates saved or approved in Library →
-// Prompts become invocable in a conversation that is already running. Templates are read
+// Re-read the resource loader so prompt templates saved in the Library become invocable in a conversation that is already running. Templates are read
 // from the loader on every prompt(), so refreshing the loader is enough and the
 // transcript survives. This does NOT rebuild the system prompt — pi only does that when
-// its own reload() runs — so the agent's recorded basePrompt stays accurate.
+// its own reload() runs — so the agent's recorded promptFiles stay accurate.
 export async function reloadPrompts(id: string): Promise<void> {
   await agents.get(id)?.resourceLoader.reload();
 }
 
-// Re-read everything the session loaded at startup — extensions and the scope's SYSTEM.md
-// included — so a change made in Library or on disk reaches a conversation that is already
+// Re-read everything the session loaded at startup — extensions and SYSTEM.md included
+// — so a change made in the Library or on disk reaches a conversation that is already
 // running. pi's own `/reload` is a TUI action, but the flow behind it is `session.reload()`,
 // which rebuilds the extension runner AND the system prompt from a re-read loader, and
 // hands the fresh tools to the active set. The messages are untouched, so the transcript
 // and the model's context both survive (reload_test.ts).
 //
-// What it still does NOT do: the scope's model default is resolved in startAgent and is
-// only reported here, never applied — a conversation does not get its model swapped
+// What it still does NOT do: the model default is resolved in startAgent and is only
+// reported here, never applied — a conversation does not get its model swapped
 // underneath it; and pi skips the extensions' own `session_start` event because pique
 // binds no TUI context, so an extension doing its setup in that handler rather than at
 // module scope will not have run.
@@ -527,15 +490,12 @@ export async function reloadAgent(id: string): Promise<ReloadSummary> {
   const agent = agents.get(id);
   if (!agent) return { added: [], removed: [], failed: [] };
   const before = new Set<string>(agent.session.getActiveToolNames());
-  const promptBefore = agent.basePrompt;
-  const appendBefore = agent.appendPrompts;
+  const promptBefore = agent.promptFiles;
   await agent.session.reload();
   const after: string[] = agent.session.getActiveToolNames();
   const afterSet = new Set(after);
-  // Resolved again by the same rules the session's loader just used, so the record
-  // tracks what the conversation now actually runs.
-  agent.basePrompt = resolveBasePrompt(agent.scope);
-  agent.appendPrompts = resolveAppendPrompts(agent.scope);
+  // Read again beside the reload, so the record tracks what the conversation now runs.
+  agent.promptFiles = readPromptFiles();
   // The same loader instance the session holds, so this reads the errors from the
   // reload that just happened rather than a stale scan.
   const errors: Array<{ path: string; error: string }> =
@@ -547,18 +507,14 @@ export async function reloadAgent(id: string): Promise<ReloadSummary> {
       name: e.path.split("/").pop()?.replace(/\.[jt]s$/, "") ?? e.path,
       error: e.error,
     })),
-    // Either file moving counts. Joined rather than compared element-wise because the
-    // list can change LENGTH — a new root APPEND_SYSTEM.md, or a deleted one — and the
-    // separator is the same blank line pi joins them with anyway.
-    promptChanged: agent.basePrompt !== promptBefore ||
-      agent.appendPrompts.join("\n\n") !== appendBefore.join("\n\n"),
+    promptChanged: agent.promptFiles !== promptBefore,
     modelDefault: await pendingModelDefault(agent),
   };
 }
 
-// The scope's default model when this conversation is not running it — the case where
-// someone changed the default from another view, or edited the config on disk. Undefined
-// unless a new chat in this scope would genuinely come up on a different model: a default
+// The default model when this conversation is not running it — the case where someone
+// changed the default from another view, or edited the config on disk. Undefined unless
+// a new chat would genuinely come up on a different model: a default
 // that is merely unavailable resolves to the same fallback this session already took, and
 // nagging about a model no new chat would reach either would be noise.
 async function pendingModelDefault(
@@ -566,9 +522,7 @@ async function pendingModelDefault(
 ): Promise<{ provider: string; id: string } | undefined> {
   const live = agent.session.model;
   if (!live || !runtime) return undefined;
-  const { provider, modelId } = resolveChatDefaults(
-    await resolveScopeConfig(agent.scope),
-  );
+  const { provider, modelId } = resolveChatDefaults(await readAgentSettings());
   if (provider === live.provider && modelId === live.id) return undefined;
   return runtime.getModel(provider, modelId)
     ? { provider, id: modelId }
@@ -602,10 +556,8 @@ export function listCommands(id: string): CommandInfo[] {
       description: c.description ?? "",
       source: "extension",
     }));
-  // A template inherited from root and one defined in this workspace can share a name;
-  // pi's loader collapses that itself, first path wins, so this list holds no twins. The
-  // load order chat/agent.ts sets up is what makes the workspace's the survivor
-  // (prompts/integration_test.ts).
+  // A project template and a global one can share a name; pi's loader collapses that
+  // itself, first path wins, so this list holds no twins.
   // deno-lint-ignore no-explicit-any
   const prompts: CommandInfo[] = session.promptTemplates.map((t: any) => ({
     name: t.name,

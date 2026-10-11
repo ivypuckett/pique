@@ -1,122 +1,95 @@
 import { assertEquals } from "@std/assert";
 import {
   addWorkspace,
+  adoptSession,
   allWorkspaces,
   closeWorkspace,
   createInitialSession,
   focusAdjacent,
   focusWorkspace,
   isSessionState,
-  migrateSession,
   updateWorkspace,
 } from "./session.ts";
 import { addView } from "./workspace.ts";
 
-Deno.test("createInitialSession is the root workspace alone, active", () => {
+Deno.test("createInitialSession is one workspace, active", () => {
   const s = createInitialSession();
-  assertEquals(s.root.id, "root");
-  assertEquals(s.root.title, "Root");
-  assertEquals(s.workspaces, []);
-  assertEquals(s.activeId, "root");
+  assertEquals(s.workspaces.map((w) => [w.id, w.title]), [["ws-1", "Workspace 1"]]);
+  assertEquals(s.activeId, "ws-1");
 });
 
-Deno.test("allWorkspaces lists root first, then the numbered ones", () => {
+Deno.test("allWorkspaces lists the workspaces in rail order", () => {
   const s = addWorkspace(addWorkspace(createInitialSession()));
-  assertEquals(allWorkspaces(s).map((w) => w.id), ["root", "ws-1", "ws-2"]);
+  assertEquals(allWorkspaces(s).map((w) => w.id), ["ws-1", "ws-2", "ws-3"]);
 });
 
 Deno.test("addWorkspace appends a titled workspace and activates it", () => {
   const s = addWorkspace(createInitialSession());
-  assertEquals(s.workspaces.map((w) => w.id), ["ws-1"]);
-  assertEquals(s.workspaces[0].title, "Workspace 1");
-  assertEquals(s.activeId, "ws-1");
+  assertEquals(s.workspaces.map((w) => w.id), ["ws-1", "ws-2"]);
+  assertEquals(s.workspaces[1].title, "Workspace 2");
+  assertEquals(s.activeId, "ws-2");
 });
 
 Deno.test("addWorkspace seeds the new workspace's cwd when given one", () => {
   const s = addWorkspace(createInitialSession(), "/proj/x");
-  assertEquals(s.workspaces[0].cwd, "/proj/x");
-  // No cwd, or a blank one, leaves the override unset.
+  assertEquals(s.workspaces[1].cwd, "/proj/x");
+  // No cwd, or a blank one, leaves it unset.
   assertEquals(
-    addWorkspace(createInitialSession()).workspaces[0].cwd,
+    addWorkspace(createInitialSession()).workspaces[1].cwd,
     undefined,
   );
   assertEquals(
-    addWorkspace(createInitialSession(), "  ").workspaces[0].cwd,
+    addWorkspace(createInitialSession(), "  ").workspaces[1].cwd,
     undefined,
   );
-});
-
-Deno.test("addWorkspace picks the smallest free ws-N id", () => {
-  let s = addWorkspace(createInitialSession()); // ws-1
-  s = addWorkspace(s); // ws-2
-  s = addWorkspace(s); // ws-3
-  assertEquals(s.workspaces.map((w) => w.id), ["ws-1", "ws-2", "ws-3"]);
-  assertEquals(s.workspaces.map((w) => w.title), [
-    "Workspace 1",
-    "Workspace 2",
-    "Workspace 3",
-  ]);
 });
 
 Deno.test("closeWorkspace removes the active one and activates the previous neighbor", () => {
-  let s = addWorkspace(addWorkspace(addWorkspace(createInitialSession()))); // ws-1..3
-  s = closeWorkspace(s); // ws-3 was active
+  let s = addWorkspace(addWorkspace(createInitialSession())); // ws-1..3, ws-3 active
+  s = closeWorkspace(s);
   assertEquals(s.workspaces.map((w) => w.id), ["ws-1", "ws-2"]);
   assertEquals(s.activeId, "ws-2");
 });
 
 Deno.test("closeWorkspace activates the next neighbor when the first is closed", () => {
-  let s = addWorkspace(addWorkspace(createInitialSession())); // ws-1, ws-2
+  let s = addWorkspace(createInitialSession()); // ws-1, ws-2
   s = focusWorkspace(s, "ws-1");
   s = closeWorkspace(s);
   assertEquals(s.workspaces.map((w) => w.id), ["ws-2"]);
   assertEquals(s.activeId, "ws-2");
 });
 
-Deno.test("closeWorkspace falls back to root when the last numbered workspace closes", () => {
-  let s = addWorkspace(createInitialSession()); // ws-1, active
+// The way closing a workspace's last view leaves a fresh view-1.
+Deno.test("closeWorkspace leaves a fresh ws-1 when the last workspace closes", () => {
+  let s = addWorkspace(createInitialSession());
+  s = closeWorkspace(focusWorkspace(s, "ws-1")); // ws-2 alone
+  s = updateWorkspace(s, "ws-2", addView);
   s = closeWorkspace(s);
-  assertEquals(s.workspaces, []);
-  assertEquals(s.activeId, "root");
-  assertEquals(s.root.id, "root");
+  assertEquals(s, createInitialSession());
 });
 
-Deno.test("closeWorkspace cannot close root", () => {
-  const s = addWorkspace(createInitialSession()); // ws-1
-  const atRoot = focusWorkspace(s, "root");
-  assertEquals(closeWorkspace(atRoot), atRoot);
-});
-
-Deno.test("focusAdjacent walks root and the numbered workspaces, clamping at the ends", () => {
-  let s = addWorkspace(addWorkspace(createInitialSession())); // ws-1, ws-2 (ws-2 active)
+Deno.test("focusAdjacent walks the workspaces, clamping at the ends", () => {
+  let s = addWorkspace(createInitialSession()); // ws-1, ws-2 (ws-2 active)
   assertEquals(focusAdjacent(s, 1).activeId, "ws-2"); // already last, clamps
   s = focusAdjacent(s, -1);
   assertEquals(s.activeId, "ws-1");
-  s = focusAdjacent(s, -1);
-  assertEquals(s.activeId, "root"); // root sits above the numbered ones
-  assertEquals(focusAdjacent(s, -1).activeId, "root"); // already first, clamps
+  assertEquals(focusAdjacent(s, -1).activeId, "ws-1"); // already first, clamps
 });
 
 Deno.test("focusWorkspace is a no-op for an unknown id", () => {
-  const s = focusWorkspace(addWorkspace(createInitialSession()), "ws-999");
+  const s = focusWorkspace(createInitialSession(), "ws-999");
   assertEquals(s.activeId, "ws-1");
 });
 
 Deno.test("updateWorkspace edits one workspace, leaving others untouched", () => {
-  const s = addWorkspace(addWorkspace(createInitialSession())); // ws-1, ws-2
+  const s = addWorkspace(createInitialSession()); // ws-1, ws-2
   const next = updateWorkspace(s, "ws-2", addView);
   assertEquals(next.workspaces[0].views.length, 1);
   assertEquals(next.workspaces[1].views.length, 2);
-  assertEquals(next.root.views.length, 1);
-});
-
-Deno.test("updateWorkspace addresses root by id", () => {
-  const s = updateWorkspace(createInitialSession(), "root", addView);
-  assertEquals(s.root.views.length, 2);
 });
 
 Deno.test("titles do not renumber: closing ws-2 of three and adding reads 1, 3, 2", () => {
-  let s = addWorkspace(addWorkspace(addWorkspace(createInitialSession()))); // ws-1..3
+  let s = addWorkspace(addWorkspace(createInitialSession())); // ws-1..3
   s = focusWorkspace(s, "ws-2");
   s = closeWorkspace(s); // ws-2 gone; ws-1, ws-3 remain
   s = addWorkspace(s); // smallest free is 2 again, appended at the end
@@ -136,91 +109,18 @@ Deno.test("isSessionState accepts a real session and rejects malformed shapes", 
   );
   assertEquals(isSessionState(null), false);
   assertEquals(isSessionState({}), false);
-  // Pre-root shape: no root workspace.
+  // No workspaces at all.
   assertEquals(isSessionState({ workspaces: [], activeId: "ws-1" }), false);
   // activeId names no workspace
   const s = createInitialSession();
   assertEquals(isSessionState({ ...s, activeId: "ws-999" }), false);
 });
 
-Deno.test("migrateSession adopts a pre-root layout under a fresh root", () => {
-  const old = {
-    workspaces: addWorkspace(createInitialSession()).workspaces,
-    activeId: "ws-1",
-  };
-  const s = migrateSession(old, "~/workspace")!;
-  assertEquals(s.root.id, "root");
-  assertEquals(s.root.cwd, "~/workspace"); // the old global defaultDir becomes root's
-  assertEquals(s.workspaces.map((w) => w.id), ["ws-1"]);
-  assertEquals(s.activeId, "ws-1");
-  assertEquals(isSessionState(s), true);
-});
-
-Deno.test("migrateSession passes a current session through and rejects junk", () => {
+// A layout written while the root workspace existed still passes the guard when its
+// active workspace is a numbered one; the root it carries is dropped, not kept.
+Deno.test("adoptSession keeps only what a session has", () => {
   const s = createInitialSession();
-  assertEquals(migrateSession(s), s);
-  assertEquals(migrateSession(null), null);
-  assertEquals(migrateSession({ nope: 1 }), null);
-});
-
-// A session whose views predate the right pane's groups. Rejecting one costs the user
-// every workspace and its working directory, so it is migrated view by view instead.
-function oldSession(): unknown {
-  const view = {
-    id: "view-1",
-    chatWidthCh: 57,
-    center: {
-      collapsed: false,
-      activeTabId: "center-1",
-      rows: [{ id: "center-1", title: "Chat", kind: "chat" }],
-    },
-    right: {
-      collapsed: false,
-      activeTabId: "right-2",
-      rows: [
-        { id: "right-1", title: "Terminal", kind: "terminal" },
-        { id: "right-2", title: "Kanban", kind: "kanban" },
-      ],
-    },
-    explorer: { widthCh: 30, hidden: false },
-  };
-  return {
-    root: { id: "root", title: "Root", views: [view], activeId: "view-1", cwd: "~/src" },
-    workspaces: [
-      {
-        id: "ws-1",
-        title: "Workspace 1",
-        views: [view],
-        activeId: "view-1",
-        cwd: "~/workspace/pique",
-      },
-    ],
-    activeId: "ws-1",
-  };
-}
-
-Deno.test("migrateSession groups the panes of every workspace, root included", () => {
-  const s = migrateSession(oldSession())!;
-  assertEquals(isSessionState(s), true);
-  for (const w of [s.root, ...s.workspaces]) {
-    const { right } = w.views[0];
-    assertEquals(right.tabs.map((t) => t.group), ["terminal", "kanban"]);
-    assertEquals(right.activeGroup, "kanban");
-  }
-});
-
-Deno.test("migrateSession keeps every workspace and its working directory", () => {
-  const s = migrateSession(oldSession())!;
-  assertEquals(s.root.cwd, "~/src");
-  assertEquals(s.workspaces.map((w) => [w.id, w.cwd]), [[
-    "ws-1",
-    "~/workspace/pique",
-  ]]);
-  assertEquals(s.activeId, "ws-1");
-});
-
-Deno.test("migrateSession refuses a session holding a view it cannot migrate", () => {
-  const broken = oldSession() as { workspaces: { views: unknown[] }[] };
-  broken.workspaces[0].views = [{ id: "view-1", right: { rows: "nope" } }];
-  assertEquals(migrateSession(broken), null);
+  const old = { ...s, root: s.workspaces[0] } as typeof s;
+  assertEquals(isSessionState(old), true);
+  assertEquals(Object.keys(adoptSession(old)).sort(), ["activeId", "workspaces"]);
 });

@@ -23,16 +23,15 @@ export type {
 };
 
 // Each Chat module gets its own backend agent, addressed by the id chatStart
-// returns; every other call carries that id. `scope` is the workspace the module
-// lives in — it decides which tools, defaults and board the agent gets. `view` is
-// the view inside it, and decides which conversation is resumed: one per view.
+// returns; every other call carries that id. `workspace` and `view` name the pane the
+// module lives in, and decide which conversation is resumed: one per view.
 //
 // `fresh` abandons the view's saved conversation and starts a new one instead of
 // resuming it.
 export interface ChatBindings {
   chatStart(
-    arg: { cwd?: string; scope?: string; view?: string; fresh?: boolean },
-  ): Promise<{ id: string }>;
+    arg: { cwd?: string; workspace?: string; view?: string; fresh?: boolean },
+  ): Promise<{ id: string; thinking: ThinkingLevel }>;
   chatHistory(arg: { id: string }): Promise<Item[]>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
   chatRead(arg: { id: string }): Promise<ChatEvent[]>;
@@ -54,12 +53,11 @@ export function chatBindings(): ChatBindings | null {
 }
 
 // Model-provider management, backed by the provider* handlers in desktop.ts.
-// Global (not keyed by a chat id): providers are a per-machine set shared with
-// the `pi` CLI. Connecting/adding takes effect on chat agents without a restart.
+// Global (not keyed by a chat id): providers are one set, in the agent dir. Connecting/adding takes effect on chat agents without a restart.
 export interface ProviderBindings {
   providerList(): Promise<ProviderInfo[]>;
   // Every model those providers offer, for pickers with no chat session behind them
-  // (the automaton editor). A live Chat module uses chatListModels instead, which also
+  // (the Settings model checklist). A live Chat module uses chatListModels instead, which also
   // marks the one it is currently on.
   providerModels(): Promise<ModelOption[]>;
   // `value` is what the provider's login prompt asks for: an API key for most, a

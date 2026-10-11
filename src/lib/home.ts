@@ -1,5 +1,5 @@
 // The user's home directory — the one place that decides which environment variable
-// says where it is. Everything pique persists hangs off it (~/.pique/scopes, the pi
+// says where it is. Everything pique persists hangs off it (~/.pique, the pi
 // agent dir, settings.json), so this resolving wrongly means nothing boots.
 //
 // HOME first, USERPROFILE second: Windows sets USERPROFILE and leaves HOME unset,

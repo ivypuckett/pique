@@ -4,8 +4,7 @@
   // One form for creating and editing: an existing template keeps its name, because
   // saving under a new one would leave the old file behind.
   //
-  // `draft` is bindable rather than owned here so the shell can discard it on a scope
-  // switch — a draft belongs to the scope it was started in.
+  // `draft` is bindable rather than owned here so the shell can discard it.
   let {
     draft = $bindable(),
     busy,

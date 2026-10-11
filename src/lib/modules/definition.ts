@@ -3,69 +3,25 @@
 // disk here.
 //
 // Returns a result rather than throwing, on purpose. A junk definition in one extension
-// must not break the listing of every other one — the same shape a broken automaton
-// gets, listed with its error rather than swallowing the list.
-import { isAbsolute } from "@std/path";
+// must not break the listing of every other one: it is listed with its error rather
+// than swallowing the list.
 import { MODULES } from "./manifest.ts";
-import type { Capabilities, Manifest } from "./capabilities.ts";
 
 // Same shape the extension listing already holds names to (extensions/paths.ts), and
 // for the same reason: a name becomes a filename and must not escape its directory.
 const NAME_RE = /^[a-z][a-z0-9_]*$/;
 
+// What a module is: its kind (the filename), the title of its rail row and tab, and
+// whether a view may hold more than one of it. Any other key in the file is ignored.
+export type ModuleDefinition = {
+  kind: string;
+  label: string;
+  duplicable?: boolean;
+};
+
 export type ParseResult =
-  | { ok: true; def: Manifest }
+  | { ok: true; def: ModuleDefinition }
   | { ok: false; error: string };
-
-// Every capability there is. A name outside this set is an error rather than an ignored
-// key: a typo that parsed as "grants nothing" would show as enabled in the consent
-// screen and then fail at runtime with no explanation.
-const BOOLEAN_CAPS = ["kanban", "storage"] as const;
-
-function parseCapabilities(raw: unknown): Capabilities | string {
-  if (raw === undefined) return {};
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return "capabilities must be an object";
-  }
-  const out: Capabilities = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if ((BOOLEAN_CAPS as readonly string[]).includes(key)) {
-      if (typeof value !== "boolean") {
-        return `capability ${key} must be a boolean`;
-      }
-      out[key as typeof BOOLEAN_CAPS[number]] = value;
-      continue;
-    }
-    if (key === "fs") {
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        return "capability fs must be an object of read/write root lists";
-      }
-      const fs: { read?: string[]; write?: string[] } = {};
-      for (
-        const [side, roots] of Object.entries(value as Record<string, unknown>)
-      ) {
-        if (side !== "read" && side !== "write") {
-          return `unknown fs grant: ${side}`;
-        }
-        if (!Array.isArray(roots) || roots.some((r) => typeof r !== "string")) {
-          return `fs.${side} must be a list of paths`;
-        }
-        // A relative root can never match: capabilities.ts refuses a path it cannot
-        // anchor, so a definition carrying one would grant nothing while looking like
-        // it granted something.
-        const bad = (roots as string[]).find((r) => !isAbsolute(r));
-        if (bad !== undefined) {
-          return `fs.${side} root must be absolute: ${bad}`;
-        }
-        fs[side] = roots as string[];
-      }
-      out.fs = fs;
-      continue;
-    }
-    return `unknown capability: ${key}`;
-  }
-  return out;
-}
 
 // `name` is the extension's own basename, taken from the filename on disk — never from
 // inside the file. A definition therefore cannot claim to be a module other than the one
@@ -99,23 +55,13 @@ export function parseDefinition(name: string, text: string): ParseResult {
   if (obj.duplicable !== undefined && typeof obj.duplicable !== "boolean") {
     return { ok: false, error: "duplicable must be a boolean" };
   }
-  if (obj.rationale !== undefined && typeof obj.rationale !== "string") {
-    return { ok: false, error: "rationale must be a string" };
-  }
-
-  const capabilities = parseCapabilities(obj.capabilities);
-  if (typeof capabilities === "string") {
-    return { ok: false, error: capabilities };
-  }
 
   return {
     ok: true,
     def: {
       kind: name,
       label: label.trim(),
-      rationale: obj.rationale as string | undefined,
       duplicable: obj.duplicable as boolean | undefined,
-      capabilities,
     },
   };
 }

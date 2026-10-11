@@ -1,21 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import {
-  approvePrompt,
-  deletePrompt,
-  inheritedPromptDirs,
-  listPrompts,
-  listVisiblePrompts,
-  promotePrompt,
-  rejectPrompt,
-  savePrompt,
-} from "./service.ts";
-import {
-  ensurePromptDirs,
-  pendingPromptPath,
-  promptPath,
-  promptsDir,
-} from "./paths.ts";
-import { ROOT, type ScopeId } from "../scope/paths.ts";
+import { deletePrompt, listPrompts, savePrompt } from "./service.ts";
+import { ensurePromptDirs, promptPath, promptsDir } from "./paths.ts";
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
   const prev = Deno.env.get("HOME");
@@ -29,64 +14,47 @@ async function withTempHome(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-async function write(
-  scope: ScopeId,
-  name: string,
-  body: string,
-  state: "live" | "pending" = "live",
-): Promise<void> {
-  await ensurePromptDirs(scope);
-  const path = state === "live"
-    ? promptPath(scope, name)
-    : pendingPromptPath(scope, name);
-  await Deno.writeTextFile(path, body);
+async function write(name: string, body: string): Promise<void> {
+  await ensurePromptDirs();
+  await Deno.writeTextFile(promptPath(name), body);
 }
 
-Deno.test("a scope with no prompts dir lists nothing rather than failing", async () => {
+Deno.test("no prompts dir lists nothing rather than failing", async () => {
   await withTempHome(async () => {
-    assertEquals(await listPrompts("ws-1"), []);
+    assertEquals(await listPrompts(), []);
   });
 });
 
-Deno.test("live and pending templates are listed with their state", async () => {
+Deno.test("templates are listed by name, with their frontmatter", async () => {
   await withTempHome(async () => {
-    await write("ws-1", "review", "---\ndescription: d\n---\nbody");
-    await write("ws-1", "audit", "---\n---\nbody", "pending");
-
-    assertEquals(
-      (await listPrompts("ws-1")).map((p) => ({
-        name: p.name,
-        state: p.state,
-      })),
-      [
-        { name: "audit", state: "pending" },
-        { name: "review", state: "live" },
-      ],
-    );
+    await write("review", "---\ndescription: d\n---\nbody");
+    await write("audit", "---\n---\nbody");
+    const listed = await listPrompts();
+    assertEquals(listed.map((p) => p.name), ["audit", "review"]);
+    assertEquals(listed[1].description, "d");
   });
 });
 
 // The dir is user-editable, so one stray file must not break the listing.
 Deno.test("non-markdown files and illegal names are skipped", async () => {
   await withTempHome(async () => {
-    await write("ws-1", "ok", "body");
-    await Deno.writeTextFile(`${promptsDir("ws-1")}/notes.txt`, "x");
-    await Deno.writeTextFile(`${promptsDir("ws-1")}/Bad Name.md`, "x");
+    await write("ok", "body");
+    await Deno.writeTextFile(`${promptsDir()}/notes.txt`, "x");
+    await Deno.writeTextFile(`${promptsDir()}/Bad Name.md`, "x");
 
-    assertEquals((await listPrompts("ws-1")).map((p) => p.name), ["ok"]);
+    assertEquals((await listPrompts()).map((p) => p.name), ["ok"]);
   });
 });
 
-Deno.test("saving writes a live template a chat can invoke straight away", async () => {
+Deno.test("saving writes a template a chat can invoke straight away", async () => {
   await withTempHome(async () => {
-    await savePrompt("ws-1", "ship", {
+    await savePrompt("ship", {
       description: "Ship it",
       argumentHint: "<pr>",
       body: "Merge $1",
     });
 
-    const [p] = await listPrompts("ws-1");
-    assertEquals(p.state, "live");
+    const [p] = await listPrompts();
     assertEquals(p.description, "Ship it");
     assertEquals(p.argumentHint, "<pr>");
     assertEquals(p.body, "Merge $1");
@@ -95,169 +63,28 @@ Deno.test("saving writes a live template a chat can invoke straight away", async
 
 Deno.test("saving an existing name replaces it rather than adding a second", async () => {
   await withTempHome(async () => {
-    await savePrompt("ws-1", "ship", { description: "one", body: "a" });
-    await savePrompt("ws-1", "ship", { description: "two", body: "b" });
+    await savePrompt("ship", { description: "one", body: "a" });
+    await savePrompt("ship", { description: "two", body: "b" });
 
-    const live = await listPrompts("ws-1");
-    assertEquals(live.length, 1);
-    assertEquals(live[0].description, "two");
+    const listed = await listPrompts();
+    assertEquals(listed.length, 1);
+    assertEquals(listed[0].description, "two");
   });
 });
 
-Deno.test("a name that could escape the scope is rejected before any write", async () => {
+Deno.test("a name that could escape the prompts dir is rejected before any write", async () => {
   await withTempHome(async () => {
     await assertRejects(() =>
-      savePrompt("ws-1", "../escape", { description: "d", body: "b" })
+      savePrompt("../escape", { description: "d", body: "b" })
     );
+    await assertRejects(() => deletePrompt("../escape"));
   });
 });
 
-Deno.test("approving moves the template from quarantine to live", async () => {
+Deno.test("deleting removes the template", async () => {
   await withTempHome(async () => {
-    await write("ws-1", "audit", "---\ndescription: d\n---\nbody", "pending");
-    await approvePrompt("ws-1", "audit");
-
-    assertEquals(
-      (await listPrompts("ws-1")).map((p) => ({
-        name: p.name,
-        state: p.state,
-      })),
-      [
-        { name: "audit", state: "live" },
-      ],
-    );
-  });
-});
-
-Deno.test("rejecting removes the quarantined file and touches nothing live", async () => {
-  await withTempHome(async () => {
-    await write("ws-1", "keep", "body");
-    await write("ws-1", "audit", "body", "pending");
-    await rejectPrompt("ws-1", "audit");
-
-    assertEquals((await listPrompts("ws-1")).map((p) => p.name), ["keep"]);
-  });
-});
-
-Deno.test("deleting removes the template from whichever dir it is in", async () => {
-  await withTempHome(async () => {
-    await write("ws-1", "live-one", "body");
-    await write("ws-1", "pending-one", "body", "pending");
-    await deletePrompt("ws-1", "live-one", "live");
-    await deletePrompt("ws-1", "pending-one", "pending");
-
-    assertEquals(await listPrompts("ws-1"), []);
-  });
-});
-
-Deno.test("a workspace sees root's templates as well as its own", async () => {
-  await withTempHome(async () => {
-    await write(ROOT, "shared", "body");
-    await write("ws-1", "local", "body");
-
-    assertEquals((await listVisiblePrompts("ws-1")).map((p) => p.name).sort(), [
-      "local",
-      "shared",
-    ]);
-    // Root can never see a workspace's.
-    assertEquals((await listVisiblePrompts(ROOT)).map((p) => p.name), [
-      "shared",
-    ]);
-  });
-});
-
-// pi loads BOTH files and its expander takes the first match, so a duplicate name must
-// collapse to ONE entry here — otherwise the `/` menu offers a twin that never runs.
-Deno.test("a name defined in both scopes resolves once, to the nearest", async () => {
-  await withTempHome(async () => {
-    await write(ROOT, "review", "---\ndescription: root's\n---\nroot body");
-    await write(
-      "ws-1",
-      "review",
-      "---\ndescription: the workspace's\n---\nlocal body",
-    );
-
-    const visible = await listVisiblePrompts("ws-1");
-    assertEquals(visible.length, 1);
-    assertEquals(visible[0].description, "the workspace's");
-    assertEquals(visible[0].scope, "ws-1");
-  });
-});
-
-// Quarantined templates are not invocable, which is the whole point of the gate.
-Deno.test("pending templates are never visible to a chat", async () => {
-  await withTempHome(async () => {
-    await write("ws-1", "audit", "body", "pending");
-    assertEquals(await listVisiblePrompts("ws-1"), []);
-  });
-});
-
-// Handed to pi as additionalPromptTemplatePaths. A scope's own dir must NOT be in the
-// list — pi discovers that one from the agentDir, and repeating it loads everything twice.
-Deno.test("only ancestors' dirs are passed to pi as extra paths", async () => {
-  await withTempHome(async () => {
-    assertEquals(inheritedPromptDirs(ROOT), []);
-    assertEquals(inheritedPromptDirs("ws-1"), [promptsDir(ROOT)]);
-    // …and the dir handed over is the one a root save actually writes into.
-    await savePrompt(ROOT, "shared", { description: "d", body: "b" });
-    const names = [...Deno.readDirSync(inheritedPromptDirs("ws-1")[0])].map((
-      e,
-    ) => e.name).sort();
-    assertEquals(names, ["pending", "shared.md"]);
-  });
-});
-
-Deno.test("promotePrompt moves a live template into root, where every workspace sees it", async () => {
-  await withTempHome(async () => {
-    await savePrompt("ws-1", "standup", { description: "d", body: "b" });
-
-    assertEquals(await promotePrompt("ws-1", "standup", "live"), { ok: true });
-    assertEquals(await listPrompts("ws-1"), []);
-    assertEquals((await listPrompts(ROOT)).map((p) => p.name), ["standup"]);
-    assertEquals(
-      (await listVisiblePrompts("ws-1")).map((p) => p.name),
-      ["standup"],
-    );
-  });
-});
-
-// Promoting is not a second way to approve: a template still in quarantine lands in
-// root's quarantine, not in root's live dir.
-Deno.test("promotePrompt keeps a pending template pending", async () => {
-  await withTempHome(async () => {
-    await ensurePromptDirs("ws-1");
-    await Deno.writeTextFile(
-      pendingPromptPath("ws-1", "draft"),
-      "---\ndescription: d\n---\nb",
-    );
-
-    assertEquals(await promotePrompt("ws-1", "draft", "pending"), { ok: true });
-    const [p] = await listPrompts(ROOT);
-    assertEquals([p.name, p.state], ["draft", "pending"]);
-  });
-});
-
-Deno.test("promotePrompt reports a conflict rather than replacing root's, until told to", async () => {
-  await withTempHome(async () => {
-    await savePrompt("ws-1", "standup", { description: "new", body: "b" });
-    await savePrompt(ROOT, "standup", { description: "old", body: "b" });
-
-    assertEquals(await promotePrompt("ws-1", "standup", "live"), {
-      conflict: true,
-    });
-    assertEquals((await listPrompts(ROOT))[0].description, "old");
-
-    assertEquals(await promotePrompt("ws-1", "standup", "live", true), {
-      ok: true,
-    });
-    assertEquals((await listPrompts(ROOT))[0].description, "new");
-    assertEquals(await listPrompts("ws-1"), []);
-  });
-});
-
-Deno.test("promotePrompt refuses to promote out of root", async () => {
-  await withTempHome(async () => {
-    await savePrompt(ROOT, "standup", { description: "d", body: "b" });
-    await assertRejects(() => promotePrompt(ROOT, "standup", "live"));
+    await savePrompt("ship", { description: "d", body: "b" });
+    await deletePrompt("ship");
+    assertEquals(await listPrompts(), []);
   });
 });

@@ -9,7 +9,6 @@
   import ConfirmDialog from "./lib/ConfirmDialog.svelte";
   import { settings, settingsOpen, stepZoom } from "./lib/settings/store.ts";
   import { DEFAULT_SETTINGS } from "./lib/settings/bindings.ts";
-  import { ROOT } from "./lib/scope/paths.ts";
   import { activeTabId, EDITOR } from "./lib/layout.ts";
   import type { WorkspaceState } from "./lib/workspace.ts";
   import {
@@ -33,9 +32,9 @@
   import { MODULES } from "./lib/modules/manifest.ts";
 
   // ctrl+j o: open a new workspace and put the caret in its directory box (TopBar's
-  // PathInput), which starts at the directory the workspace inherits from root. The
-  // picker IS that box, so there is nothing to cancel — esc just leaves the new
-  // workspace on the inherited directory. Found by aria-label for the same reason
+  // PathInput), which starts empty — the home directory. The picker IS that box, so
+  // there is nothing to cancel — esc just leaves the new workspace in the home
+  // directory. Found by aria-label for the same reason
   // visibleChatInput below is: the box lives in a component this one doesn't reach into.
   async function openWorkspaceFromPicker(): Promise<void> {
     addWorkspace();
@@ -109,8 +108,8 @@
 
   // The presented view's active tab: only its content is on screen (hidden tabs and
   // background views are display:none, so offsetParent is null) — and a module can keep
-  // several panes mounted itself — Library hides its inactive sub-tab — so the same test
-  // has to filter the candidates, not just the pane.
+  // several panes mounted itself, so the same test has to filter the candidates, not
+  // just the pane.
   function focusActiveTab() {
     const panes = document.querySelectorAll<HTMLElement>("[data-tab-content]");
     for (const pane of panes) {
@@ -123,14 +122,12 @@
   }
 
   // ctrl+j w: closing a workspace unmounts it — its views, tabs and running modules go
-  // with it, and nothing brings them back — so it asks first. Root is never closable
-  // (store's closeWorkspace no-ops on it), so it never prompts. The armed chord is
+  // with it, and nothing brings them back — so it asks first. The armed chord is
   // dropped on open: while the dialog is up every key belongs to it, not the mode.
   let pendingClose = $state<WorkspaceState | null>(null);
 
   function askCloseWorkspace() {
     const w = get(activeWorkspace);
-    if (w.id === ROOT) return;
     clearChord();
     pendingClose = w;
   }
@@ -177,9 +174,9 @@
   // before it will take a keystroke.
   //
   // Terminals only. focusActiveTab picks a pane's first focusable element, which for a
-  // terminal is xterm's textarea but for kanban is the first column's rename field — so
-  // focusing every module would turn a stray keystroke after ctrl+t k into a renamed
-  // column. The rest keep focus wherever it already was.
+  // terminal is xterm's textarea but for another module is whatever control happens to
+  // come first — so focusing every module would hand a stray keystroke after ctrl+t to
+  // that control. The rest keep focus wherever it already was.
   async function settleFocus() {
     await tick();
     if (pendingClose) return; // the dialog owns focus while it is up
@@ -290,8 +287,8 @@
                 case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
                 case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
                 case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
-                // Arrows, not j/k: every rail row has a letter of its own, and k is
-                // already Kanban's.
+                // Arrows, not j/k: every rail row has a letter of its own, and j/k
+                // would be the first two a new module could not have.
                 case "ArrowUp": onTabs((id) => focusAdjacentGroup(id, -1)); sticky = true; break;
                 case "ArrowDown": onTabs((id) => focusAdjacentGroup(id, 1)); sticky = true; break;
                 default: handled = false;

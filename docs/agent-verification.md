@@ -38,9 +38,7 @@ What _does_ work in web mode, and is worth testing here:
   `<html data-theme>`).
 - The module rail: every row, the tab strip filtering to the selected one, `+`
   on the terminal row, and the empty-row hint.
-- The Library module's chrome — its rail row and the scope toggle (which is
-  hidden in the Root workspace, so create a second workspace to see it). The
-  list itself needs the desktop app.
+- Settings → Library's section heading. The list itself needs the desktop app.
 
 ## The one big gotcha: `computer` actions hang
 

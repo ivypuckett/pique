@@ -14,6 +14,7 @@
   } from "./themes.ts";
   import { parseThemeCss } from "./theme_css.ts";
   import { refreshChatModels } from "../chat/store.ts";
+  import Library from "../library/Library.svelte";
 
   // Same modifier glyph the status bar shows for the shortcuts it lists.
   const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
@@ -149,7 +150,7 @@
   }
 
   // Model providers. Null in web-dev (no bindings) → the section shows a
-  // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
+  // desktop-only note. Connections live in the agent dir (see providers.ts).
   const prov = providerBindings();
   let providers = $state<ProviderInfo[]>([]);
   let provError = $state("");
@@ -401,6 +402,7 @@
     { id: "appearance", label: "Appearance" },
     { id: "workspace", label: "Workspace" },
     { id: "providers", label: "Providers" },
+    { id: "library", label: "Library" },
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 </script>
@@ -590,9 +592,8 @@
       <div>
         <div class="text-sm">Default working directory</div>
         <div class="mt-0.5 text-xs opacity-70">
-          Set per workspace from the path button in the top bar. The Root workspace's
-          directory is the default every other workspace falls back to when it has
-          none of its own; empty means your home directory.
+          Set per workspace from the path button in the top bar; a workspace with none
+          of its own uses your home directory.
         </div>
       </div>
 
@@ -762,7 +763,7 @@
                       {/each}
                     </ul>
                     <div class="mt-1 text-[0.65rem] opacity-50">
-                      Only checked models appear in the chat and automaton model pickers.
+                      Only checked models appear in the chat model picker.
                     </div>
                   {/if}
                 {/if}
@@ -868,6 +869,10 @@
         {#if provError}<div class="mt-2 break-all text-xs text-error">{provError}</div>{/if}
       {/if}
 
+      {/if}
+
+      {#if section === "library"}
+        <Library />
       {/if}
 
       </div>

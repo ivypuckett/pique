@@ -15,16 +15,10 @@ import {
   startAgent,
   stopAgent,
 } from "./agent.ts";
-import { enableLocal, revokeLocal } from "../extensions/local.ts";
-import {
-  ensureExtensionDirs,
-  livePath,
-  pendingPath,
-} from "../extensions/paths.ts";
-import { writeScopeConfig } from "../scope/config.ts";
-import { scopeAgentDir, type ScopeId } from "../scope/paths.ts";
+import { removeLocal } from "../extensions/local.ts";
+import { ensureExtensionDirs, livePath } from "../extensions/paths.ts";
+import { agentDir } from "../paths.ts";
 
-const SCOPE: ScopeId = "ws-1";
 const REPLY = "resilience-reply-ok";
 
 // A mock endpoint that can stall, and can answer with a tool call instead of text.
@@ -115,9 +109,9 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
   Deno.env.set("HOME", dir);
   newExchange();
   try {
-    await Deno.mkdir(`${dir}/.pi/agent`, { recursive: true });
+    await Deno.mkdir(`${dir}/.pique/agent`, { recursive: true });
     await Deno.writeTextFile(
-      `${dir}/.pi/agent/models.json`,
+      `${dir}/.pique/agent/models.json`,
       JSON.stringify({
         providers: {
           mock: {
@@ -133,8 +127,9 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
         },
       }),
     );
-    await writeScopeConfig(SCOPE, {
-      chat: { defaultProvider: "mock", defaultModel: "mock-model" },
+    await writeAgentSettings({
+      defaultProvider: "mock",
+      defaultModel: "mock-model",
     });
     await fn(cwd);
   } finally {
@@ -163,14 +158,9 @@ export default function (pi: ExtensionAPI) {
 `;
 }
 
-async function defineAndApprove(
-  scope: ScopeId,
-  file: string,
-  toolName = file,
-): Promise<void> {
-  await ensureExtensionDirs(scope);
-  await Deno.writeTextFile(pendingPath(scope, file), extensionSource(toolName));
-  await enableLocal(scope, file);
+async function defineExtension(file: string, toolName = file): Promise<void> {
+  await ensureExtensionDirs();
+  await Deno.writeTextFile(livePath(file), extensionSource(toolName));
 }
 
 // ---------------------------------------------------------------------------
@@ -180,15 +170,15 @@ async function defineAndApprove(
 // ---------------------------------------------------------------------------
 Deno.test("probe A: an edited extension's NEW tool replaces its old one on reload", async () => {
   await withTempHome(async () => {
-    await defineAndApprove(SCOPE, "evolving", "tool_v1");
-    const chat = await startAgent({ scope: SCOPE });
+    await defineExtension("evolving", "tool_v1");
+    const chat = await startAgent();
     try {
       assertEquals(activeToolNames(chat).includes("tool_v1"), true);
 
       // Same file, different tool name: if the module is served from cache, v1 stays
       // and v2 never appears.
       await Deno.writeTextFile(
-        livePath(SCOPE, "evolving"),
+        livePath("evolving"),
         extensionSource("tool_v2"),
       );
       await reloadAgent(chat);
@@ -211,20 +201,20 @@ Deno.test("probe A: an edited extension's NEW tool replaces its old one on reloa
 });
 
 // ---------------------------------------------------------------------------
-// Probe B: a broken extension. Library can enable a file that does not import — a bad
-// edit, a bad approval. The question is blast radius: does reload throw, and does one
+// Probe B: a broken extension. The agent dir can hold a file that does not import — a
+// bad edit, a bad install. The question is blast radius: does reload throw, and does one
 // bad file take the healthy extensions down with it?
 // ---------------------------------------------------------------------------
 Deno.test("probe B: one broken extension does not take the healthy ones with it", async () => {
   await withTempHome(async () => {
-    await defineAndApprove(SCOPE, "healthy");
-    const chat = await startAgent({ scope: SCOPE });
+    await defineExtension("healthy");
+    const chat = await startAgent();
     try {
       assertEquals(activeToolNames(chat).includes("healthy"), true);
 
-      await ensureExtensionDirs(SCOPE);
+      await ensureExtensionDirs();
       await Deno.writeTextFile(
-        livePath(SCOPE, "broken"),
+        livePath("broken"),
         "this is not valid typescript ((((\n",
       );
 
@@ -254,7 +244,7 @@ Deno.test("probe B: one broken extension does not take the healthy ones with it"
       // loader private (the same shape prompts/integration_test.ts uses).
       const loader = new DefaultResourceLoader({
         cwd: Deno.cwd(),
-        agentDir: scopeAgentDir(SCOPE),
+        agentDir: agentDir(),
       });
       await loader.reload();
       const errors: Array<{ path: string; error: string }> =
@@ -279,13 +269,13 @@ Deno.test("probe B: one broken extension does not take the healthy ones with it"
 // ---------------------------------------------------------------------------
 Deno.test("probe C: reloading mid-turn does not corrupt the in-flight turn", async () => {
   await withTempHome(async () => {
-    const chat = await startAgent({ scope: SCOPE });
+    const chat = await startAgent();
     try {
       blockModel();
       promptAgent(chat, "hello");
       await received; // the turn is provably in flight, parked on the gate
 
-      await defineAndApprove(SCOPE, "midflight_tool");
+      await defineExtension("midflight_tool");
       let threw = "";
       try {
         await reloadAgent(chat);
@@ -322,15 +312,15 @@ Deno.test("probe C: reloading mid-turn does not corrupt the in-flight turn", asy
 });
 
 // ---------------------------------------------------------------------------
-// Probe D: two reloads at once. Enable and Revoke are two clicks; nothing serialises
+// Probe D: two reloads at once. Two quick `/reload`s; nothing serialises
 // them, and reload() is several awaits deep with no lock.
 // ---------------------------------------------------------------------------
 Deno.test("probe D: concurrent reloads leave a coherent tool set", async () => {
   await withTempHome(async () => {
-    await defineAndApprove(SCOPE, "first");
-    const chat = await startAgent({ scope: SCOPE });
+    await defineExtension("first");
+    const chat = await startAgent();
     try {
-      await defineAndApprove(SCOPE, "second");
+      await defineExtension("second");
       let threw = "";
       try {
         await Promise.all([reloadAgent(chat), reloadAgent(chat)]);
@@ -439,13 +429,13 @@ Deno.test("probe F: reloading while an extension tool is running does not break 
   await withTempHome(async () => {
     const marker = `${await Deno.makeTempDir()}/running`;
     const releaseFile = `${await Deno.makeTempDir()}/release`;
-    await ensureExtensionDirs(SCOPE);
+    await ensureExtensionDirs();
     await Deno.writeTextFile(
-      livePath(SCOPE, "slow"),
+      livePath("slow"),
       blockingExtensionSource("slow_tool", marker, releaseFile),
     );
 
-    const chat = await startAgent({ scope: SCOPE });
+    const chat = await startAgent();
     try {
       assertEquals(activeToolNames(chat).includes("slow_tool"), true);
 
@@ -474,15 +464,15 @@ Deno.test("probe F: reloading while an extension tool is running does not break 
 
 // ---------------------------------------------------------------------------
 // Probe G: the transcript outlives the tool. Once a tool has been CALLED, the
-// conversation holds a toolCall/toolResult pair naming it; revoking the extension and
+// conversation holds a toolCall/toolResult pair naming it; removing the extension and
 // reloading leaves pi assembling a request whose history mentions a tool that no
 // longer exists. This probe covers pique's and pi's side of that only — whether a
 // given provider ACCEPTS such a request is a provider question the mock cannot answer.
 // ---------------------------------------------------------------------------
-Deno.test("probe G: a conversation that already called a since-revoked tool still runs", async () => {
+Deno.test("probe G: a conversation that already called a since-removed tool still runs", async () => {
   await withTempHome(async () => {
-    await defineAndApprove(SCOPE, "vanishing");
-    const chat = await startAgent({ scope: SCOPE });
+    await defineExtension("vanishing");
+    const chat = await startAgent();
     try {
       nextToolCall = "vanishing";
       promptAgent(chat, "use the tool");
@@ -490,7 +480,7 @@ Deno.test("probe G: a conversation that already called a since-revoked tool stil
       assertEquals(first.error, "", "the fixture turn must succeed");
       assertEquals(first.done, true, "the fixture turn must complete");
 
-      await revokeLocal(SCOPE, "vanishing");
+      await removeLocal("vanishing");
       await reloadAgent(chat);
       assertEquals(
         activeToolNames(chat).includes("vanishing"),
@@ -515,13 +505,13 @@ Deno.test("probe G: a conversation that already called a since-revoked tool stil
 
 // ---------------------------------------------------------------------------
 // Probe H: reload is not a once-per-session event. A chat left open all day sees one
-// per Enable, Revoke and Install, and every one of them re-imports every extension
+// per edit, removal and install, and every one of them re-imports every extension
 // module and rebuilds the runner. Repeated reloads must converge, not accumulate.
 // ---------------------------------------------------------------------------
 Deno.test("probe H: repeated reloads converge on the same tool set", async () => {
   await withTempHome(async () => {
-    await defineAndApprove(SCOPE, "steady");
-    const chat = await startAgent({ scope: SCOPE });
+    await defineExtension("steady");
+    const chat = await startAgent();
     try {
       const before = activeToolNames(chat).slice().sort();
       for (let i = 0; i < 25; i++) await reloadAgent(chat);
@@ -557,9 +547,9 @@ Deno.test("probe H: repeated reloads converge on the same tool set", async () =>
 Deno.test("probe E: what lifecycle events an extension actually sees across reload", async () => {
   await withTempHome(async () => {
     const log = await Deno.makeTempFile();
-    await ensureExtensionDirs(SCOPE);
+    await ensureExtensionDirs();
     await Deno.writeTextFile(
-      livePath(SCOPE, "lifecycle"),
+      livePath("lifecycle"),
       `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
@@ -578,7 +568,7 @@ export default function (pi: ExtensionAPI) {
 `,
     );
 
-    const chat = await startAgent({ scope: SCOPE });
+    const chat = await startAgent();
     try {
       await reloadAgent(chat);
       const seen = (await Deno.readTextFile(log)).trim().split("\n");
@@ -604,3 +594,12 @@ export default function (pi: ExtensionAPI) {
     }
   });
 });
+
+// pi's settings.json in the agent dir, where the default model lives.
+async function writeAgentSettings(settings: unknown): Promise<void> {
+  await Deno.mkdir(agentDir(), { recursive: true });
+  await Deno.writeTextFile(
+    `${agentDir()}/settings.json`,
+    JSON.stringify(settings),
+  );
+}

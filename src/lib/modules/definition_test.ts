@@ -5,21 +5,25 @@ const ok = (name: string, obj: unknown) =>
   parseDefinition(name, JSON.stringify(obj));
 
 Deno.test("a valid definition parses, taking its kind from the filename", () => {
-  const r = ok("notes", { label: "Notes", capabilities: { kanban: true } });
+  const r = ok("notes", { label: "Notes" });
   assertEquals(r.ok, true);
   if (!r.ok) return;
   // The kind is NOT read from the file: it is the extension's own name, so a definition
   // cannot claim to be a different module than the one it sits beside.
   assertEquals(r.def.kind, "notes");
   assertEquals(r.def.label, "Notes");
-  assertEquals(r.def.capabilities.kanban, true);
 });
 
-Deno.test("a definition with no capabilities grants nothing rather than everything", () => {
-  const r = ok("notes", { label: "Notes" });
+// A definition written for an older build — capabilities, a rationale — still parses;
+// the keys it no longer means anything by are dropped rather than refused.
+Deno.test("keys a definition no longer uses are ignored", () => {
+  const r = ok("notes", {
+    label: "Notes",
+    rationale: "A scratchpad.",
+    capabilities: { storage: true },
+  });
   assertEquals(r.ok, true);
-  if (!r.ok) return;
-  assertEquals(r.def.capabilities, {});
+  if (r.ok) assertEquals(r.def, { kind: "notes", label: "Notes", duplicable: undefined });
 });
 
 Deno.test("junk is an error, not a throw", () => {
@@ -44,53 +48,10 @@ Deno.test("a name that is not a legal extension name is refused", () => {
 // An install must never be able to take over a built-in row.
 Deno.test("a kind colliding with a built-in is refused at parse time", () => {
   for (
-    const builtin of ["kanban", "terminal", "library", "gitdiff", "automatons"]
+    const builtin of ["terminal", "gitdiff"]
   ) {
     assertEquals(ok(builtin, { label: "Mine" }).ok, false, builtin);
   }
-});
-
-// A typo'd capability that parsed as "grants nothing" would look enabled in the UI and
-// fail mysteriously at runtime. Refuse the file instead.
-Deno.test("an unknown capability name is refused, not ignored", () => {
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { kanbna: true } }).ok,
-    false,
-  );
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { network: true } }).ok,
-    false,
-  );
-});
-
-Deno.test("a capability with the wrong type is refused", () => {
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { kanban: "yes" } }).ok,
-    false,
-  );
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { fs: true } }).ok,
-    false,
-  );
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { fs: { read: "/x" } } }).ok,
-    false,
-  );
-});
-
-// A relative root cannot be checked against an absolute path (capabilities.ts refuses
-// them), so a definition carrying one would grant nothing while appearing to grant
-// something.
-Deno.test("an fs root that is not absolute is refused", () => {
-  assertEquals(
-    ok("notes", { label: "N", capabilities: { fs: { read: ["notes"] } } }).ok,
-    false,
-  );
-  const r = ok("notes", {
-    label: "N",
-    capabilities: { fs: { read: ["/home/u/notes"] } },
-  });
-  assertEquals(r.ok, true);
 });
 
 Deno.test("duplicable must be a boolean when present", () => {
@@ -98,16 +59,4 @@ Deno.test("duplicable must be a boolean when present", () => {
   const r = ok("notes", { label: "N", duplicable: true });
   assertEquals(r.ok, true);
   if (r.ok) assertEquals(r.def.duplicable, true);
-});
-
-// An agent-authored module carries its reason (modules/agent-tools.ts) and the consent
-// screen shows it. Validated like every other field rather than passed through: it is
-// rendered to a user who is deciding whether to trust the thing.
-Deno.test("a rationale is carried through, and must be a string", () => {
-  const r = ok("notes", { label: "N", rationale: "A scratchpad." });
-  assertEquals(r.ok, true);
-  if (r.ok) assertEquals(r.def.rationale, "A scratchpad.");
-  assertEquals(ok("notes", { label: "N", rationale: 42 }).ok, false);
-  const none = ok("notes", { label: "N" });
-  assertEquals(none.ok && none.def.rationale, undefined);
 });

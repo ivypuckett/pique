@@ -40,13 +40,11 @@ Deno.test("promptFile round-trips through parsePrompt", () => {
   const text = promptFile({
     description: "Ship it",
     argumentHint: "<pr>",
-    rationale: "asked for often",
     body: "Merge $1",
   });
   const p = parsePrompt("ship", text);
   assertEquals(p.description, "Ship it");
   assertEquals(p.argumentHint, "<pr>");
-  assertEquals(p.rationale, "asked for often");
   assertEquals(p.body, "Merge $1");
 });
 
@@ -61,13 +59,9 @@ Deno.test("a description containing --- or a newline stays in the frontmatter", 
 
 // An empty hint must be omitted rather than written as "", or the `/` menu renders a
 // stray gap after the name.
-Deno.test("an absent hint or rationale is left out of the file", () => {
+Deno.test("an absent hint is left out of the file", () => {
   assertEquals(
     promptFile({ description: "d", body: "b" }).includes("argument-hint"),
-    false,
-  );
-  assertEquals(
-    promptFile({ description: "d", body: "b" }).includes("rationale"),
     false,
   );
 });

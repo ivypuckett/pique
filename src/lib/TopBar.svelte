@@ -4,21 +4,16 @@
     focusView,
     moduleRailHidden,
     resetView,
-    session,
     setWorkspaceDir,
     workspaceRailHidden,
   } from "./store.ts";
   import { settingsOpen } from "./settings/store.ts";
   import PathInput from "./PathInput.svelte";
-  import { ROOT } from "./scope/paths.ts";
 
-  // This workspace's own override, falling back to root's (root has nothing to fall
-  // back to); blank shows a "~" hint, since the backend resolves the default to the
-  // home directory. It is also where the picker starts, so editing a workspace's
-  // directory begins at the one it is already using.
-  const dir = $derived(
-    $activeWorkspace.cwd ?? ($activeWorkspace.id === ROOT ? "" : $session.root.cwd) ?? "",
-  );
+  // This workspace's own directory; blank shows a "~" hint, since the backend resolves
+  // the default to the home directory. It is also where the picker starts, so editing a
+  // workspace's directory begins at the one it is already using.
+  const dir = $derived($activeWorkspace.cwd ?? "");
 </script>
 
 <header class="flex h-9 shrink-0 items-center justify-between border-b border-base-300 bg-base-200 px-3">

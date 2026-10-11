@@ -3,13 +3,11 @@
 // "Provider agnostic like pi": pique exposes pi's own two connection mechanisms
 // over win.bind, so any provider pi supports can be connected from the UI —
 //   • API keys for built-in cloud providers (anthropic, openai, google, …),
-//     persisted via runtime.login() → ~/.pi/agent/auth.json.
+//     persisted via runtime.login() → auth.json in the agent dir (paths.ts).
 //   • Custom OpenAI-compatible endpoints (LM Studio, Ollama, vLLM, …), written
-//     as ~/.pi/agent/models.json provider entries — the SAME shape the user's
-//     LM Studio already uses.
-// Both files are shared with the `pi` CLI by design (only extensions are kept
-// separate in ~/.pique; see settings/file.ts). Mutations run against the one
-// shared ModelRuntime (see chat/agent.ts) so they take effect without a restart.
+//     as models.json provider entries there — the SAME shape the `pi` CLI uses.
+// Mutations run against the one shared ModelRuntime (see chat/agent.ts) so they take
+// effect without a restart.
 //
 // The frontend half is the provider* win.bind handlers in src/desktop.ts; keep
 // arg/return shapes in sync by hand (separate module graphs, as with chat/ext).
@@ -17,7 +15,7 @@
 import { dirname } from "@std/path";
 import { ensureRuntime } from "./agent.ts";
 import { listAvailableModels } from "./available.ts";
-import { home } from "../home.ts";
+import { agentDir } from "../paths.ts";
 import {
   BEDROCK,
   detectAwsProfiles,
@@ -46,7 +44,7 @@ export type ProviderInfo = {
 
 // One model the runtime can serve, addressed the way a stored `provider/model-id` ref
 // is. Distinct from chat/agent.ts's ModelInfo, which also marks which one a LIVE chat
-// session is on: the automaton editor has no session, only a definition to write into.
+// session is on: the Settings checklist has no session behind it.
 export type ModelOption = { provider: string; id: string; name: string };
 
 // A user-defined OpenAI-compatible endpoint, as entered in the Settings form.
@@ -57,7 +55,7 @@ export type CustomProviderInput = {
   models: string[];
 };
 
-// The parsed ~/.pi/agent/models.json. Only `providers` is touched; any other
+// The parsed models.json. Only `providers` is touched; any other
 // keys the user (or pi) put there are preserved on write.
 type ModelsJson = { providers?: Record<string, unknown>; [k: string]: unknown };
 
@@ -225,7 +223,7 @@ export function apiKeyInteraction(value: string, method?: string) {
 // --- Runtime + models.json plumbing ------------------------------------------
 
 function piModelsPath(): string {
-  return `${home()}/.pi/agent/models.json`;
+  return `${agentDir()}/models.json`;
 }
 
 // Missing or corrupt file → {} so callers add the first entry cleanly (mirrors
@@ -335,7 +333,7 @@ async function mergeCredentialEnv(
   id: string,
   env: Record<string, string>,
 ): Promise<void> {
-  const path = `${home()}/.pi/agent/auth.json`;
+  const path = `${agentDir()}/auth.json`;
   let auth: Record<string, { env?: Record<string, string> }>;
   try {
     auth = JSON.parse(await Deno.readTextFile(path));

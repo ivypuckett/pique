@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { ExtensionSource } from "./bindings.ts";
 
-  // Presentation only. Library.svelte does the extensionsRead and keeps the digest it
-  // returned, so the bytes handed to extensionsEnable are provably the bytes shown here
-  // — splitting the read across this boundary would make the gate prove nothing.
+  // Presentation only: Library.svelte does the extensionsRead.
   //
   // One pane for both origins: a local module is always a single file, a package is
   // however many entry files pi resolved for it, and it is the code that is the artifact

@@ -15,17 +15,18 @@ modes rather than counting as an unrecognised key.
 | --- | --- | --- |
 | `ctrl+h` | view | `n` new · `w` close · `h`/`l` previous/next · `enter` focus |
 | `ctrl+j` | workspace | `n` new · `o` open a folder · `w` close · `k`/`j` up/down · `enter` focus |
-| `ctrl+t` | pane | `e` editor · `t` terminal · `g` git diff · `k` kanban · `b` library · `a` automatons · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
+| `ctrl+t` | pane | `e` editor · `t` terminal · `g` git diff · `n` new · `w` close · `↑`/`↓` rail row · `h`/`l` previous/next tab · `1`-`9` jump · `enter` focus |
 
 The pane chord's letters are the module rail's rows, one letter each, and they
-**show** a row rather than adding to it: `ctrl+t k` twice is still one Kanban.
+**show** a row rather than adding to it: `ctrl+t g` twice is still one Git Diff.
 `n` is what adds — one more of whatever row you are on, so `ctrl+t n` is a second
 terminal. Only a row that may hold more than one answers it.
 
-`b` is Library because `l` is worth more as "next tab" — the strip is something
-you move along far more often than you open a library. The rail moves on `↑`/`↓`
-rather than `j`/`k` for a plainer reason: `k` is already Kanban's, and every row
-has a letter, so the arrows are a convenience rather than the way in.
+A module of your own has a rail row but no letter: the chord is a fixed namespace,
+and a module claiming a letter could shadow a built-in. The rail moves on
+`↑`/`↓` rather than `j`/`k` because every built-in row has a letter, so the
+arrows are a convenience rather than the way in — and the one way in to a module
+of your own.
 
 ### Sticky and one-shot
 
@@ -42,7 +43,7 @@ somewhere else.
 
 Only two rows have tabs to close: **terminal**, which can hold several, and
 **editor**, whose tabs are the files you opened from the tree. A singleton row
-— Git Diff, Kanban, Library, Automatons — *is* its module: it has no tab strip,
+— Git Diff, or a module of your own that does not ask for more — *is* its module: it has no tab strip,
 no close button, and `ctrl+t w` does nothing there. It mounts the first time you
 visit it and stays for the life of the view, the way the file tree does.
 
@@ -59,10 +60,10 @@ goes to a shell you cannot see. The second half is the convenience: a terminal
 you cannot type into is not one you really opened.
 
 Terminals only, on the way in. The helper focuses a pane's first focusable
-element, which for a terminal is xterm's textarea but for Kanban is the first
-column's rename field — so focusing every module would turn a stray keystroke
-after `ctrl+t k` into a renamed column. Everything else keeps focus where it
-already was. `ctrl+t` additionally reveals the right pane if it was collapsed.
+element, which for a terminal is xterm's textarea but for another module is
+whatever control happens to come first — so focusing every module would hand a
+stray keystroke after `ctrl+t` to that control. Everything else keeps focus
+where it already was. `ctrl+t` additionally reveals the right pane if it was collapsed.
 
 `ctrl+t e` is the one exception that focuses something else: it selects the
 editor row and puts the caret in the file tree, which is an explicit step in

@@ -10,7 +10,7 @@
   // The box holds the path as a raw string, `~` and all, so going UP is ordinary text
   // editing — there is no parent entry in the dropdown, and no directory it refuses to
   // leave. `path` is the committed value and the box mirrors it whenever it isn't being
-  // edited; blank means the workspace inherits its directory, shown as the "~" the
+  // edited; blank means the workspace has no directory of its own, shown as the "~" the
   // backend resolves that to.
   //
   // The box is right-aligned: a path longer than its 32ch then keeps its tail — the
@@ -78,7 +78,7 @@
   }
 
   // Enter with nothing highlighted. A path that doesn't list is refused and keeps focus,
-  // so a typo can be corrected in place; an empty box commits, restoring inheritance.
+  // so a typo can be corrected in place; an empty box commits, restoring the default.
   async function commit(): Promise<void> {
     const dir = normalize(text);
     if (dir !== "" && (await listEntries(dir)) === null) {
