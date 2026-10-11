@@ -8,7 +8,6 @@ import Terminal from "../terminal/Terminal.svelte";
 import Chat from "../chat/Chat.svelte";
 import FileTree from "../filetree/FileTree.svelte";
 import GitDiff from "../gitdiff/GitDiff.svelte";
-import Library from "../library/Library.svelte";
 import UserModule from "./UserModule.svelte";
 import { moduleDef } from "./manifest.ts";
 
@@ -32,7 +31,6 @@ export const registry: Record<
   chat: Chat,
   filetree: FileTree,
   gitdiff: GitDiff,
-  library: Library,
 };
 
 // Which component renders `kind`: the built-in for it, or the iframe host for a module

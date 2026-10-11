@@ -28,12 +28,13 @@
   import SystemPromptDetail from "../prompts/SystemPromptDetail.svelte";
   import SystemPromptEditor from "../prompts/SystemPromptEditor.svelte";
 
-  // Everything in pi's agent dir (~/.pi/agent), which pique shares with the `pi` CLI:
-  // the two prompt files, extensions and the modules beside them, prompt templates and
-  // skills. One list, because pi loads all of it the same way — by finding it there.
-
-  // A module tab stays mounted when it is not active (Column.svelte hides it with a
-  // class), so nothing re-lists on its own — bumping this counter is how the user asks.
+  // Settings → Library. Everything in pi's agent dir (~/.pi/agent), which pique shares
+  // with the `pi` CLI: the two prompt files, extensions and the modules beside them,
+  // prompt templates and skills. One list, because pi loads all of it the same way — by
+  // finding it there.
+  //
+  // Mounted when the section is opened, so it lists afresh each time; bumping this
+  // counter is how the user asks for a re-read without leaving it.
   let refreshKey = $state(0);
 
   const ext = extensionBindings();
@@ -360,23 +361,26 @@
   </li>
 {/snippet}
 
-<div class="flex h-full min-h-0 flex-col">
-  <div class="flex shrink-0 items-center gap-1 border-b border-base-300 px-3 py-1.5">
-    <span class="text-xs opacity-60">
-      pi's agent dir, <code>~/.pi/agent</code> — shared with the <code>pi</code> CLI.
-    </span>
-    <button
-      class="btn btn-ghost btn-xs ml-auto"
-      aria-label="Refresh"
-      title="Re-read the prompt files, extensions, modules, templates and skills"
-      onclick={() => refreshKey++}
-    >↻</button>
+<div>
+  <div class="mb-3 flex items-center gap-1">
+    <span class="text-xs uppercase tracking-wide text-primary">Library</span>
+    {#if desktop}
+      <button
+        class="btn btn-ghost btn-xs ml-auto"
+        aria-label="Refresh"
+        title="Re-read the prompt files, extensions, modules, templates and skills"
+        onclick={() => refreshKey++}
+      >↻</button>
+    {/if}
   </div>
 
   {#if !desktop}
-    <div class="p-4 text-xs opacity-70">Available in the desktop app only.</div>
+    <div class="text-xs opacity-70">Available in the desktop app only.</div>
   {:else}
-    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+    <div class="mb-3 text-xs opacity-70">
+      pi's agent dir, <code>~/.pi/agent</code> — shared with the <code>pi</code> CLI.
+    </div>
+    <div>
       <!-- The Add bar. The catalog searches pi PACKAGES, which is the install path for
            extensions, templates and skills alike — which is why it sits above the whole
            library rather than under one part of it. -->

@@ -14,6 +14,7 @@
   } from "./themes.ts";
   import { parseThemeCss } from "./theme_css.ts";
   import { refreshChatModels } from "../chat/store.ts";
+  import Library from "../library/Library.svelte";
 
   // Same modifier glyph the status bar shows for the shortcuts it lists.
   const mod = navigator.userAgent.includes("Mac") ? "⌘" : "⌃";
@@ -401,6 +402,7 @@
     { id: "appearance", label: "Appearance" },
     { id: "workspace", label: "Workspace" },
     { id: "providers", label: "Providers" },
+    { id: "library", label: "Library" },
   ] as const;
   let section = $state<(typeof SECTIONS)[number]["id"]>("appearance");
 </script>
@@ -867,6 +869,10 @@
         {#if provError}<div class="mt-2 break-all text-xs text-error">{provError}</div>{/if}
       {/if}
 
+      {/if}
+
+      {#if section === "library"}
+        <Library />
       {/if}
 
       </div>

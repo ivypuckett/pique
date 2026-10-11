@@ -4,7 +4,6 @@ import {
   createInitialView,
   gridTemplateColumns,
   MIN_WIDTH_CH,
-  moduleLabel,
   resizeBoundary,
 } from "./layout.ts";
 import {
@@ -175,7 +174,7 @@ Deno.test("groupTabs lists one group's tabs, in open order", () => {
     "right-3",
   ]);
   assertEquals(groupTabs(v, "gitdiff").map((t) => t.id), ["right-2"]);
-  assertEquals(groupTabs(v, "library"), []);
+  assertEquals(groupTabs(v, EDITOR), []);
   // no group argument means the selected one
   assertEquals(groupTabs(v).map((t) => t.id), ["right-1", "right-3"]);
 });
@@ -238,9 +237,9 @@ Deno.test("selectGroup shows an open group without opening anything", () => {
 });
 
 Deno.test("selectGroup opens the module when its row is empty", () => {
-  const v = selectGroup(createInitialView(), "library");
-  assertEquals(v.right.activeGroup, "library");
-  assertEquals(groupTabs(v, "library").map((t) => t.title), ["Library"]);
+  const v = selectGroup(createInitialView(), "gitdiff");
+  assertEquals(v.right.activeGroup, "gitdiff");
+  assertEquals(groupTabs(v, "gitdiff").map((t) => t.title), ["Git Diff"]);
 });
 
 Deno.test("selectGroup selects the empty editor row rather than opening a module", () => {
@@ -263,7 +262,7 @@ Deno.test("selectGroup reopens a module whose last tab was closed", () => {
 });
 
 Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
-  // rail order: editor, terminal, gitdiff, library
+  // rail order: editor, terminal, gitdiff
   let v = createInitialView(); // terminal selected
   v = focusAdjacentGroup(v, -1);
   assertEquals(v.right.activeGroup, EDITOR);
@@ -273,7 +272,7 @@ Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
   v = focusAdjacentGroup(v, 1);
   assertEquals(v.right.activeGroup, "gitdiff");
   for (let i = 0; i < 9; i++) v = focusAdjacentGroup(v, 1);
-  assertEquals(v.right.activeGroup, "library"); // clamped at the bottom
+  assertEquals(v.right.activeGroup, "gitdiff"); // clamped at the bottom
 });
 
 Deno.test("focusAdjacentGroup opens the module of the row it lands on", () => {
@@ -458,18 +457,6 @@ Deno.test("addDiffTab adds a gitdiff tab in the editor group, scoped to the file
   assertEquals(tab.props, {
     path: "/home/ivy/workspace/pique/src/lib/layout.ts",
   });
-});
-
-Deno.test("library is a module kind with a capitalised label", () => {
-  assertEquals(moduleLabel("library"), "Library");
-});
-
-Deno.test("addTab opens a Library tab titled Library", () => {
-  const v = addTab(createInitialView(), "library");
-  const tab = v.right.tabs.at(-1)!;
-  assertEquals(tab.kind, "library");
-  assertEquals(tab.title, "Library");
-  assertEquals(activeTabId(v), tab.id);
 });
 
 // A view saved while a module was installed, read back after it was removed.

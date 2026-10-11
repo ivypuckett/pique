@@ -25,12 +25,10 @@ export type ModuleDef = {
 export const MODULES: ModuleDef[] = [
   { kind: "terminal", label: "Terminal", key: "t", duplicable: true },
   { kind: "gitdiff", label: "Git Diff", key: "g" },
-  // b, not l: "next tab" is worth more on l — the pane is a strip you move along far
-  // more often than you open a library.
-  { kind: "library", label: "Library", key: "b" },
 ];
 
-// Modules contributed by installed extensions, set at boot and on Library refresh.
+// Modules contributed by installed extensions, set at boot and whenever one is written
+// or deleted.
 // Held apart from MODULES rather than merged into it because the ctrl+t chord reads
 // MODULES directly (App.svelte, StatusBar.svelte) and must not see an install: a
 // letter is a fixed namespace, and an install claiming one could shadow a built-in.

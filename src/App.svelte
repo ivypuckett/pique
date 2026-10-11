@@ -108,8 +108,8 @@
 
   // The presented view's active tab: only its content is on screen (hidden tabs and
   // background views are display:none, so offsetParent is null) — and a module can keep
-  // several panes mounted itself — Library hides its inactive sub-tab — so the same test
-  // has to filter the candidates, not just the pane.
+  // several panes mounted itself, so the same test has to filter the candidates, not
+  // just the pane.
   function focusActiveTab() {
     const panes = document.querySelectorAll<HTMLElement>("[data-tab-content]");
     for (const pane of panes) {
