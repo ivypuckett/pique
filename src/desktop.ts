@@ -33,6 +33,8 @@ let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
 let systemPrompts: typeof import("./lib/prompts/system.ts");
+let importer: typeof import("./lib/import.ts");
+let paths: typeof import("./lib/paths.ts");
 // Assigned when the module file server starts, at the very bottom of this file.
 let modulesPort = 0;
 
@@ -139,7 +141,8 @@ win.bind("chatStart", async (arg) => {
     view?: string;
     fresh?: boolean;
   };
-  return { id: await chat.startAgent({ cwd, workspace, view, fresh }) };
+  const id = await chat.startAgent({ cwd, workspace, view, fresh });
+  return { id, thinking: chat.thinkingLevelOf(id) };
 });
 
 win.bind("chatHistory", async (arg) => {
@@ -214,7 +217,7 @@ win.bind("chatSetThinking", async (arg) => {
 });
 
 // Model-provider management — connect any provider pi supports (see chat/providers.ts).
-// API keys persist to ~/.pi/agent/auth.json; custom endpoints to ~/.pi/agent/models.json.
+// API keys persist to auth.json in the agent dir; custom endpoints to models.json there.
 win.bind("providerList", async () => await providers.listProviders());
 
 // Every model the connected providers offer, independent of any chat session — what
@@ -421,6 +424,21 @@ win.bind("systemPromptsDelete", async (arg) => {
   return true;
 });
 
+// The agent dir this process runs against, and pi's own — the setting can differ from
+// the first until the next launch, and Settings says so.
+win.bind("agentDir", () =>
+  Promise.resolve({ dir: paths.agentDir(), pi: paths.piAgentDir() })
+);
+
+// Copy the `pi` CLI's setup in (lib/import.ts). It may have replaced auth.json,
+// models.json and settings.json, so the runtime and the package manager re-read them.
+win.bind("importFromPi", async () => {
+  const result = await importer.importFromPi();
+  chat.resetRuntime();
+  extensions.resetPackageManager();
+  return result;
+});
+
 // The close button is a quit: pique is a single window, and by the time this returns
 // every pty it owned is gone. Exit rather than leaving that to the window —
 // on macOS the webview backend can decline to close, and a window that stays up after
@@ -447,6 +465,13 @@ extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
 skills = await import("./lib/skills/service.ts");
 systemPrompts = await import("./lib/prompts/system.ts");
+importer = await import("./lib/import.ts");
+paths = await import("./lib/paths.ts");
+// Where pi's agent dir is, from Settings — before anything is served, so no handler
+// runs against the default by mistake. Fixed until the next launch (paths.ts).
+paths.configureAgentDir(
+  settings.resolveAgentDir(await settings.readJson("settings")),
+);
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const { fromFileUrl } = await import("@std/path");
 // Resolved off this module rather than the cwd: `--include dist` embeds the build one

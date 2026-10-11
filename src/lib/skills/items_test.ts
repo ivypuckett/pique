@@ -6,7 +6,7 @@ function s(over: Partial<SkillInfo> = {}): SkillInfo {
   return {
     name: "brainstorming",
     description: "explore an idea",
-    path: "/home/x/.pi/agent/skills/brainstorming",
+    path: "/home/x/.pique/agent/skills/brainstorming",
     ...over,
   };
 }

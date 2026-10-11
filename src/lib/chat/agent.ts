@@ -141,7 +141,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
 import { listAvailableModels } from "./available.ts";
-import { readJson, resolveModuleDir } from "../settings/file.ts";
+import { resolveModuleDir } from "../settings/file.ts";
 import { moduleAuthoringTools } from "../modules/agent-tools.ts";
 import { readPromptFiles } from "../prompts/system.ts";
 import { agentDir, piqueDir, viewSessionsDir } from "../paths.ts";
@@ -154,8 +154,10 @@ type Session = any;
 const FALLBACK_PROVIDER = "lmstudio";
 const FALLBACK_MODEL = "google/gemma-4-e4b";
 
-// Pure projection of the chat defaults (~/.pique/chat.json) → the agent's startup
-// model + thinking. `config` is whatever readJson("chat") returned: possibly null, or
+// Pure projection of pi's settings.json (in the agent dir) → the agent's startup model +
+// thinking. pi keeps them there itself: a session's setModel and setThinkingLevel save
+// the pick as the new default, so the next conversation starts on it. `config` is
+// whatever readAgentSettings returned: possibly null, or
 // holding non-string values, so every field is guarded.
 export function resolveChatDefaults(
   config: unknown,
@@ -196,10 +198,33 @@ let runtime: ModelRuntime | undefined;
 
 // The single shared ModelRuntime, created lazily. Exported so provider
 // management (providers.ts) mutates the same runtime the chat agents stream
-// from — auth/models changes there take effect without a restart.
+// from — auth/models changes there take effect without a restart. Handed the agent
+// dir's two files explicitly rather than left to find pi's own dir.
 export async function ensureRuntime() {
-  if (!runtime) runtime = await ModelRuntime.create();
+  if (!runtime) {
+    runtime = await ModelRuntime.create({
+      authPath: `${agentDir()}/auth.json`,
+      modelsPath: `${agentDir()}/models.json`,
+    });
+  }
   return runtime;
+}
+
+// Drop the runtime so the next caller re-reads auth.json and models.json — after an
+// import has replaced them underneath it. Conversations already running keep the one
+// they started with.
+export function resetRuntime(): void {
+  runtime = undefined;
+}
+
+// pi's settings.json in the agent dir, read rather than written: pi writes it itself.
+// Missing or corrupt → null, and resolveChatDefaults falls back.
+async function readAgentSettings(): Promise<unknown> {
+  try {
+    return JSON.parse(await Deno.readTextFile(`${agentDir()}/settings.json`));
+  } catch {
+    return null;
+  }
 }
 
 // Start an agent and return its id. `workspace` and `view` name the Chat module it
@@ -219,7 +244,7 @@ export async function startAgent(
   // Startup model/thinking come from the chat defaults; fall back to the consts when
   // unset or when the configured model isn't available.
   const { provider, modelId, thinking } = resolveChatDefaults(
-    await readJson("chat"),
+    await readAgentSettings(),
   );
   const cwd = resolveModuleDir(opts.cwd);
   // The view owns the conversation, so it owns the directory the session files live
@@ -246,7 +271,7 @@ export async function startAgent(
     model,
     cwd,
     customTools,
-    // pi's own agent dir, shared with the `pi` CLI (paths.ts). The sessionManager below
+    // The agent dir (paths.ts). The sessionManager below
     // is given its dir explicitly rather than deriving it here, so conversations stay
     // pique's.
     agentDir: dir,
@@ -422,6 +447,11 @@ export function setThinkingLevel(id: string, level: ThinkingLevel): void {
   agents.get(id)?.session.setThinkingLevel(level);
 }
 
+// The level this agent is running at — what the picker shows when it opens.
+export function thinkingLevelOf(id: string): ThinkingLevel {
+  return agents.get(id)?.session.thinkingLevel ?? "off";
+}
+
 // Names of the tools this agent can actually call: pi's builtins, pique's compiled-in
 // tool, and every tool registered by an extension pi loaded.
 export function activeToolNames(id: string): string[] {
@@ -492,7 +522,7 @@ async function pendingModelDefault(
 ): Promise<{ provider: string; id: string } | undefined> {
   const live = agent.session.model;
   if (!live || !runtime) return undefined;
-  const { provider, modelId } = resolveChatDefaults(await readJson("chat"));
+  const { provider, modelId } = resolveChatDefaults(await readAgentSettings());
   if (provider === live.provider && modelId === live.id) return undefined;
   return runtime.getModel(provider, modelId)
     ? { provider, id: modelId }

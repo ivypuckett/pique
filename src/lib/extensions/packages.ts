@@ -1,7 +1,6 @@
 // Package extensions: third-party pi packages (npm/git/local path), managed through
-// pi's own DefaultPackageManager against pi's agent dir (paths.ts) — the same place the
-// `pi` CLI installs them, so a package installed in either is installed in both. Runs in
-// the desktop process only.
+// pi's own DefaultPackageManager against the agent dir (paths.ts), laid out the way the
+// `pi` CLI lays out its own. Runs in the desktop process only.
 //
 //   install  install(source) + addSourceToSettings(source)   downloads and enables
 //   review   resolveExtensionSources(...)                     the entry files that run
@@ -116,6 +115,12 @@ async function manager() {
     managers.set(dir, pm);
   }
   return pm;
+}
+
+// Forget the cached manager, so the next call re-reads settings.json — after an import
+// has rewritten it underneath the one held here.
+export function resetPackageManager(): void {
+  managers.clear();
 }
 
 // Whether a source is a local path rather than an npm/git spec, by the same rule pi's

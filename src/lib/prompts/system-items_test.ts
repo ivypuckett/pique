@@ -6,7 +6,7 @@ function file(
   kind: "system" | "appendix",
   body?: string,
 ): PromptFileInfo {
-  return { kind, path: `/home/x/.pi/agent/${kind}`, body };
+  return { kind, path: `/home/x/.pique/agent/${kind}`, body };
 }
 
 Deno.test("both rows are listed, present or not", () => {

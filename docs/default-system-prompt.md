@@ -3,7 +3,7 @@
 **Status: proposal. Nothing here is shipped, seeded, or written to `~/.pique`.**
 Card `717e160f` asks what should go in a default prompt; this is the answer for
 you to approve, reject or edit. If you approve it, the text in §5 gets pasted
-into `~/.pi/agent/APPEND_SYSTEM.md` from Settings → Library — by you, once,
+into `APPEND_SYSTEM.md` in the agent folder from Settings → Library — by you, once,
 deliberately.
 
 ---
@@ -77,7 +77,7 @@ and the proposed default would be redundant here.
 
 The difference is reach and ownership:
 
-|                   | `CLAUDE.md`                     | `~/.pi/agent/APPEND_SYSTEM.md`        |
+|                   | `CLAUDE.md`                     | `~/.pique/agent/APPEND_SYSTEM.md`     |
 | ----------------- | ------------------------------- | ------------------------------------- |
 | Applies to        | one project directory           | every conversation, every project     |
 | Lives in          | the repo, shared with the team  | your machine, yours alone             |

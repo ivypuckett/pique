@@ -14,8 +14,8 @@ function withHome(home: string, fn: () => void): void {
 // pi's own extensions dir, where it discovers every `<name>.ts` itself.
 Deno.test("local extensions live in pi's agent dir", () => {
   withHome("/home/x", () => {
-    assertEquals(liveDir(), "/home/x/.pi/agent/extensions");
-    assertEquals(livePath("my_ext"), "/home/x/.pi/agent/extensions/my_ext.ts");
+    assertEquals(liveDir(), "/home/x/.pique/agent/extensions");
+    assertEquals(livePath("my_ext"), "/home/x/.pique/agent/extensions/my_ext.ts");
   });
 });
 

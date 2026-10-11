@@ -20,7 +20,9 @@
     type PromptFileDraft,
   } from "../prompts/system-items.ts";
   import { type LibraryItem, type LibraryKind, sortItems } from "./items.ts";
-  import { refreshChatCommands } from "../chat/store.ts";
+  import { refreshChatCommands, refreshChatModels } from "../chat/store.ts";
+  import { settings } from "../settings/store.ts";
+  import { agentDirBindings } from "../settings/bindings.ts";
   import ExtensionReview from "../extensions/ExtensionReview.svelte";
   import PromptDetail from "../prompts/PromptDetail.svelte";
   import PromptEditor from "../prompts/PromptEditor.svelte";
@@ -28,10 +30,10 @@
   import SystemPromptDetail from "../prompts/SystemPromptDetail.svelte";
   import SystemPromptEditor from "../prompts/SystemPromptEditor.svelte";
 
-  // Settings → Library. Everything in pi's agent dir (~/.pi/agent), which pique shares
-  // with the `pi` CLI: the two prompt files, extensions and the modules beside them,
-  // prompt templates and skills. One list, because pi loads all of it the same way — by
-  // finding it there.
+  // Settings → Library. Everything in pi's agent dir (~/.pique/agent unless moved, see
+  // lib/paths.ts): the two prompt files, extensions and the modules beside them, prompt
+  // templates and skills. One list, because pi loads all of it the same way — by finding
+  // it there.
   //
   // Mounted when the section is opened, so it lists afresh each time; bumping this
   // counter is how the user asks for a re-read without leaving it.
@@ -42,6 +44,25 @@
   const prompts = promptBindings();
   const skills = skillBindings();
   const sysPrompts = systemPromptBindings();
+  const dirs = agentDirBindings();
+
+  // The agent dir this launch runs against, and the `pi` CLI's own — what an import
+  // copies from. The setting can differ from `inUse` until pique restarts.
+  let inUse = $state("");
+  let piDir = $state("");
+  let importing = $state(false);
+  // The import's own report, shown beside the button that asked for it — the shared
+  // notice line sits under the whole list, out of view.
+  let imported = $state("");
+  let importError = $state("");
+  dirs?.agentDir().then((d) => {
+    inUse = d.dir;
+    piDir = d.pi;
+  });
+  const pending = $derived(
+    inUse !== "" && $settings.agent.dir.trim() !== "" &&
+      $settings.agent.dir.trim() !== inUse,
+  );
   // All the factories read the same `globalThis.bindings`, so one check covers the lot:
   // in web mode there is no desktop backend at all.
   const desktop = ext !== null && prompts !== null && skills !== null &&
@@ -266,6 +287,27 @@
     if (searched || query.trim() !== "") search();
   }
 
+  async function confirmImport(): Promise<void> {
+    importing = false;
+    imported = "";
+    importError = "";
+    if (!dirs) return;
+    busy = true;
+    try {
+      const { copied, kept } = await dirs.importFromPi();
+      imported = `Imported ${copied} file${copied === 1 ? "" : "s"} from ${piDir}` +
+        (kept ? `; kept ${kept} you already had here.` : ".") +
+        " Type /reload in a Chat module to load them there.";
+      await refresh();
+      refreshChatCommands();
+      // Its providers may be new to the model pickers.
+      refreshChatModels();
+    } catch (e) {
+      importError = e instanceof Error ? e.message : String(e);
+    }
+    busy = false;
+  }
+
   async function confirmInstall(): Promise<void> {
     confirming = false;
     if (!ext) return;
@@ -377,8 +419,59 @@
   {#if !desktop}
     <div class="text-xs opacity-70">Available in the desktop app only.</div>
   {:else}
-    <div class="mb-3 text-xs opacity-70">
-      pi's agent dir, <code>~/.pi/agent</code> — shared with the <code>pi</code> CLI.
+    <!-- Where all of it lives. A path rather than a picker: it may not exist yet, and
+         it is read once at launch, so there is nothing to browse or apply here. -->
+    <div class="mb-4">
+      <div class="text-sm">Agent folder</div>
+      <div class="mt-0.5 text-xs opacity-70">
+        pi's agent dir: extensions, modules, prompt templates, skills, the prompt files
+        and provider credentials. Point it at <code>~/.pi/agent</code> to share it with
+        the <code>pi</code> CLI. Takes effect when pique restarts.
+      </div>
+      <div class="mt-2 flex gap-2">
+        <input
+          class="input input-bordered input-sm flex-1 font-mono"
+          placeholder="~/.pique/agent"
+          aria-label="Agent folder"
+          bind:value={$settings.agent.dir}
+        />
+        <button
+          type="button"
+          class="btn btn-sm"
+          disabled={busy || importing || piDir === "" || piDir === inUse}
+          title={`Copy the pi CLI's setup from ${piDir} into this folder`}
+          onclick={() => (importing = true)}
+        >Import from pi…</button>
+      </div>
+      {#if imported}<div class="mt-1 text-xs text-success">{imported}</div>{/if}
+      {#if importError}
+        <div class="mt-1 break-all text-xs text-error">{importError}</div>
+      {/if}
+      {#if pending}
+        <div class="mt-1 text-[0.65rem] text-warning">
+          In use until restart: <code>{inUse}</code>
+        </div>
+      {/if}
+      {#if importing}
+        <div class="mt-3 rounded border border-warning/50 bg-warning/10 p-3">
+          <div class="text-sm font-medium text-warning">Import pi's setup?</div>
+          <div class="mt-1.5 text-xs opacity-80">
+            Copies <code>{piDir}</code> into <code>{inUse}</code>: extensions,
+            packages, prompt templates, skills, the prompt files and provider
+            credentials. Anything already here is kept, and pi's chat history is left
+            behind.
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button type="button" class="btn btn-warning btn-sm" onclick={confirmImport}
+            >Import</button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onclick={() => (importing = false)}
+            >Cancel</button>
+          </div>
+        </div>
+      {/if}
     </div>
     <div>
       <!-- The Add bar. The catalog searches pi PACKAGES, which is the install path for
@@ -561,7 +654,7 @@
         afterwards, or on <code>/reload</code>; a module appears in the right pane's rail.
         A template is sent by typing <code>/name</code>. Skills are read-only here — add
         one by putting a <code>&lt;name&gt;/SKILL.md</code> directory or a
-        <code>&lt;name&gt;.md</code> file in <code>~/.pi/agent/skills/</code>.
+        <code>&lt;name&gt;.md</code> file in the agent folder's <code>skills/</code>.
       </div>
 
       {#if notice}<div class="mt-2 text-xs text-success">{notice}</div>{/if}

@@ -13,7 +13,6 @@ import {
   type ReloadSummary,
   type ThinkingLevel,
 } from "./bindings.ts";
-import { readConfig, writeConfig } from "../settings/bindings.ts";
 import { hydrateModules } from "../modules/bindings.ts";
 
 // Defined next to ChatEvent in chat/agent.ts: the backend rebuilds the same Items for a
@@ -44,20 +43,6 @@ export function formatReloadNotice(summary: ReloadSummary): string {
     );
   }
   return `Reloaded — ${parts.join("; ")}`;
-}
-
-// The chat defaults, ~/.pique/chat.json: the model and thinking level a new conversation
-// starts on (chat/agent.ts resolveChatDefaults). A pick in any chat becomes the default
-// for the next one.
-type ChatDefaults = {
-  defaultProvider?: string;
-  defaultModel?: string;
-  defaultThinkingLevel?: ThinkingLevel;
-};
-
-async function patchChatDefaults(patch: ChatDefaults): Promise<void> {
-  const own = (await readConfig("chat") ?? {}) as ChatDefaults;
-  await writeConfig("chat", { ...own, ...patch });
 }
 
 export interface ChatSession {
@@ -92,13 +77,9 @@ function createSession(
   const streaming = writable(false);
   const models = writable<ModelInfo[]>([]);
   const commands = writable<CommandInfo[]>([]);
-  // Starts at "off" and is corrected once the chat defaults load. The backend applies
-  // the same value to the agent itself, so this only keeps the picker's label honest.
+  // Starts at "off" and is corrected to what the agent runs at once it starts — pi's
+  // default, which is the last level picked anywhere.
   const level = writable<ThinkingLevel>("off");
-  readConfig("chat").then((c) => {
-    const l = (c as ChatDefaults | null)?.defaultThinkingLevel;
-    if (l) level.set(l);
-  });
 
   // The backend agent id, assigned once chatStart resolves.
   let id: string | undefined;
@@ -225,6 +206,7 @@ function createSession(
       }
       id = started.id;
       items.set(history);
+      if (started.thinking) level.set(started.thinking);
       ready.set(true);
       models.set(await b.chatListModels({ id }));
       commands.set(await b.chatListCommands({ id }));
@@ -301,18 +283,12 @@ function createSession(
       const m = get(models).find((x) => `${x.provider}/${x.id}` === value);
       if (b && m && id) {
         await b.chatSetModel({ id, provider: m.provider, model: m.id });
-        // The pick becomes the default for the next conversation, wherever it starts.
-        patchChatDefaults({
-          defaultProvider: m.provider,
-          defaultModel: m.id,
-        });
         models.set(await b.chatListModels({ id }));
       }
     },
     pickLevel(value: ThinkingLevel) {
       level.set(value);
       if (id) b?.chatSetThinking({ id, level: value });
-      patchChatDefaults({ defaultThinkingLevel: value });
     },
     // Put the saved conversation behind us and begin another. The old session file stays
     // on disk; it is simply no longer the most recent one. Reached from the chat by

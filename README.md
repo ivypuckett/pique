@@ -39,8 +39,9 @@ WebKitGTK, so if the window never appears, start it from the task instead.
    workspace carry parallel lines of work.)
 2. System prompts can do more harm than good. Not specifying one within pique
    removes it entirely.
-3. pique adopts pi's philosophy: it uses pi's own agent dir (`~/.pi/agent`, shared
-   with the `pi` CLI) and lets pi discover what is in it. Nothing is gated or
+3. pique adopts pi's philosophy: it keeps a pi agent dir (`~/.pique/agent`, laid
+   out exactly as the `pi` CLI's `~/.pi/agent`) and lets pi discover what is in
+   it. Nothing is gated or
    sandboxed by pique — an extension, or a module, is trusted code, and
    sandboxing is left to an extension that wants to provide it.
 4. Linux, macOS and Windows are all supported targets. Linux is what pique is
@@ -72,10 +73,10 @@ Notes:
 - Provider: LM Studio, Anthropic, etc.
 - Thinking Level: Sets how much the agent deliberates before speaking.
 
-- System Prompt: `~/.pi/agent/SYSTEM.md`, which replaces pi's own preamble.
+- System Prompt: `SYSTEM.md` in the agent folder, which replaces pi's own preamble.
   pique ships none (decision 2) — with no `SYSTEM.md`, pi's preamble is what
   runs. In a trusted project, its own `.pi/SYSTEM.md` takes precedence.
-- System Prompt Appendix: `~/.pi/agent/APPEND_SYSTEM.md`, added on top of
+- System Prompt Appendix: `APPEND_SYSTEM.md` in the agent folder, added on top of
   whichever base applies rather than replacing it — house rules without a
   replacement preamble. Both are edited in Settings → Library.
 - Prompt Template: A markdown file you send as a message by typing `/name` in a
@@ -99,3 +100,18 @@ Notes:
 Settings → Library lists what is in pi's agent dir — the system prompt and
 appendix, extensions and installed packages, modules, prompt templates and
 skills — to view, edit, install and delete.
+
+## Where things live
+
+Everything is under `~/.pique`:
+
+| Path | Holds |
+| --- | --- |
+| `~/.pique/agent/` | pi's agent dir: extensions and modules, packages, prompt templates, skills, `SYSTEM.md`/`APPEND_SYSTEM.md`, provider credentials, and the default model (`settings.json`) |
+| `~/.pique/settings.json`, `layout.json` | pique's preferences, and its workspaces and views |
+| `~/.pique/sessions/` | chat conversations, one directory per view |
+| `~/.pique/modules/` | what each user module has saved |
+
+The agent folder can be moved in Settings → Library — point it at `~/.pi/agent` to
+share one setup with the `pi` CLI — and "Import from pi" copies the CLI's setup into
+it.

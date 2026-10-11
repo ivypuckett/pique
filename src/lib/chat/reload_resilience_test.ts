@@ -17,7 +17,6 @@ import {
 } from "./agent.ts";
 import { removeLocal } from "../extensions/local.ts";
 import { ensureExtensionDirs, livePath } from "../extensions/paths.ts";
-import { writeJson } from "../settings/file.ts";
 import { agentDir } from "../paths.ts";
 
 const REPLY = "resilience-reply-ok";
@@ -110,9 +109,9 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
   Deno.env.set("HOME", dir);
   newExchange();
   try {
-    await Deno.mkdir(`${dir}/.pi/agent`, { recursive: true });
+    await Deno.mkdir(`${dir}/.pique/agent`, { recursive: true });
     await Deno.writeTextFile(
-      `${dir}/.pi/agent/models.json`,
+      `${dir}/.pique/agent/models.json`,
       JSON.stringify({
         providers: {
           mock: {
@@ -128,7 +127,7 @@ async function withTempHome(fn: (cwd: string) => Promise<void>): Promise<void> {
         },
       }),
     );
-    await writeJson("chat", {
+    await writeAgentSettings({
       defaultProvider: "mock",
       defaultModel: "mock-model",
     });
@@ -595,3 +594,12 @@ export default function (pi: ExtensionAPI) {
     }
   });
 });
+
+// pi's settings.json in the agent dir, where the default model lives.
+async function writeAgentSettings(settings: unknown): Promise<void> {
+  await Deno.mkdir(agentDir(), { recursive: true });
+  await Deno.writeTextFile(
+    `${agentDir()}/settings.json`,
+    JSON.stringify(settings),
+  );
+}

@@ -150,7 +150,7 @@
   }
 
   // Model providers. Null in web-dev (no bindings) → the section shows a
-  // desktop-only note. Connections are shared with the `pi` CLI (see providers.ts).
+  // desktop-only note. Connections live in the agent dir (see providers.ts).
   const prov = providerBindings();
   let providers = $state<ProviderInfo[]>([]);
   let provError = $state("");

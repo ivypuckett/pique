@@ -40,7 +40,7 @@ function fakeBindings(resumed: Item[] = []) {
       });
       queues.set(id, []);
       histories.set(id, arg.fresh ? [] : resumed);
-      return Promise.resolve({ id });
+      return Promise.resolve({ id, thinking: "off" });
     },
     // deno-lint-ignore no-explicit-any
     chatHistory(arg: any) {
@@ -78,8 +78,6 @@ function fakeBindings(resumed: Item[] = []) {
     },
     chatSetModel: () => Promise.resolve(true),
     chatSetThinking: () => Promise.resolve(true),
-    configRead: () => Promise.resolve(null),
-    configWrite: () => Promise.resolve(true),
     moduleManifest: () => {
       moduleTableReads++;
       return Promise.resolve({ port: 0, modules: [] });

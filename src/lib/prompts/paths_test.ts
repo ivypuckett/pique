@@ -14,8 +14,8 @@ function withHome(home: string, fn: () => void): void {
 // pi auto-discovers <agentDir>/prompts, and here that discovery is the whole point.
 Deno.test("prompts live in pi's agent dir, where pi looks for them", () => {
   withHome("/tmp/home", () => {
-    assertEquals(promptsDir(), "/tmp/home/.pi/agent/prompts");
-    assertEquals(promptPath("ship"), "/tmp/home/.pi/agent/prompts/ship.md");
+    assertEquals(promptsDir(), "/tmp/home/.pique/agent/prompts");
+    assertEquals(promptPath("ship"), "/tmp/home/.pique/agent/prompts/ship.md");
   });
 });
 

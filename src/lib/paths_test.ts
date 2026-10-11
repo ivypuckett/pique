@@ -1,5 +1,12 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { agentDir, assertId, piqueDir, viewSessionsDir } from "./paths.ts";
+import {
+  agentDir,
+  assertId,
+  configureAgentDir,
+  piAgentDir,
+  piqueDir,
+  viewSessionsDir,
+} from "./paths.ts";
 
 function withHome(home: string, fn: () => void): void {
   const prev = Deno.env.get("HOME");
@@ -11,13 +18,34 @@ function withHome(home: string, fn: () => void): void {
   }
 }
 
-// pi's own agent dir, so pique and the `pi` CLI find the same extensions, templates,
-// skills and prompt files.
-Deno.test("the agent dir is pi's, and pique's own state is beside it", () => {
+// Everything under ~/.pique, with pi's agent dir laid out inside it — and the `pi`
+// CLI's own dir apart, as what an import copies from.
+Deno.test("the agent dir is inside ~/.pique, apart from pi's own", () => {
   withHome("/home/x", () => {
-    assertEquals(agentDir(), "/home/x/.pi/agent");
     assertEquals(piqueDir(), "/home/x/.pique");
+    assertEquals(agentDir(), "/home/x/.pique/agent");
+    assertEquals(piAgentDir(), "/home/x/.pi/agent");
   });
+});
+
+// The setting moves it, and a blank one is the default; either way pi is told, so an
+// extension asking pi for its dir gets the same answer.
+Deno.test("the agent dir can be moved, and pi is told where", () => {
+  const prev = Deno.env.get("PI_CODING_AGENT_DIR");
+  try {
+    withHome("/home/x", () => {
+      configureAgentDir("/home/x/.pi/agent");
+      assertEquals(agentDir(), "/home/x/.pi/agent");
+      assertEquals(Deno.env.get("PI_CODING_AGENT_DIR"), "/home/x/.pi/agent");
+      configureAgentDir("  ");
+      assertEquals(agentDir(), "/home/x/.pique/agent");
+      assertEquals(Deno.env.get("PI_CODING_AGENT_DIR"), "/home/x/.pique/agent");
+    });
+  } finally {
+    configureAgentDir(undefined);
+    if (prev === undefined) Deno.env.delete("PI_CODING_AGENT_DIR");
+    else Deno.env.set("PI_CODING_AGENT_DIR", prev);
+  }
 });
 
 Deno.test("each view keeps its conversations in a directory of its own", () => {
@@ -37,7 +65,7 @@ Deno.test("paths resolve off USERPROFILE where HOME is unset", () => {
   Deno.env.delete("HOME");
   Deno.env.set("USERPROFILE", "C:\\Users\\x");
   try {
-    assertEquals(agentDir(), "C:\\Users\\x/.pi/agent");
+    assertEquals(agentDir(), "C:\\Users\\x/.pique/agent");
   } finally {
     Deno.env.delete("USERPROFILE");
     if (prev) Deno.env.set("HOME", prev);

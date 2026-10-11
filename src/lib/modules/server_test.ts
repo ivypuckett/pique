@@ -5,7 +5,7 @@ import { uiPathFor } from "./server.ts";
 // `extensions/*.ts` by basename, so a directory would not load as an extension at all.
 Deno.test("a ui path is a sibling of the extension file it belongs to", () => {
   assertEquals(
-    uiPathFor("notes").endsWith("/.pi/agent/extensions/notes.ui.html"),
+    uiPathFor("notes").endsWith("/.pique/agent/extensions/notes.ui.html"),
     true,
   );
 });

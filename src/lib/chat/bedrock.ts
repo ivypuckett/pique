@@ -21,10 +21,11 @@
 // CANNOT work, which is most of them.
 //
 // This module reads (~/.aws, and the region out of pi's auth.json); providers.ts owns
-// every write to ~/.pi. That split is what keeps agent.ts able to import the filter
+// every write to the agent dir. That split is what keeps agent.ts able to import the filter
 // without a cycle through providers.ts → agent.ts.
 
 import { home } from "../home.ts";
+import { agentDir } from "../paths.ts";
 
 export const BEDROCK = "amazon-bedrock";
 
@@ -149,7 +150,7 @@ export async function resolveBedrockRegion(): Promise<string | undefined> {
   if (fromEnv) return fromEnv;
   try {
     const auth = JSON.parse(
-      await Deno.readTextFile(`${home()}/.pi/agent/auth.json`),
+      await Deno.readTextFile(`${agentDir()}/auth.json`),
     );
     const region = auth?.[BEDROCK]?.env?.AWS_REGION;
     return typeof region === "string" && region !== "" ? region : undefined;

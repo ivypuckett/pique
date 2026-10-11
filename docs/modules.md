@@ -27,7 +27,7 @@ There is no consent step. A module is trusted the way an extension is — see
 A module is an extension that also draws, so it lives where extensions live:
 
 ```
-~/.pi/agent/extensions/
+~/.pique/agent/extensions/
   notes.module.json     what it is called
   notes.ui.html         the single document its frame runs
   notes.ts              OPTIONAL — the pi extension, if it registers tools too

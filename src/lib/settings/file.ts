@@ -49,6 +49,20 @@ function expandTilde(dir: string): string {
   return trimmed;
 }
 
+// The "agent folder" setting (settings.agent.dir), `~` expanded, or undefined for the
+// default. `settings` is whatever readJson("settings") returned, so every field is
+// guarded.
+export function resolveAgentDir(settings: Json): string | undefined {
+  if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+    const agent = (settings as { [k: string]: Json }).agent;
+    if (agent && typeof agent === "object" && !Array.isArray(agent)) {
+      const dir = (agent as { [k: string]: Json }).dir;
+      if (typeof dir === "string") return expandTilde(dir) || undefined;
+    }
+  }
+  return undefined;
+}
+
 // How many directory levels to descend, when the workspace root is not itself a git
 // repo, looking for the repos inside so their changed folders can be highlighted.
 // Reads workspace.gitScanDepth, clamped to [0, 10] (0 = don't descend). Any missing,

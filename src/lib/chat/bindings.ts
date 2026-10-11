@@ -31,7 +31,7 @@ export type {
 export interface ChatBindings {
   chatStart(
     arg: { cwd?: string; workspace?: string; view?: string; fresh?: boolean },
-  ): Promise<{ id: string }>;
+  ): Promise<{ id: string; thinking: ThinkingLevel }>;
   chatHistory(arg: { id: string }): Promise<Item[]>;
   chatPrompt(arg: { id: string; text: string }): Promise<unknown>;
   chatRead(arg: { id: string }): Promise<ChatEvent[]>;
@@ -53,8 +53,7 @@ export function chatBindings(): ChatBindings | null {
 }
 
 // Model-provider management, backed by the provider* handlers in desktop.ts.
-// Global (not keyed by a chat id): providers are a per-machine set shared with
-// the `pi` CLI. Connecting/adding takes effect on chat agents without a restart.
+// Global (not keyed by a chat id): providers are one set, in the agent dir. Connecting/adding takes effect on chat agents without a restart.
 export interface ProviderBindings {
   providerList(): Promise<ProviderInfo[]>;
   // Every model those providers offer, for pickers with no chat session behind them

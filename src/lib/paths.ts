@@ -1,26 +1,46 @@
-// Where pique and pi keep things on disk. Runs Deno-side only.
+// Where pique keeps things on disk. Runs Deno-side only.
 //
-// pi's agent dir is the one the `pi` CLI uses, so the two share everything in it:
+// Everything lives under ~/.pique. pique's own state sits at the top of it (layout,
+// prefs, conversations, module storage); pi's agent dir is a folder inside it, laid out
+// exactly as pi lays out its own ~/.pi/agent:
 //
 //   extensions/        local extensions, and user modules beside them (modules/)
 //   prompts/           prompt templates
 //   skills/            skills
-//   settings.json      installed packages
+//   settings.json      installed packages, and the default model and thinking level
 //   SYSTEM.md          replaces pi's own preamble, when present
 //   APPEND_SYSTEM.md   added on top of whichever base prompt applies
 //   auth.json, models.json   provider credentials and custom endpoints
 //
 // pi discovers all of it itself, so pique only ever reads and writes these files — it
-// does not assemble anything pi would not find on its own. pique's own state (layout,
-// prefs, chat defaults, conversations, module storage) stays under ~/.pique.
+// does not assemble anything pi would not find on its own. The agent dir can be moved
+// (Settings → Library) — pointed at ~/.pi/agent, it is shared with the `pi` CLI.
 import { home } from "./home.ts";
-
-export function agentDir(): string {
-  return `${home()}/.pi/agent`;
-}
 
 export function piqueDir(): string {
   return `${home()}/.pique`;
+}
+
+// The settings value, once configureAgentDir has run. Fixed for the life of the
+// process: running conversations and the model runtime hold the dir they started with,
+// so a change applies on the next launch.
+let configured: string | undefined;
+
+export function agentDir(): string {
+  return configured ?? `${piqueDir()}/agent`;
+}
+
+// Called once at boot with the "agent folder" setting (blank for the default). It is
+// also exported as PI_CODING_AGENT_DIR, so anything that asks pi where its dir is — an
+// extension keeping its own files, say — gets the same answer pique does.
+export function configureAgentDir(dir: string | undefined): void {
+  configured = dir && dir.trim() !== "" ? dir.trim() : undefined;
+  Deno.env.set("PI_CODING_AGENT_DIR", agentDir());
+}
+
+// Where the `pi` CLI keeps its setup by default — what "Import from pi" copies from.
+export function piAgentDir(): string {
+  return `${home()}/.pi/agent`;
 }
 
 // Workspace and view ids name directories, so constrain them: no separators, no

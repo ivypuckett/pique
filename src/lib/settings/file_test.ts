@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
   readJson,
+  resolveAgentDir,
   resolveGitScanDepth,
   resolveModuleDir,
   writeJson,
@@ -98,3 +99,17 @@ Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () =
   );
 });
 
+Deno.test("resolveAgentDir reads the setting, expanding a leading ~", () => {
+  const home = Deno.env.get("HOME");
+  assertEquals(resolveAgentDir({ agent: { dir: "/x/agent" } }), "/x/agent");
+  assertEquals(resolveAgentDir({ agent: { dir: "~/.pi/agent" } }), `${home}/.pi/agent`);
+});
+
+Deno.test("resolveAgentDir is undefined for a blank, missing or malformed setting", () => {
+  assertEquals(resolveAgentDir(null), undefined);
+  assertEquals(resolveAgentDir({}), undefined);
+  assertEquals(resolveAgentDir({ agent: { dir: "  " } }), undefined);
+  // deno-lint-ignore no-explicit-any
+  assertEquals(resolveAgentDir({ agent: { dir: 42 as any } }), undefined);
+  assertEquals(resolveAgentDir({ agent: "nope" }), undefined);
+});

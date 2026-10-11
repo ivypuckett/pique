@@ -23,10 +23,10 @@ async function withTempHome(fn: (home: string) => Promise<void>) {
 // pique handing them over.
 Deno.test("the two files are pi's own, in pi's agent dir", async () => {
   await withTempHome((home) => {
-    assertEquals(promptFilePath("system"), `${home}/.pi/agent/SYSTEM.md`);
+    assertEquals(promptFilePath("system"), `${home}/.pique/agent/SYSTEM.md`);
     assertEquals(
       promptFilePath("appendix"),
-      `${home}/.pi/agent/APPEND_SYSTEM.md`,
+      `${home}/.pique/agent/APPEND_SYSTEM.md`,
     );
     return Promise.resolve();
   });

@@ -12,6 +12,7 @@ import {
   listPackages,
   type PackageType,
   removePackage,
+  resetPackageManager,
   resolvePackageFiles,
   searchExtensions,
 } from "./packages.ts";
@@ -19,7 +20,13 @@ import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
 import { agentDir } from "../paths.ts";
 import { home } from "../home.ts";
 
-export { type ExtSearchResult, installPackage, type PackageType, searchExtensions };
+export {
+  type ExtSearchResult,
+  installPackage,
+  type PackageType,
+  resetPackageManager,
+  searchExtensions,
+};
 
 export type Origin = "local" | "package";
 

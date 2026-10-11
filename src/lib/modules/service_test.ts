@@ -11,7 +11,7 @@ async function withScope(
   const dir = await Deno.makeTempDir();
   const prev = Deno.env.get("HOME");
   Deno.env.set("HOME", dir);
-  const live = `${dir}/.pi/agent/extensions`;
+  const live = `${dir}/.pique/agent/extensions`;
   await Deno.mkdir(live, { recursive: true });
   try {
     await fn((name, ext, body) =>
@@ -76,7 +76,7 @@ Deno.test("a module needs no extension .ts beside it", async () => {
 
 Deno.test("no extensions dir means no modules and no errors", async () => {
   await withScope(async () => {
-    await Deno.remove(`${Deno.env.get("HOME")}/.pi/agent/extensions`, {
+    await Deno.remove(`${Deno.env.get("HOME")}/.pique/agent/extensions`, {
       recursive: true,
     });
     const { modules, errors } = await listModules();

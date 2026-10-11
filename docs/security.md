@@ -51,7 +51,7 @@ exactly that.
 
 Nothing pique loads passes a human first. An extension, a prompt template, a
 skill, a module, `SYSTEM.md` — each is in use as soon as it is in pi's agent dir
-(`~/.pi/agent`, shared with the `pi` CLI). The one confirm left is before
+(`~/.pique/agent` unless moved). The one confirm left is before
 installing a package, because `npm install` runs the package's own scripts as it
 downloads.
 
@@ -90,7 +90,7 @@ address refuses.
 
 ### 3. Credentials are written with default file permissions — MEDIUM — FIXED ON POSIX
 
-`providers.ts:writeModelsJson` writes `~/.pi/agent/models.json` — which holds
+`providers.ts:writeModelsJson` writes `models.json` in the agent dir — which holds
 `apiKey` for a custom provider, via `buildCustomEntry` — with
 `Deno.writeTextFile` and no `mode`. That is `0o666 & ~umask`, so **0644** on a
 stock machine: any other user on the host can read the key.
@@ -116,8 +116,7 @@ API — plus a Windows machine to verify it on, which is why it is recorded as
 open rather than guessed at. Decision 3 in the README names Windows a supported
 target, so this is a gap to close, not a platform to write off.
 
-Not fixable by a mode bit, and worth stating plainly next to the decision to
-share those files with the `pi` CLI: the chat agent has `read` and its cwd is
+Not fixable by a mode bit, and worth stating plainly: the chat agent has `read` and its cwd is
 usually `$HOME`, so it can read both files and send them anywhere. That is the
 direct cost of "this is not a sandbox".
 
@@ -168,4 +167,4 @@ Nothing from this review. The boundary that does not hold is unchanged and is
 not a finding but the design: there is no sandbox, the chat agent has `read` and
 `bash` with its cwd usually `$HOME`, and nothing between an agent and pi's agent
 dir. `tool_call` interception, in an extension, is the piece of work that would
-change that, and its path set must cover all of `~/.pi/agent`.
+change that, and its path set must cover the whole agent dir.

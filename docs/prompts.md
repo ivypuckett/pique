@@ -45,12 +45,12 @@ contains `$1` is left alone.
 ## Where they live
 
 ```
-~/.pi/agent/prompts/
+~/.pique/agent/prompts/
   review-staged.md     invocable as /review-staged
 ```
 
-That is pi's own agent dir, shared with the `pi` CLI, and `prompts/` in it is
-exactly where pi looks — so a template saved here is in both. Settings → Library
+That is the agent folder (Settings → Library; see the README), and `prompts/` in it
+is exactly where pi looks. Settings → Library
 is a full editor: create, edit, delete. An agent writes one with pi's own `write`
 tool, and it is invocable as soon as it lands.
 
@@ -71,8 +71,8 @@ decides which one to use:
 
 |                                          | Where                                         | Reaches the model as               |
 | ---------------------------------------- | --------------------------------------------- | ---------------------------------- |
-| A standing instruction, every conversation | `~/.pi/agent/SYSTEM.md` or `APPEND_SYSTEM.md` | the system prompt                  |
-| An instruction for one task, on demand   | `~/.pi/agent/prompts/<name>.md`               | a user turn, when you type `/name` |
+| A standing instruction, every conversation | `~/.pique/agent/SYSTEM.md` or `APPEND_SYSTEM.md` | the system prompt               |
+| An instruction for one task, on demand   | `~/.pique/agent/prompts/<name>.md`            | a user turn, when you type `/name` |
 
 Nothing is selectable per conversation: every conversation runs the same system
 prompt (or, in a trusted project, that project's own `.pi/SYSTEM.md`). Editing that file does reach a running

@@ -26,11 +26,13 @@ user-managed and does not appear in the list.
 
 ## Where they live
 
-pique uses pi's own agent dir — the one the `pi` CLI uses — so an extension
-installed in either is installed in both, and pi discovers it itself:
+pique keeps a pi agent dir, laid out exactly as the `pi` CLI's `~/.pi/agent`, and
+pi discovers what is in it itself. It is `~/.pique/agent` unless moved in Settings →
+Library (point it at `~/.pi/agent` to share one setup with the CLI), and "Import from
+pi" copies the CLI's setup in:
 
 ```
-~/.pi/agent/
+~/.pique/agent/
   extensions/        local modules — pi loads every `<name>.ts` here
   settings.json      installed packages — pi's own file
   npm/node_modules/… package bytes
