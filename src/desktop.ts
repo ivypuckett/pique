@@ -37,7 +37,6 @@ let settings: typeof import("./lib/settings/file.ts");
 let dialog: typeof import("./lib/settings/dialog.ts");
 let fs: typeof import("./lib/fs.ts");
 let git: typeof import("./lib/gitdiff/git.ts");
-let kanban: typeof import("./lib/kanban/service.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
@@ -402,147 +401,6 @@ win.bind("gitChanges", async (arg) => {
   return { changes: await git.changedPaths(await moduleDir(path), depth) };
 });
 
-// Kanban: each scope has its own board DB; the service caches an open handle per
-// scope, seeding a fresh board with the default columns.
-// The frontend passes the scope it wants — its own workspace, or "root" to work the
-// shared board. All mutations on this path are the human UI, so actor is "human".
-win.bind("kanbanGetBoard", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return (await kanban.board(scope)).getBoard();
-});
-
-win.bind("kanbanGetLogs", async (arg) => {
-  const { scope, cardId } = arg as { scope: string; cardId?: string };
-  return (await kanban.board(scope)).getLogs(cardId);
-});
-
-// Column edits. Same scope argument as every other kanban call, so a workspace can edit
-// the shared root board's columns and nothing can reach a workspace board from outside.
-// board.ts refuses a blank name, a column that still has cards, and the last column; the
-// thrown message surfaces in the module's error strip.
-win.bind("kanbanAddStatus", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  return { id: (await kanban.board(scope)).addStatus({ name }) };
-});
-
-win.bind("kanbanRenameStatus", async (arg) => {
-  const { scope, statusId, name } = arg as {
-    scope: string;
-    statusId: string;
-    name: string;
-  };
-  (await kanban.board(scope)).renameStatus({ statusId, name });
-  return true;
-});
-
-win.bind("kanbanMoveStatus", async (arg) => {
-  const { scope, statusId, position } = arg as {
-    scope: string;
-    statusId: string;
-    position: number;
-  };
-  (await kanban.board(scope)).moveStatus({ statusId, position });
-  return true;
-});
-
-win.bind("kanbanDeleteStatus", async (arg) => {
-  const { scope, statusId, withCards } = arg as {
-    scope: string;
-    statusId: string;
-    withCards?: boolean;
-  };
-  (await kanban.board(scope)).deleteStatus({ statusId, withCards });
-  return true;
-});
-
-win.bind("kanbanCreateCard", async (arg) => {
-  const { scope, statusId, title, description } = arg as {
-    scope: string;
-    statusId: string;
-    title?: string;
-    description?: string;
-  };
-  const id = (await kanban.board(scope)).createCard({
-    statusId,
-    title,
-    description,
-    actor: "human",
-  });
-  return { id };
-});
-
-win.bind("kanbanDeleteCard", async (arg) => {
-  const { scope, cardId } = arg as { scope: string; cardId: string };
-  (await kanban.board(scope)).deleteCard(cardId);
-  return true;
-});
-
-// Reordering within a column. Unlike kanbanSetStatus this needs no reason: the card
-// stays where it is, only its place in the column changes.
-win.bind("kanbanMoveCard", async (arg) => {
-  const { scope, cardId, position } = arg as {
-    scope: string;
-    cardId: string;
-    position: number;
-  };
-  (await kanban.board(scope)).moveCard({ cardId, position });
-  return true;
-});
-
-win.bind("kanbanSetStatus", async (arg) => {
-  const { scope, cardId, statusId, reason } = arg as {
-    scope: string;
-    cardId: string;
-    statusId: string;
-    reason: string;
-  };
-  (await kanban.board(scope)).setStatus({
-    cardId,
-    statusId,
-    reason,
-    actor: "human",
-  });
-  return true;
-});
-
-win.bind("kanbanSetMetadata", async (arg) => {
-  const { scope, cardId, title, description, tags, subtasks } = arg as {
-    scope: string;
-    cardId: string;
-    title?: string;
-    description?: string;
-    tags?: Record<string, string>;
-    subtasks?: { text: string; done: boolean }[];
-  };
-  (await kanban.board(scope)).setMetadata({
-    cardId,
-    title,
-    description,
-    tags,
-    subtasks,
-    actor: "human",
-  });
-  return true;
-});
-
-win.bind("kanbanSetConnections", async (arg) => {
-  const { scope, cardId, artifacts, predecessors, successors } = arg as {
-    scope: string;
-    cardId: string;
-    artifacts?: string[];
-    predecessors?: string[];
-    successors?: string[];
-  };
-  (await kanban.board(scope)).setConnections({
-    cardId,
-    artifacts,
-    predecessors,
-    successors,
-    actor: "human",
-  });
-  return true;
-});
-
 // Extensions — one concept covering both origins: loose `.ts` modules written by the
 // user or by an agent, and installed pi packages. An extension runs iff it is in pi's
 // own loading set for the scope (the extensions/ dir, or settings.json); it awaits
@@ -783,14 +641,13 @@ win.bind("systemPromptsDelete", async (arg) => {
 });
 
 // The close button is a quit: pique is a single window, and by the time this returns
-// every pty and board it owned is gone. Exit rather than leaving that to the window —
+// every pty it owned is gone. Exit rather than leaving that to the window —
 // on macOS the webview backend can decline to close, and a window that stays up after
 // this handler ran is an app whose terminals are all dead and cannot be revived. The
-// teardown is guarded for the same reason: a throw from either half must not skip it.
+// teardown is guarded for the same reason: a throw from it must not skip the exit.
 win.addEventListener("close", () => {
   try {
     term?.killAllSessions();
-    kanban?.closeAllBoards();
   } finally {
     Deno.exit(0);
   }
@@ -805,7 +662,6 @@ settings = await import("./lib/settings/file.ts");
 dialog = await import("./lib/settings/dialog.ts");
 fs = await import("./lib/fs.ts");
 git = await import("./lib/gitdiff/git.ts");
-kanban = await import("./lib/kanban/service.ts");
 extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
 skills = await import("./lib/skills/service.ts");

@@ -12,7 +12,7 @@ import { ROOT } from "./scope/paths.ts";
 // workspace presents one of its views.
 //
 // Root is a workspace like any other on screen, but it is also every other
-// workspace's parent: tools, prefs and its Kanban board are visible from a numbered
+// workspace's parent: tools and prefs are visible from a numbered
 // workspace, never the reverse (see scope/paths.ts `chain`). It cannot be closed, so
 // `workspaces` may be empty — closing the last numbered workspace falls back to root
 // rather than resurrecting a blank one.

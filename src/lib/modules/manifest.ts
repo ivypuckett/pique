@@ -30,7 +30,6 @@ export type ModuleDef = {
 export const MODULES: ModuleDef[] = [
   { kind: "terminal", label: "Terminal", key: "t", duplicable: true },
   { kind: "gitdiff", label: "Git Diff", key: "g" },
-  { kind: "kanban", label: "Kanban", key: "k" },
   // b, not l: "next tab" is worth more on l — the pane is a strip you move along far
   // more often than you open a library.
   { kind: "library", label: "Library", key: "b" },
@@ -46,7 +45,7 @@ let installed: ModuleDef[] = [];
 // a module that was revoked between refreshes disappears rather than lingering.
 export function setInstalledModules(defs: ModuleDef[]): void {
   // A built-in always wins a collision: `kind` decides which component renders, so a
-  // shadowing entry would let an installed module replace Chat or Kanban.
+  // shadowing entry would let an installed module replace Chat or the Terminal.
   installed = defs.filter((d) => !MODULES.some((m) => m.kind === d.kind));
 }
 

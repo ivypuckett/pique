@@ -86,7 +86,7 @@ Deno.test("createInitialView opens on its terminal tab", () => {
 
 Deno.test("isViewState rejects a remembered tab that is in another group", () => {
   const bad = createInitialView();
-  bad.right.activeTabs = { kanban: "right-1" }; // right-1 is a terminal
+  bad.right.activeTabs = { gitdiff: "right-1" }; // right-1 is a terminal
   assertEquals(isViewState(bad), false);
 });
 
@@ -115,7 +115,7 @@ Deno.test("addTab appends a tab in its own group and shows it", () => {
 });
 
 Deno.test("addTab picks the smallest free right-N id across every group", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2
+  let v = addTab(createInitialView(), "gitdiff"); // right-2
   v = addTab(v, "terminal"); // right-3
   assertEquals(v.right.tabs.map((t) => t.id), [
     "right-1",
@@ -125,23 +125,23 @@ Deno.test("addTab picks the smallest free right-N id across every group", () => 
 });
 
 Deno.test("addTab selects the group it opens", () => {
-  const v = addTab(createInitialView(), "kanban");
-  assertEquals(v.right.activeGroup, "kanban");
+  const v = addTab(createInitialView(), "gitdiff");
+  assertEquals(v.right.activeGroup, "gitdiff");
   assertEquals(activeTabId(v), "right-2");
   // the terminal group is still open behind it, on the tab it was showing
-  assertEquals(v.right.activeTabs, { terminal: "right-1", kanban: "right-2" });
+  assertEquals(v.right.activeTabs, { terminal: "right-1", gitdiff: "right-2" });
 });
 
-Deno.test("addTab reveals the open kanban tab instead of adding a second", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2
+Deno.test("addTab reveals the open gitdiff tab instead of adding a second", () => {
+  let v = addTab(createInitialView(), "gitdiff"); // right-2
   v = addTab(v, "terminal"); // right-3, and the terminal group is selected
-  v = addTab(v, "kanban");
+  v = addTab(v, "gitdiff");
   assertEquals(v.right.tabs.map((t) => t.kind), [
     "terminal",
-    "kanban",
+    "gitdiff",
     "terminal",
   ]);
-  assertEquals(v.right.activeGroup, "kanban");
+  assertEquals(v.right.activeGroup, "gitdiff");
   assertEquals(activeTabId(v), "right-2");
 });
 
@@ -168,13 +168,13 @@ Deno.test("addTab ignores a path-scoped diff when opening the git diff module", 
 });
 
 Deno.test("groupTabs lists one group's tabs, in open order", () => {
-  let v = addTab(createInitialView(), "kanban");
+  let v = addTab(createInitialView(), "gitdiff");
   v = addTab(v, "terminal");
   assertEquals(groupTabs(v, "terminal").map((t) => t.id), [
     "right-1",
     "right-3",
   ]);
-  assertEquals(groupTabs(v, "kanban").map((t) => t.id), ["right-2"]);
+  assertEquals(groupTabs(v, "gitdiff").map((t) => t.id), ["right-2"]);
   assertEquals(groupTabs(v, "library"), []);
   // no group argument means the selected one
   assertEquals(groupTabs(v).map((t) => t.id), ["right-1", "right-3"]);
@@ -192,7 +192,7 @@ Deno.test("setActiveTab is a no-op for an unknown tab id", () => {
 });
 
 Deno.test("setActiveTab selects the tab's group when it is not the current one", () => {
-  let v = addTab(createInitialView(), "kanban"); // kanban selected
+  let v = addTab(createInitialView(), "gitdiff"); // gitdiff selected
   v = setActiveTab(v, "right-1"); // a terminal
   assertEquals(v.right.activeGroup, "terminal");
   assertEquals(activeTabId(v), "right-1");
@@ -200,10 +200,10 @@ Deno.test("setActiveTab selects the tab's group when it is not the current one",
 
 Deno.test("a group remembers its tab across a switch away and back", () => {
   let v = addTab(createInitialView(), "terminal"); // right-2 shown of two terminals
-  v = addTab(v, "kanban"); // right-3, kanban selected
+  v = addTab(v, "gitdiff"); // right-3, gitdiff selected
   v = setActiveTab(v, "right-2"); // back to the terminals
   assertEquals(activeTabId(v), "right-2");
-  v = addTab(v, "kanban"); // reveal kanban again
+  v = addTab(v, "gitdiff"); // reveal gitdiff again
   assertEquals(activeTabId(v), "right-3");
   v = addTab(v, "terminal"); // a third terminal, so the group is selected again
   assertEquals(v.right.activeGroup, "terminal");
@@ -219,7 +219,7 @@ Deno.test("newTab adds one more of the selected row's module", () => {
 });
 
 Deno.test("newTab does nothing on a row that may only hold one", () => {
-  const v = addTab(createInitialView(), "kanban"); // kanban selected
+  const v = addTab(createInitialView(), "gitdiff"); // gitdiff selected
   assertEquals(newTab(v), v);
 });
 
@@ -229,10 +229,10 @@ Deno.test("newTab does nothing on the editor row — its tabs come from the tree
 });
 
 Deno.test("selectGroup shows an open group without opening anything", () => {
-  let v = addTab(createInitialView(), "kanban"); // kanban selected, right-2
+  let v = addTab(createInitialView(), "gitdiff"); // gitdiff selected, right-2
   v = addTab(v, "terminal"); // right-3, terminals selected
-  const back = selectGroup(v, "kanban");
-  assertEquals(back.right.activeGroup, "kanban");
+  const back = selectGroup(v, "gitdiff");
+  assertEquals(back.right.activeGroup, "gitdiff");
   assertEquals(back.right.tabs.length, v.right.tabs.length); // nothing opened
   assertEquals(activeTabId(back), "right-2");
 });
@@ -256,14 +256,14 @@ Deno.test("selectGroup ignores a row that is not a module", () => {
 });
 
 Deno.test("selectGroup reopens a module whose last tab was closed", () => {
-  let v = addTab(createInitialView(), "kanban");
+  let v = addTab(createInitialView(), "gitdiff");
   v = closeTab(v, activeTabId(v));
-  v = selectGroup(v, "kanban");
-  assertEquals(groupTabs(v, "kanban").length, 1);
+  v = selectGroup(v, "gitdiff");
+  assertEquals(groupTabs(v, "gitdiff").length, 1);
 });
 
 Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
-  // rail order: editor, terminal, gitdiff, kanban, library
+  // rail order: editor, terminal, gitdiff, library
   let v = createInitialView(); // terminal selected
   v = focusAdjacentGroup(v, -1);
   assertEquals(v.right.activeGroup, EDITOR);
@@ -308,13 +308,13 @@ Deno.test("focusAdjacentTab moves along the group's strip and clamps at the ends
 });
 
 Deno.test("focusAdjacentTab skips the tabs of other groups", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2, between the two terminals
+  let v = addTab(createInitialView(), "gitdiff"); // right-2, between the two terminals
   v = addTab(v, "terminal"); // right-3, shown
-  assertEquals(activeTabId(focusAdjacentTab(v, -1)), "right-1"); // not the kanban tab
+  assertEquals(activeTabId(focusAdjacentTab(v, -1)), "right-1"); // not the gitdiff tab
 });
 
 Deno.test("focusTabAt shows the nth tab of the group and ignores a digit past the end", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2, not on the terminal strip
+  let v = addTab(createInitialView(), "gitdiff"); // right-2, not on the terminal strip
   v = addTab(v, "terminal"); // right-3
   v = addTab(v, "terminal"); // right-4, shown
   assertEquals(activeTabId(focusTabAt(v, 1)), "right-1");
@@ -328,7 +328,7 @@ Deno.test("focusAdjacentTab is a no-op on an empty group", () => {
 });
 
 Deno.test("closeTab refuses to close a singleton row's module", () => {
-  const v = addTab(createInitialView(), "kanban"); // kanban selected, right-2
+  const v = addTab(createInitialView(), "gitdiff"); // gitdiff selected, right-2
   assertEquals(closeTab(v, "right-2"), v); // the row IS the module; nothing to close
 });
 
@@ -375,10 +375,10 @@ Deno.test("closeTab shows the next tab of the group when the first one is closed
 });
 
 Deno.test("closeTab picks the neighbor from the same group, not the strip beside it", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2
+  let v = addTab(createInitialView(), "gitdiff"); // right-2
   v = addTab(v, "terminal"); // right-3, shown
   v = closeTab(v, "right-3");
-  assertEquals(activeTabId(v), "right-1"); // the other terminal, not the kanban tab
+  assertEquals(activeTabId(v), "right-1"); // the other terminal, not the gitdiff tab
 });
 
 Deno.test("closeTab leaves the shown tab unchanged when closing a different one", () => {
@@ -388,10 +388,10 @@ Deno.test("closeTab leaves the shown tab unchanged when closing a different one"
 });
 
 Deno.test("closeTab leaves another group's memory and the selection alone", () => {
-  let v = addTab(createInitialView(), "kanban"); // right-2, kanban selected
+  let v = addTab(createInitialView(), "gitdiff"); // right-2, gitdiff selected
   v = closeTab(v, "right-1"); // the terminal row's last tab, refilled with a fresh one
-  assertEquals(v.right.activeGroup, "kanban"); // refilling a row you aren't on can't pull you to it
-  assertEquals(v.right.activeTabs.kanban, "right-2");
+  assertEquals(v.right.activeGroup, "gitdiff"); // refilling a row you aren't on can't pull you to it
+  assertEquals(v.right.activeTabs.gitdiff, "right-2");
   assertEquals(v.right.activeTabs.terminal, groupTabs(v, "terminal")[0].id);
 });
 

@@ -177,9 +177,9 @@
   // before it will take a keystroke.
   //
   // Terminals only. focusActiveTab picks a pane's first focusable element, which for a
-  // terminal is xterm's textarea but for kanban is the first column's rename field — so
-  // focusing every module would turn a stray keystroke after ctrl+t k into a renamed
-  // column. The rest keep focus wherever it already was.
+  // terminal is xterm's textarea but for another module is whatever control happens to
+  // come first — so focusing every module would hand a stray keystroke after ctrl+t to
+  // that control. The rest keep focus wherever it already was.
   async function settleFocus() {
     await tick();
     if (pendingClose) return; // the dialog owns focus while it is up
@@ -290,8 +290,8 @@
                 case "KeyW": onTabs(() => closeActiveTab()); sticky = true; break;
                 case "KeyH": onTabs((id) => focusAdjacentTab(id, -1)); sticky = true; break;
                 case "KeyL": onTabs((id) => focusAdjacentTab(id, 1)); sticky = true; break;
-                // Arrows, not j/k: every rail row has a letter of its own, and k is
-                // already Kanban's.
+                // Arrows, not j/k: every rail row has a letter of its own, and j/k
+                // would be the first two a new module could not have.
                 case "ArrowUp": onTabs((id) => focusAdjacentGroup(id, -1)); sticky = true; break;
                 case "ArrowDown": onTabs((id) => focusAdjacentGroup(id, 1)); sticky = true; break;
                 default: handled = false;

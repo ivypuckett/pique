@@ -18,20 +18,6 @@ function storagePath(scope: string, moduleId: string): string {
 // module — everything else needs only the scope the broker passes in.
 export function handlersFor(moduleId: string): Handlers {
   return {
-    // kanban/service.ts is imported at call time, not at module load: desktop.ts loads
-    // it lazily for its own weight, and a static import here would drag it into the
-    // graph that has to be ready before the first bind is registered.
-    kanbanGetBoard: async (scope) => {
-      const { board } = await import("../kanban/service.ts");
-      return (await board(scope)).getBoard();
-    },
-
-    kanbanGetLogs: async (scope, payload) => {
-      const { board } = await import("../kanban/service.ts");
-      const { cardId } = (payload ?? {}) as { cardId?: string };
-      return (await board(scope)).getLogs(cardId);
-    },
-
     storageGet: async (scope) => {
       try {
         return JSON.parse(

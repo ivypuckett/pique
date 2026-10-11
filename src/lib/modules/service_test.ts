@@ -31,7 +31,7 @@ async function withScope(
 }
 
 const definition = (label: string) =>
-  JSON.stringify({ label, capabilities: { kanban: true } });
+  JSON.stringify({ label, capabilities: { storage: true } });
 
 Deno.test("a definition with its document is a module", async () => {
   await withScope(async (write) => {
@@ -94,7 +94,7 @@ Deno.test("manifestFor finds the module's grants, and nothing for an unknown id"
     await write("notes", "module.json", definition("Notes"));
     await write("notes", "ui.html", "<p>hi</p>");
     assertEquals(
-      (await manifestFor("root", "notes"))?.capabilities.kanban,
+      (await manifestFor("root", "notes"))?.capabilities.storage,
       true,
     );
     assertEquals(await manifestFor("root", "nope"), undefined);
@@ -116,7 +116,7 @@ Deno.test("a module in pending is listed with its capabilities and does not run"
     const pending = await listPendingModules("root");
     assertEquals(pending.length, 1);
     // The capabilities are parsed precisely so the consent screen can name them.
-    assertEquals(pending[0].def?.capabilities.kanban, true);
+    assertEquals(pending[0].def?.capabilities.storage, true);
     // ...and it is not installed, so nothing serves it and the broker has no manifest.
     assertEquals((await listModules("root")).modules, []);
     assertEquals(await manifestFor("root", "notes"), undefined);
@@ -154,7 +154,7 @@ Deno.test("revoking returns a module to the gate, capabilities and all", async (
     await revokeModule("root", "notes");
     assertEquals((await listModules("root")).modules, []);
     assertEquals(
-      (await listPendingModules("root"))[0].def?.capabilities.kanban,
+      (await listPendingModules("root"))[0].def?.capabilities.storage,
       true,
     );
   });

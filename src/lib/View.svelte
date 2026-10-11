@@ -8,7 +8,7 @@
   // cwd: the workspace's working-directory override, threaded down to modules so a
   // freshly spawned terminal/chat starts there. Undefined means "use the default".
   // workspaceId: the owning workspace's id, threaded down so a module can address
-  // per-workspace state (e.g. the Kanban board DB).
+  // per-workspace state (e.g. its chat conversations).
   let { view, cwd, workspaceId }: { view: ViewState; cwd?: string; workspaceId?: string } =
     $props();
 

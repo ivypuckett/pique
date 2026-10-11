@@ -5,7 +5,6 @@ import {
   chain,
   ROOT,
   scopeAgentDir,
-  scopeBoardPath,
   scopeConfigPath,
   scopeDir,
   scopeSessionsDir,
@@ -22,7 +21,7 @@ function withHome(home: string, fn: () => void): void {
   }
 }
 
-Deno.test("a scope owns one directory holding its agent dir, config and board", () => {
+Deno.test("a scope owns one directory holding its agent dir and config", () => {
   withHome("/home/x", () => {
     assertEquals(scopeDir("ws-1"), "/home/x/.pique/scopes/ws-1");
     assertEquals(scopeAgentDir("ws-1"), "/home/x/.pique/scopes/ws-1/agent");
@@ -30,12 +29,11 @@ Deno.test("a scope owns one directory holding its agent dir, config and board", 
       scopeConfigPath("ws-1"),
       "/home/x/.pique/scopes/ws-1/config.json",
     );
-    assertEquals(scopeBoardPath("ws-1"), "/home/x/.pique/scopes/ws-1/board.db");
     assertEquals(scopeAgentDir(ROOT), "/home/x/.pique/scopes/root/agent");
   });
 });
 
-// The scope dir backs config, board, sessions and the agent dir, so it resolving is
+// The scope dir backs config, sessions and the agent dir, so it resolving is
 // what boot depends on — on Windows, off USERPROFILE. The mixed separators below are
 // current behaviour, not endorsed: Windows accepts "/" on input, and joining is a
 // separate sweep.

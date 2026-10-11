@@ -1,7 +1,7 @@
 // One chat conversation per view: a workspace's views each hold their own thread, so
 // two views side by side are two contexts rather than one transcript shown twice.
 // Sessions are keyed by workspace AND view here; what the view does NOT get its own of
-// is the scope — tools, model defaults, board and cwd all still resolve against the
+// is the scope — tools, model defaults and cwd all still resolve against the
 // workspace (see scope/paths.ts). The backend agent starts on the pane's retain() and
 // stops when it releases (i.e. the view or its workspace closes).
 import { get, type Writable, writable } from "svelte/store";

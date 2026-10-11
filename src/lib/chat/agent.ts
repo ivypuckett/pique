@@ -143,7 +143,6 @@ import {
 import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
 import { listAvailableModels } from "./available.ts";
 import { readJson, resolveModuleDir } from "../settings/file.ts";
-import { kanbanTools } from "../kanban/agent-tools.ts";
 import { extensionAuthoringTools } from "../extensions/agent-tools.ts";
 import { moduleAuthoringTools } from "../modules/agent-tools.ts";
 import { inheritedExtensionPaths } from "../extensions/service.ts";
@@ -229,7 +228,7 @@ export async function ensureRuntime() {
 
 // Start an agent in `scope` and return its id. The scope is the workspace the Chat
 // module lives in (root included); everything the agent can see — tools, model
-// defaults, working directory, Kanban board — is resolved against it. `view` is the
+// defaults, working directory — is resolved against it. `view` is the
 // view inside that workspace, and it decides one thing only: which conversation this
 // is. By default the agent picks that conversation back up where it was left;
 // `fresh` starts a new one.
@@ -253,14 +252,13 @@ export async function startAgent(
   const model = modelRuntime.getModel(provider, modelId) ??
     modelRuntime.getModel(FALLBACK_PROVIDER, FALLBACK_MODEL);
   // Tools compiled into pique, all bound to this scope: define_extension and
-  // define_prompt quarantine into it, and the Kanban tools address its board. Tools
+  // define_prompt quarantine into it. Tools
   // from extensions the user has *enabled* don't appear here — those load below.
   const agentDefs = await listVisibleAgents(scope);
   const customTools = [
     ...extensionAuthoringTools(scope),
     ...moduleAuthoringTools(scope),
     ...promptAuthoringTools(scope),
-    ...kanbanTools(scope),
     ...subagentTools(scope, cwd, modelRuntime, model, agentDefs),
   ];
 

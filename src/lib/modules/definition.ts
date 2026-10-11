@@ -20,7 +20,7 @@ export type ParseResult =
 // Every capability there is. A name outside this set is an error rather than an ignored
 // key: a typo that parsed as "grants nothing" would show as enabled in the consent
 // screen and then fail at runtime with no explanation.
-const BOOLEAN_CAPS = ["kanban", "storage"] as const;
+const BOOLEAN_CAPS = ["storage"] as const;
 
 function parseCapabilities(raw: unknown): Capabilities | string {
   if (raw === undefined) return {};

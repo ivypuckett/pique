@@ -178,8 +178,8 @@ function withTab(v: ViewState, tab: ModuleRef): ViewState {
 }
 
 // Open a module in the right pane. A singleton kind (everything but the terminal — see
-// the manifest) is *revealed* rather than duplicated: a second Kanban tab is two views
-// of the one board, and pressing ctrl+t k twice used to make one.
+// the manifest) is *revealed* rather than duplicated: a second Git Diff tab is two
+// views of the one diff, and pressing ctrl+t g twice used to make one.
 //
 // Editors and path-scoped diffs are in the editor group, not the module's, so one open
 // beside the file tree never stands in for Git Diff itself.

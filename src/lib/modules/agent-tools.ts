@@ -72,9 +72,6 @@ export function moduleAuthoringTools(scope: ScopeId): ToolDefinition[] {
           description: "May a view hold more than one tab of it? Default false.",
         })),
         capabilities: Type.Optional(Type.Object({
-          kanban: Type.Optional(Type.Boolean({
-            description: "Read this scope's kanban board.",
-          })),
           storage: Type.Optional(Type.Boolean({
             description: "Keep its own saved JSON, private to it and this scope.",
           })),

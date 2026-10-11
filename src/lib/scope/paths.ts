@@ -3,18 +3,16 @@
 // A scope is the root workspace ("root") or one numbered workspace ("ws-N"). Each
 // owns a directory under ~/.pique/scopes/<id>:
 //
-//   config.json   scoped prefs (chat defaults, kanban statuses)
+//   config.json   scoped prefs (chat defaults)
 //   agent/        this scope's pi agentDir — extensions/, pending/, settings.json
 //   sessions/     this scope's saved chat conversations, as pi session JSONL
-//   board.db      this scope's Kanban board
 //
 // Everything a scope inherits it inherits through `chain`, which is the ONLY place
 // the shape of the hierarchy is encoded — widen it there if scopes ever nest deeper
 // than root → workspace. Runs Deno-side only.
 import { home } from "../home.ts";
 
-// Scope ids key a directory name, so constrain them the way kanban/paths.ts did the
-// board filename: no separators, no traversal.
+// Scope ids key a directory name, so constrain them: no separators, no traversal.
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export type ScopeId = string;
@@ -74,10 +72,6 @@ export function scopeViewSessionsDir(id: ScopeId, view: string): string {
 
 export function scopeConfigPath(id: ScopeId): string {
   return `${scopeDir(id)}/config.json`;
-}
-
-export function scopeBoardPath(id: ScopeId): string {
-  return `${scopeDir(id)}/board.db`;
 }
 
 // Create the scope's directory tree. Callers that write into a scope call this

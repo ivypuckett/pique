@@ -14,8 +14,8 @@ const manifest = (caps: Manifest["capabilities"]): Manifest => ({
 function recorder() {
   const calls: { method: string; scope: string; payload: unknown }[] = [];
   const handlers: Handlers = {
-    kanbanGetBoard: (scope, payload) => {
-      calls.push({ method: "kanbanGetBoard", scope, payload });
+    storageGet: (scope, payload) => {
+      calls.push({ method: "storageGet", scope, payload });
       return Promise.resolve({ statuses: [] });
     },
     fsRead: (scope, payload) => {
@@ -29,9 +29,9 @@ function recorder() {
 Deno.test("a granted call reaches its handler and returns its value", async () => {
   const { calls, handlers } = recorder();
   const out = await dispatch(
-    manifest({ kanban: true }),
+    manifest({ storage: true }),
     "ws-1",
-    "kanbanGetBoard",
+    "storageGet",
     {},
     handlers,
   );
@@ -42,7 +42,7 @@ Deno.test("a granted call reaches its handler and returns its value", async () =
 Deno.test("a refused call never reaches its handler", async () => {
   const { calls, handlers } = recorder();
   await assertRejects(
-    () => dispatch(manifest({}), "ws-1", "kanbanGetBoard", {}, handlers),
+    () => dispatch(manifest({}), "ws-1", "storageGet", {}, handlers),
     Error,
     "not granted",
   );
@@ -54,9 +54,9 @@ Deno.test("a refused call never reaches its handler", async () => {
 Deno.test("the refusal names the method", async () => {
   const { handlers } = recorder();
   const err = await assertRejects(
-    () => dispatch(manifest({}), "ws-1", "kanbanGetBoard", {}, handlers),
+    () => dispatch(manifest({}), "ws-1", "storageGet", {}, handlers),
   );
-  assertEquals((err as Error).message.includes("kanbanGetBoard"), true);
+  assertEquals((err as Error).message.includes("storageGet"), true);
 });
 
 // The scope is the host's, always. A frame cannot reach another workspace's data by
@@ -64,9 +64,9 @@ Deno.test("the refusal names the method", async () => {
 Deno.test("the handler is given the caller's scope, never one from the payload", async () => {
   const { calls, handlers } = recorder();
   await dispatch(
-    manifest({ kanban: true }),
+    manifest({ storage: true }),
     "ws-1",
-    "kanbanGetBoard",
+    "storageGet",
     { scope: "root", moduleId: "other" },
     handlers,
   );
@@ -77,7 +77,7 @@ Deno.test("an unknown method is refused before any lookup", async () => {
   const { calls, handlers } = recorder();
   await assertRejects(
     () =>
-      dispatch(manifest({ kanban: true }), "ws-1", "termStart", {}, handlers),
+      dispatch(manifest({ storage: true }), "ws-1", "termStart", {}, handlers),
     Error,
     "not granted",
   );

@@ -5,14 +5,14 @@ const ok = (name: string, obj: unknown) =>
   parseDefinition(name, JSON.stringify(obj));
 
 Deno.test("a valid definition parses, taking its kind from the filename", () => {
-  const r = ok("notes", { label: "Notes", capabilities: { kanban: true } });
+  const r = ok("notes", { label: "Notes", capabilities: { storage: true } });
   assertEquals(r.ok, true);
   if (!r.ok) return;
   // The kind is NOT read from the file: it is the extension's own name, so a definition
   // cannot claim to be a different module than the one it sits beside.
   assertEquals(r.def.kind, "notes");
   assertEquals(r.def.label, "Notes");
-  assertEquals(r.def.capabilities.kanban, true);
+  assertEquals(r.def.capabilities.storage, true);
 });
 
 Deno.test("a definition with no capabilities grants nothing rather than everything", () => {
@@ -44,7 +44,7 @@ Deno.test("a name that is not a legal extension name is refused", () => {
 // An install must never be able to take over a built-in row.
 Deno.test("a kind colliding with a built-in is refused at parse time", () => {
   for (
-    const builtin of ["kanban", "terminal", "library", "gitdiff"]
+    const builtin of ["terminal", "library", "gitdiff"]
   ) {
     assertEquals(ok(builtin, { label: "Mine" }).ok, false, builtin);
   }
@@ -65,7 +65,7 @@ Deno.test("an unknown capability name is refused, not ignored", () => {
 
 Deno.test("a capability with the wrong type is refused", () => {
   assertEquals(
-    ok("notes", { label: "N", capabilities: { kanban: "yes" } }).ok,
+    ok("notes", { label: "N", capabilities: { storage: "yes" } }).ok,
     false,
   );
   assertEquals(

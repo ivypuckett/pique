@@ -8,7 +8,6 @@ import Terminal from "../terminal/Terminal.svelte";
 import Chat from "../chat/Chat.svelte";
 import FileTree from "../filetree/FileTree.svelte";
 import GitDiff from "../gitdiff/GitDiff.svelte";
-import Kanban from "../kanban/Kanban.svelte";
 import Library from "../library/Library.svelte";
 import UserModule from "./UserModule.svelte";
 import { moduleDef } from "./manifest.ts";
@@ -33,7 +32,6 @@ export const registry: Record<
   chat: Chat,
   filetree: FileTree,
   gitdiff: GitDiff,
-  kanban: Kanban,
   library: Library,
 };
 

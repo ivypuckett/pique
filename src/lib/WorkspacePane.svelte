@@ -45,7 +45,7 @@
   {/snippet}
 
   <!-- Root is pinned above the rule; the numbered workspaces below inherit their
-       tools, prefs and board from it. The rule is the one visual cue for that
+       tools and prefs from it. The rule is the one visual cue for that
        relationship, so it stays even when there are no workspaces under it yet. -->
   <ul class="menu menu-sm w-full gap-0.5 p-0">
     {@render row($session.root)}

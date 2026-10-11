@@ -134,11 +134,6 @@ Deno.test("pique's compiled-in tools are present in every scope", async () => {
         true,
         `define_extension missing in ${scope}`,
       );
-      assertEquals(
-        tools.includes("kanban_get_board"),
-        true,
-        `kanban tools missing in ${scope}`,
-      );
     }
   });
 });

@@ -14,11 +14,8 @@ import { isAbsolute, normalize } from "@std/path";
 
 // Grants are named after what a module wants to do, not after the binds they reach:
 // the binds are an implementation detail that will be renamed one day, while "may this
-// module read the board" is the sentence the consent screen has to show a human.
+// module read these files" is the sentence the consent screen has to show a human.
 export type Capabilities = {
-  // The board of the scope the module is open in. Read-only for now; a write grant is
-  // a separate name, not a truthier `kanban`.
-  kanban?: boolean;
   // The module's own JSON blob, private to it and to the scope it runs in.
   storage?: boolean;
   // Absolute directory roots. Each grant is its own list: read does not imply write and
@@ -46,8 +43,6 @@ export const METHODS: Record<
   string,
   keyof Capabilities | "fs.read" | "fs.write"
 > = {
-  kanbanGetBoard: "kanban",
-  kanbanGetLogs: "kanban",
   storageGet: "storage",
   storageSet: "storage",
   fsRead: "fs.read",

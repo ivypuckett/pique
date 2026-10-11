@@ -26,8 +26,8 @@ export type ResultMessage = {
   value: unknown;
 };
 
-// There is deliberately no event shape here. A push channel (a board changed, a file
-// moved) was designed and not built, because nothing yet needs one: a panel polls when
+// There is deliberately no event shape here. A push channel (a file moved) was designed
+// and not built, because nothing yet needs one: a panel polls when
 // it wants fresh data. Adding the type before the mechanism would leave a contract the
 // host does not honour, which is worse than an obvious absence.
 

@@ -7,7 +7,7 @@
 //
 // - `scope` is the host's, passed in by the component that mounted the frame. A frame
 //   never sends one, and a `scope` in the payload is ignored — so a module in ws-1
-//   cannot read root's board by asking nicely.
+//   cannot read root's storage by asking nicely.
 // - `manifest` is resolved from disk for the module the host says this is, not from
 //   anything the frame said about itself. A frame cannot name a module, so it cannot
 //   name a different one.

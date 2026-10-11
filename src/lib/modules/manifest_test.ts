@@ -29,7 +29,7 @@ function withInstalled(defs: ModuleDef[], fn: () => void) {
 Deno.test("with nothing installed, the table is exactly the built-ins", () => {
   setInstalledModules([]);
   assertEquals(railGroups().length, MODULES.length + 1); // + the editor row
-  assertEquals(moduleDef("kanban")?.label, "Kanban");
+  assertEquals(moduleDef("gitdiff")?.label, "Git Diff");
   assertEquals(moduleDef("notes"), undefined);
 });
 
@@ -42,11 +42,11 @@ Deno.test("an installed module is a module in every respect", () => {
 });
 
 // A built-in must never be shadowed by an install: the kind decides which component
-// renders, and letting an install win would let it replace Chat or Kanban.
+// renders, and letting an install win would let it replace Chat or the Terminal.
 Deno.test("a built-in kind wins a collision with an installed one", () => {
-  withInstalled([def("kanban", "Not Kanban", true)], () => {
-    assertEquals(moduleDef("kanban")?.label, "Kanban");
-    assertEquals(isDuplicable("kanban"), false);
+  withInstalled([def("gitdiff", "Not Git Diff", true)], () => {
+    assertEquals(moduleDef("gitdiff")?.label, "Git Diff");
+    assertEquals(isDuplicable("gitdiff"), false);
   });
 });
 

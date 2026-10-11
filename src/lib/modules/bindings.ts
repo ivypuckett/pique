@@ -17,7 +17,6 @@ export const modulesVersion = writable(0);
 // — separate module graphs — and deliberately structural rather than imported: service.ts
 // calls Deno APIs, and a value import from it would break the frontend bundle.
 export type ModuleCapabilities = {
-  kanban?: boolean;
   storage?: boolean;
   fs?: { read?: string[]; write?: string[] };
 };

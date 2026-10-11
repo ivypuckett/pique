@@ -8,11 +8,11 @@ const m = (caps: Manifest["capabilities"]): Manifest => ({
 });
 
 Deno.test("a granted method is allowed", () => {
-  assertEquals(allows(m({ kanban: true }), "kanbanGetBoard", {}), true);
+  assertEquals(allows(m({ storage: true }), "storageGet", {}), true);
 });
 
 Deno.test("an ungranted method is refused", () => {
-  assertEquals(allows(m({ kanban: true }), "fsRead", { path: "/x" }), false);
+  assertEquals(allows(m({ storage: true }), "fsRead", { path: "/x" }), false);
 });
 
 // The method list is a closed set. A method nobody granted — including one added to
@@ -20,7 +20,6 @@ Deno.test("an ungranted method is refused", () => {
 // asserts against a manifest holding every capability there is.
 Deno.test("an unknown method is refused even with every capability granted", () => {
   const all = m({
-    kanban: true,
     storage: true,
     fs: { read: ["/"], write: ["/"] },
   });
@@ -100,7 +99,7 @@ Deno.test("an fs call with no usable path is refused", () => {
 });
 
 Deno.test("an empty manifest permits nothing", () => {
-  assertEquals(allows(m({}), "kanbanGetBoard", {}), false);
+  assertEquals(allows(m({}), "storageGet", {}), false);
   assertEquals(allows(m({}), "fsRead", { path: "/home/u/notes/a.md" }), false);
   assertEquals(allows(m({}), "storageGet", {}), false);
 });

@@ -43,9 +43,9 @@ Deno.test("define_module writes a module to the gate, not into use", async () =>
 
 Deno.test("the capabilities it asks for are recorded for the consent screen", async () => {
   await withScope(async () => {
-    await run("root", { ...good, capabilities: { kanban: true } });
+    await run("root", { ...good, capabilities: { storage: true } });
     const [p] = await listPendingModules("root");
-    assertEquals(p.def?.capabilities.kanban, true);
+    assertEquals(p.def?.capabilities.storage, true);
   });
 });
 
@@ -73,7 +73,7 @@ Deno.test("an unknown capability is refused at authoring time", async () => {
 
 Deno.test("a name colliding with a built-in module is refused", async () => {
   await withScope(async () => {
-    await assertRejects(() => run("root", { ...good, name: "kanban" }), Error);
+    await assertRejects(() => run("root", { ...good, name: "terminal" }), Error);
     assertEquals(await listPendingModules("root"), []);
   });
 });
@@ -91,7 +91,7 @@ Deno.test("a name that could escape the directory is refused", async () => {
 // ever passes with a live module, the gate has been bypassed.
 Deno.test("neither file lands in the live dir", async () => {
   await withScope(async () => {
-    await run("root", { ...good, capabilities: { kanban: true } });
+    await run("root", { ...good, capabilities: { storage: true } });
     assertEquals((await listModules("root")).modules, []);
     assertEquals((await listModules("root")).errors, []);
   });

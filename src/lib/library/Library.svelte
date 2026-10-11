@@ -40,7 +40,7 @@
 
   // Which scope this module acts on: its own workspace's, or the shared root one it
   // inherits from. Root itself has nothing else to switch to, so the toggle is hidden
-  // there — same shape as Kanban's board switcher.
+  // there.
   //
   // `workspaceId` is optional only because Column threads it through as optional; every
   // real workspace has an id, and root's IS `ROOT` (session.ts).
