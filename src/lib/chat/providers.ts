@@ -18,7 +18,6 @@ import { listAvailableModels } from "./available.ts";
 import { agentDir } from "../paths.ts";
 import {
   BEDROCK,
-  detectAwsProfiles,
   filterBedrockModels,
   resolveBedrockRegion,
 } from "./bedrock.ts";
@@ -66,8 +65,8 @@ const PROVIDER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 // --- Pure helpers (unit-tested; no runtime/filesystem) -----------------------
 
 // `status` is pi's AuthStatus for this provider (see listProviders).
-// deno-lint-ignore no-explicit-any
 export function toProviderInfo(
+  // deno-lint-ignore no-explicit-any
   provider: any,
   status: { configured: boolean; source?: string; label?: string },
   isCustom: boolean,

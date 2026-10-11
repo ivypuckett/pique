@@ -92,9 +92,10 @@ Deno.test("resolveGitScanDepth falls back to 3 for missing/invalid values", () =
   assertEquals(resolveGitScanDepth({ workspace: {} }), 3);
   assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: -1 } }), 3);
   assertEquals(resolveGitScanDepth({ workspace: { gitScanDepth: 2.5 } }), 3);
-  // deno-lint-ignore no-explicit-any
   assertEquals(
-    resolveGitScanDepth({ workspace: { gitScanDepth: "4" as any } }),
+    resolveGitScanDepth({
+      workspace: { gitScanDepth: "4" as unknown as number },
+    }),
     3,
   );
 });

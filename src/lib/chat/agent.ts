@@ -550,8 +550,8 @@ export function listCommands(id: string): CommandInfo[] {
     description: "Re-read extensions, prompts and skills from disk",
     source: "pique",
   }];
-  // deno-lint-ignore no-explicit-any
   const ext: CommandInfo[] = session.extensionRunner.getRegisteredCommands()
+    // deno-lint-ignore no-explicit-any
     .map((c: any) => ({
       name: c.invocationName,
       description: c.description ?? "",
@@ -566,8 +566,8 @@ export function listCommands(id: string): CommandInfo[] {
     source: "prompt",
     argumentHint: t.argumentHint,
   }));
-  // deno-lint-ignore no-explicit-any
   const skills: CommandInfo[] = session.resourceLoader.getSkills().skills.map((
+    // deno-lint-ignore no-explicit-any
     s: any,
   ) => ({
     name: `skill:${s.name}`,
