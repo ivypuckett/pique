@@ -1,7 +1,6 @@
 // Backend service for skills: what a scope has, and where a named one lives.
-// Read-only apart from promoteSkill (docs/automatons.md) — the Library sub-tab shows
-// this list and the automaton editor picks from it, and neither installs or edits a
-// skill; moving one up to root is the single write. Runs Deno-side only.
+// Read-only apart from promoteSkill — the Library sub-tab shows this list, and never
+// installs or edits a skill; moving one up to root is the single write. Runs Deno-side only.
 import { extract } from "@std/front-matter/yaml";
 import { basename } from "@std/path";
 import { assertSkillName, skillsDir } from "./paths.ts";
@@ -15,7 +14,7 @@ import {
 // A type alias, not an interface, so it keeps TypeScript's implicit index signature
 // and can cross the win.bind boundary as a JSON value.
 export type SkillInfo = {
-  // The path basename. THIS is what an automaton names (design decision 5).
+  // The path basename.
   name: string;
   description: string;
   // Absolute path to the skill dir or file, ready for pi's additionalSkillPaths.
@@ -83,11 +82,8 @@ export async function listSkills(scope: ScopeId): Promise<SkillInfo[]> {
   }
 
   // The two shapes can share a basename — `foo/SKILL.md` next to a stray `foo.md`.
-  // They MUST collapse to one entry here: listVisibleSkills' Map keeps the last
-  // insert while resolveSkillPath's .find() takes the first, so without this a
-  // duplicate would make the two consumers disagree about which file "foo" even is
-  // — the Library UI showing one skill's description while an automaton launches
-  // the other. The directory form wins: `<name>/SKILL.md` is the shape pi itself
+  // They MUST collapse to one entry here, or the Library would list one name twice.
+  // The directory form wins: `<name>/SKILL.md` is the shape pi itself
   // treats as a skill root, so a loose `<name>.md` beside it is the accident, and
   // the loser is dropped silently rather than surfaced as a conflict.
   const dirs = new Map<string, SkillInfo>();
@@ -140,20 +136,6 @@ export async function listVisibleSkills(scope: ScopeId): Promise<SkillInfo[]> {
     for (const skill of await listSkills(s)) byName.set(skill.name, skill);
   }
   return [...byName.values()];
-}
-
-// The path an automaton's `skills:` entry resolves to, nearest scope first, or
-// undefined when no scope on the chain has it. Undefined is what makes a launch fail
-// loudly (automatons/resolve.ts) rather than run with less than its file says.
-export async function resolveSkillPath(
-  scope: ScopeId,
-  name: string,
-): Promise<string | undefined> {
-  for (const s of [...chain(scope)].reverse()) {
-    const hit = (await listSkills(s)).find((k) => k.name === name);
-    if (hit) return hit.path;
-  }
-  return undefined;
 }
 
 // Move this skill up to root, where every workspace can name it. Addressed by NAME

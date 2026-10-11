@@ -40,8 +40,6 @@ let git: typeof import("./lib/gitdiff/git.ts");
 let kanban: typeof import("./lib/kanban/service.ts");
 let extensions: typeof import("./lib/extensions/service.ts");
 let prompts: typeof import("./lib/prompts/service.ts");
-let automatons: typeof import("./lib/automatons/run.ts");
-let automatonService: typeof import("./lib/automatons/service.ts");
 let skills: typeof import("./lib/skills/service.ts");
 let agents: typeof import("./lib/agents/service.ts");
 let scopeConfig: typeof import("./lib/scope/config.ts");
@@ -258,7 +256,7 @@ win.bind("chatSetThinking", async (arg) => {
 win.bind("providerList", async () => await providers.listProviders());
 
 // Every model the connected providers offer, independent of any chat session — what
-// the automaton editor's model picker offers.
+// the Settings model checklist offers.
 win.bind("providerModels", async () => await providers.listModels());
 
 win.bind("providerConnect", async (arg) => {
@@ -694,135 +692,7 @@ win.bind("promptsPromote", async (arg) => {
   return await prompts.promotePrompt(scope, name, state, overwrite === true);
 });
 
-// Automatons — named agents that run unattended, each naming exactly the extensions
-// and skills its run may load. automatonsList returns the scope's own definitions
-// (what it can edit or delete); automatonsVisible adds what it inherits from root.
-win.bind("automatonsList", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await automatonService.listAutomatons(scope);
-});
-
-win.bind("automatonsVisible", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await automatonService.listVisibleAutomatons(scope);
-});
-
-win.bind("automatonsSave", async (arg) => {
-  // Renamed on the way out of the destructure: `extensions`, `skills`, and `kanban` are
-  // also the names of module-level service imports at the top of this file, and
-  // shadowing them here would make any later service call inside this handler resolve
-  // to the arg's value instead.
-  const {
-    scope,
-    name,
-    description,
-    prompt,
-    extensions: extensionRefs,
-    skills: skillRefs,
-    tools,
-    model,
-    cron,
-    kanban: kanbanColumn,
-    wip,
-  } = arg as {
-    scope: string;
-    name: string;
-    description: string;
-    prompt: string;
-    extensions: string[];
-    skills: string[];
-    tools?: string[];
-    model?: string;
-    cron?: string;
-    kanban?: string;
-    wip?: number;
-  };
-  await automatonService.saveAutomaton(scope, name, {
-    description,
-    prompt,
-    extensions: extensionRefs,
-    skills: skillRefs,
-    tools,
-    model,
-    cron,
-    kanban: kanbanColumn,
-    wip,
-  });
-  return true;
-});
-
-win.bind("automatonsDelete", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await automatonService.deleteAutomaton(scope, name);
-  return true;
-});
-
-win.bind("automatonsApproved", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await automatonService.approvedNames(scope);
-});
-
-win.bind("automatonsReview", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  return await automatonService.reviewAutomaton(scope, name);
-});
-
-win.bind("automatonsApprove", async (arg) => {
-  const { scope, name, expectDigest } = arg as {
-    scope: string;
-    name: string;
-    expectDigest: string;
-  };
-  await automatonService.approveAutomaton(scope, name, expectDigest);
-  return true;
-});
-
-win.bind("automatonsRevokeApproval", async (arg) => {
-  const { scope, name } = arg as { scope: string; name: string };
-  await automatonService.revokeAutomatonApproval(scope, name);
-  return true;
-});
-
-win.bind("automatonsLaunch", async (arg) => {
-  const { scope, name, args, cwd: override } = arg as {
-    scope: string;
-    name: string;
-    args?: string;
-    cwd?: string;
-  };
-  return {
-    id: await automatons.launchAutomaton({
-      scope,
-      name,
-      cwd: await moduleDir(override),
-      args,
-    }),
-  };
-});
-
-win.bind("automatonsRuns", async (arg) => {
-  const { scope } = arg as { scope: string };
-  return await automatons.listRuns(scope);
-});
-
-win.bind("automatonsHistory", async (arg) => {
-  const { scope, id } = arg as { scope: string; id: string };
-  return await automatons.runHistory(scope, id);
-});
-
-win.bind("automatonsRead", async (arg) => {
-  const { id } = arg as { id: string };
-  return await automatons.readRun(id);
-});
-
-win.bind("automatonsStop", async (arg) => {
-  const { id } = arg as { id: string };
-  await automatons.stopRun(id);
-  return true;
-});
-
-// Skills — read-only listing (docs/automatons.md); the Library sub-tab shows this
-// list and the automaton editor picks from it.
+// Skills — read-only listing; the Library sub-tab shows this list.
 win.bind("skillsVisible", async (arg) => {
   const { scope } = arg as { scope: string };
   return await skills.listVisibleSkills(scope);
@@ -938,8 +808,6 @@ git = await import("./lib/gitdiff/git.ts");
 kanban = await import("./lib/kanban/service.ts");
 extensions = await import("./lib/extensions/service.ts");
 prompts = await import("./lib/prompts/service.ts");
-automatons = await import("./lib/automatons/run.ts");
-automatonService = await import("./lib/automatons/service.ts");
 skills = await import("./lib/skills/service.ts");
 agents = await import("./lib/agents/service.ts");
 scopeConfig = await import("./lib/scope/config.ts");
@@ -947,24 +815,6 @@ scopePrompt = await import("./lib/scope/prompt.ts");
 // Fold a pre-scope ~/.pique (global agent dir, boards/, settings sections) into
 // ~/.pique/scopes/root before anything reads from the new locations. No-op once done.
 await (await import("./lib/scope/migrate.ts")).migrateToScopes();
-// A run lives in this process's memory, so every `running` record on disk belongs to a
-// process that is gone. Turn those into `failed` before anything lists them.
-await automatons.reconcileRuns();
-// The cron trigger. After reconcileRuns, which the scheduler's "is it still running?"
-// check depends on — a stale `running` record must be repaired before a schedule can
-// consult the live map. Nothing catches up: minutes that passed while pique was closed
-// are gone (automatons/schedule.ts).
-(await import("./lib/automatons/schedule.ts")).startScheduler();
-// The kanban trigger. Registered rather than imported by kanban/service.ts, which cannot
-// import this module graph without closing a cycle through the pique:kanban tools. After
-// reconcileRuns for the same reason the scheduler is: the dispatcher's guards consult the
-// live map, and a stale `running` record must be repaired first.
-{
-  const kanbanTrigger = await import("./lib/automatons/kanban.ts");
-  kanban.setCardArrivedHandler((scope, arrival) => {
-    void kanbanTrigger.dispatchArrival(scope, arrival);
-  });
-}
 const { serveDir } = await import("jsr:@std/http@^1/file-server");
 const { fromFileUrl } = await import("@std/path");
 // Resolved off this module rather than the cwd: `--include dist` embeds the build one

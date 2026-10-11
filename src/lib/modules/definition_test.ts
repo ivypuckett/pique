@@ -44,7 +44,7 @@ Deno.test("a name that is not a legal extension name is refused", () => {
 // An install must never be able to take over a built-in row.
 Deno.test("a kind colliding with a built-in is refused at parse time", () => {
   for (
-    const builtin of ["kanban", "terminal", "library", "gitdiff", "automatons"]
+    const builtin of ["kanban", "terminal", "library", "gitdiff"]
   ) {
     assertEquals(ok(builtin, { label: "Mine" }).ok, false, builtin);
   }

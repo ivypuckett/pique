@@ -3,8 +3,8 @@
 // disk here.
 //
 // Returns a result rather than throwing, on purpose. A junk definition in one extension
-// must not break the listing of every other one — the same shape a broken automaton
-// gets, listed with its error rather than swallowing the list.
+// must not break the listing of every other one: it is listed with its error rather
+// than swallowing the list.
 import { isAbsolute } from "@std/path";
 import { MODULES } from "./manifest.ts";
 import type { Capabilities, Manifest } from "./capabilities.ts";

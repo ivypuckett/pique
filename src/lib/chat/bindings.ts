@@ -59,7 +59,7 @@ export function chatBindings(): ChatBindings | null {
 export interface ProviderBindings {
   providerList(): Promise<ProviderInfo[]>;
   // Every model those providers offer, for pickers with no chat session behind them
-  // (the automaton editor). A live Chat module uses chatListModels instead, which also
+  // (the Settings model checklist). A live Chat module uses chatListModels instead, which also
   // marks the one it is currently on.
   providerModels(): Promise<ModelOption[]>;
   // `value` is what the provider's login prompt asks for: an API key for most, a

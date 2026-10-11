@@ -64,8 +64,7 @@ export function setEnabled(
 }
 
 // What a picker lists. `keep` is a `provider/id` ref that stays listed even when it is
-// unchecked — the model a conversation is already running, or the one an automaton has
-// saved: hiding it would show the picker sitting on some other model's name.
+// unchecked — the model a conversation is already running: hiding it would show the picker sitting on some other model's name.
 export function visibleModels<T extends Model>(
   models: T[],
   selection: ModelSelection,

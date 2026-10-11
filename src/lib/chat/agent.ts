@@ -466,7 +466,7 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
     ...m,
     current: m.provider === current?.provider && m.id === current?.id,
   }));
-  // Same narrowing the automaton picker gets (providers.ts listModels): Bedrock's
+  // Same narrowing the Settings checklist gets (providers.ts listModels): Bedrock's
   // static catalog is mostly unusable in any one region. See bedrock.ts.
   return filterBedrockModels(models, await resolveBedrockRegion());
 }

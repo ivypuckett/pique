@@ -1,6 +1,6 @@
 // One hash over a set of files, used by every review gate: what the human read is
 // pinned by its digest, and the enable/approve refuses if the bytes moved since
-// (extensions/service.ts, automatons/approval.ts). Pure — no filesystem — so a caller
+// (extensions/service.ts). Pure — no filesystem — so a caller
 // decides what the reviewed set is and this only says whether two sets are the same.
 //
 // Paths as well as contents, so swapping which files a reviewed set resolves to counts

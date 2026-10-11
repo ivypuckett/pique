@@ -43,7 +43,7 @@ type Common = {
   badge?: string;
   // Two severities, because the existing UI has two. `problem` is red: a template or a
   // skill whose frontmatter would not parse. `note` is dim: a skill whose frontmatter
-  // `name:` disagrees with the basename an automaton has to use. Collapsing them would
+  // `name:` disagrees with its basename. Collapsing them would
   // either shout about a naming quirk or whisper about a broken file.
   problem?: string;
   note?: string;

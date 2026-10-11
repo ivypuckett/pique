@@ -10,7 +10,6 @@ import FileTree from "../filetree/FileTree.svelte";
 import GitDiff from "../gitdiff/GitDiff.svelte";
 import Kanban from "../kanban/Kanban.svelte";
 import Library from "../library/Library.svelte";
-import Automatons from "../automatons/Automatons.svelte";
 import UserModule from "./UserModule.svelte";
 import { moduleDef } from "./manifest.ts";
 
@@ -36,7 +35,6 @@ export const registry: Record<
   gitdiff: GitDiff,
   kanban: Kanban,
   library: Library,
-  automatons: Automatons,
 };
 
 // Which component renders `kind`: the built-in for it, or the iframe host for a module

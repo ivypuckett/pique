@@ -263,7 +263,7 @@ Deno.test("selectGroup reopens a module whose last tab was closed", () => {
 });
 
 Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
-  // rail order: editor, terminal, gitdiff, kanban, library, automatons
+  // rail order: editor, terminal, gitdiff, kanban, library
   let v = createInitialView(); // terminal selected
   v = focusAdjacentGroup(v, -1);
   assertEquals(v.right.activeGroup, EDITOR);
@@ -273,7 +273,7 @@ Deno.test("focusAdjacentGroup walks the rail and clamps at both ends", () => {
   v = focusAdjacentGroup(v, 1);
   assertEquals(v.right.activeGroup, "gitdiff");
   for (let i = 0; i < 9; i++) v = focusAdjacentGroup(v, 1);
-  assertEquals(v.right.activeGroup, "automatons"); // clamped at the bottom
+  assertEquals(v.right.activeGroup, "library"); // clamped at the bottom
 });
 
 Deno.test("focusAdjacentGroup opens the module of the row it lands on", () => {
@@ -462,10 +462,6 @@ Deno.test("addDiffTab adds a gitdiff tab in the editor group, scoped to the file
 
 Deno.test("library is a module kind with a capitalised label", () => {
   assertEquals(moduleLabel("library"), "Library");
-});
-
-Deno.test("automatons gets a capitalized label from the fallback", () => {
-  assertEquals(moduleLabel("automatons"), "Automatons");
 });
 
 Deno.test("addTab opens a Library tab titled Library", () => {

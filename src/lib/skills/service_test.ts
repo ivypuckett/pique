@@ -3,7 +3,6 @@ import {
   listSkills,
   listVisibleSkills,
   promoteSkill,
-  resolveSkillPath,
 } from "./service.ts";
 import { skillsDir } from "./paths.ts";
 import { ROOT, type ScopeId } from "../scope/paths.ts";
@@ -108,23 +107,8 @@ Deno.test("a workspace sees root's skills and its own, nearest name winning", as
   });
 });
 
-Deno.test("resolveSkillPath prefers the nearest scope and returns undefined when absent", async () => {
-  await withTempHome(async () => {
-    await writeDirSkill("root", "shared", "---\n---\nb");
-    await writeDirSkill("ws-1", "shared", "---\n---\nb");
-
-    assertEquals(
-      await resolveSkillPath("ws-1", "shared"),
-      `${skillsDir("ws-1")}/shared`,
-    );
-    assertEquals(await resolveSkillPath("ws-1", "nope"), undefined);
-  });
-});
-
 // The directory shape wins because `<name>/SKILL.md` is what pi itself treats as a
-// skill root; a loose `<name>.md` sharing that name is the accident. Pinned here so
-// a future edit can't accidentally flip it and make listVisibleSkills (last insert
-// wins) and resolveSkillPath (first match wins) disagree again.
+// skill root; a loose `<name>.md` sharing that name is the accident.
 Deno.test("when both shapes share a name, the directory form wins and the loose file is dropped", async () => {
   await withTempHome(async () => {
     await writeDirSkill("ws-1", "foo", "---\ndescription: from dir\n---\nb");

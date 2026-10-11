@@ -21,9 +21,8 @@ export function skillItems(
     // Frontmatter that would not parse: the skill still loads, but its description is
     // missing and that is worth saying rather than showing a blank line.
     problem: skill.error,
-    // An automaton names a skill by its path basename, never by the frontmatter `name:`.
-    // A divergence is not an error — the skill works — but it will make a `skills:`
-    // entry that copies the frontmatter fail to resolve.
+    // pique names a skill by its path basename, never by the frontmatter `name:`. A
+    // divergence is not an error — the skill works — but it is worth pointing out.
     note: skill.frontmatterName && skill.frontmatterName !== skill.name
       ? `Its frontmatter says ${skill.frontmatterName}; name it ${skill.name}.`
       : undefined,

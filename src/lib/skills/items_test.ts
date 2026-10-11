@@ -27,9 +27,8 @@ Deno.test("no skill is ever pending", () => {
   assertEquals(items.filter((i) => i.state === "pending"), []);
 });
 
-// An automaton names a skill by its path basename, never by the frontmatter `name:`
-// (skills/service.ts). Surfacing the divergence here beats a mysterious "skill not
-// found" at launch time.
+// pique names a skill by its path basename, never by the frontmatter `name:`
+// (skills/service.ts), so the divergence is surfaced.
 Deno.test("a frontmatter name that disagrees with the basename becomes a note", () => {
   const items = skillItems(
     [s({ name: "brainstorm", frontmatterName: "brainstorming" })],

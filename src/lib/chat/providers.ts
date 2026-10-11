@@ -46,7 +46,7 @@ export type ProviderInfo = {
 
 // One model the runtime can serve, addressed the way a stored `provider/model-id` ref
 // is. Distinct from chat/agent.ts's ModelInfo, which also marks which one a LIVE chat
-// session is on: the automaton editor has no session, only a definition to write into.
+// session is on: the Settings checklist has no session behind it.
 export type ModelOption = { provider: string; id: string; name: string };
 
 // A user-defined OpenAI-compatible endpoint, as entered in the Settings form.

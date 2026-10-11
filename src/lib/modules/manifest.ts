@@ -35,7 +35,6 @@ export const MODULES: ModuleDef[] = [
   // b, not l: "next tab" is worth more on l — the pane is a strip you move along far
   // more often than you open a library.
   { kind: "library", label: "Library", key: "b" },
-  { kind: "automatons", label: "Automatons", key: "a" },
 ];
 
 // Modules contributed by installed extensions, set at boot and on Library refresh.

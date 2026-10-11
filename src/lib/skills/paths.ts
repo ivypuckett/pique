@@ -7,8 +7,7 @@
 // review gate does not apply. Runs Deno-side only.
 import { scopeAgentDir, type ScopeId } from "../scope/paths.ts";
 
-// A skill name is a path basename AND the token an automaton names it by, so it is
-// constrained the way a prompt template name is: no separators, no traversal.
+// A skill name is a path basename, so it is constrained the way a prompt template name is: no separators, no traversal.
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export function skillsDir(scope: ScopeId): string {

@@ -10,9 +10,8 @@
 //
 // The three claims that has to satisfy before pique can lean on it are below: an
 // enable lands, a revoke lands, and the conversation is not thrown away in the process.
-// The scaffolding (mock model endpoint, seeded models.json, temp HOME) is the shape
-// automatons/run_integration_test.ts established, for the same reason: startAgent
-// resolves a real model and refuses to start without one.
+// The scaffolding (mock model endpoint, seeded models.json, temp HOME) is there because
+// startAgent resolves a real model and refuses to start without one.
 import { assertEquals } from "@std/assert";
 import {
   activeToolNames,

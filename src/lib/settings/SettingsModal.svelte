@@ -762,7 +762,7 @@
                       {/each}
                     </ul>
                     <div class="mt-1 text-[0.65rem] opacity-50">
-                      Only checked models appear in the chat and automaton model pickers.
+                      Only checked models appear in the chat model picker.
                     </div>
                   {/if}
                 {/if}
