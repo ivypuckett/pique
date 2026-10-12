@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
+  explainBedrockError,
   filterBedrockModels,
   geoPrefixForRegion,
   parseAwsProfiles,
@@ -120,4 +121,15 @@ Deno.test("filterBedrockModels keeps global profiles in an unmapped region", () 
     "amazon.nova-micro-v1:0",
     "claude-opus-4-5",
   ]);
+});
+
+Deno.test("explainBedrockError expands the SDK's bare region error and passes others through", () => {
+  const explained = explainBedrockError("Region is missing");
+  assertEquals(explained.startsWith("Amazon Bedrock has no AWS region"), true);
+  assertEquals(explained.includes("~/.aws/config"), true);
+  assertEquals(
+    explainBedrockError("Error: Region is missing").includes("sso_region"),
+    true,
+  );
+  assertEquals(explainBedrockError("rate limited"), "rate limited");
 });
