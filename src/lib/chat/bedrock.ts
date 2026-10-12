@@ -158,3 +158,14 @@ export async function resolveBedrockRegion(): Promise<string | undefined> {
     return undefined; // no auth.json, or not connected — nothing to say
   }
 }
+
+// The AWS SDK's own message when it cannot find a region is "Region is missing", with
+// nothing about where it looked or how to fix it. Every other error passes through.
+export function explainBedrockError(message: string): string {
+  if (!/\bRegion is missing\b/.test(message)) return message;
+  return "Amazon Bedrock has no AWS region to call. None was found in AWS_REGION, " +
+    "AWS_DEFAULT_REGION, or a `region =` line for the connected profile in " +
+    "~/.aws/config (an SSO profile's `sso_region` does not count). Add a " +
+    "`region =` line to that profile, or reconnect Bedrock in Settings to use " +
+    "us-east-1. Global models need a region too: it is where the call is sent from.";
+}

@@ -316,12 +316,21 @@ export async function connectProvider(
 // in any other region silently talks to the wrong one and every model reads as an
 // invalid identifier. Storing AWS_REGION in the credential's env fixes that, because
 // pi consults the credential env ahead of the process environment.
+//
+// A profile with no `region =` line (common for SSO profiles, which carry only an
+// `sso_region`) gets us-east-1 stored instead, unless the environment names a region.
+// Left unset, pi hands region resolution to the AWS SDK whenever AWS_PROFILE is in the
+// process environment, and the SDK fails every call with a bare "Region is missing".
+// us-east-1 is what pi itself falls back to otherwise, and what the picker assumes.
 export async function connectAwsProfile(
   name: string,
   region?: string,
 ): Promise<void> {
   await connectProvider(BEDROCK, name, "aws-profile");
-  if (region) await mergeCredentialEnv(BEDROCK, { AWS_REGION: region });
+  const fromEnv = Deno.env.get("AWS_REGION") ??
+    Deno.env.get("AWS_DEFAULT_REGION");
+  const stored = region ?? (fromEnv ? undefined : "us-east-1");
+  if (stored) await mergeCredentialEnv(BEDROCK, { AWS_REGION: stored });
 }
 
 // Add env vars to a stored credential, leaving its type/key and every other provider's

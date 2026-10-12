@@ -139,7 +139,11 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { filterBedrockModels, resolveBedrockRegion } from "./bedrock.ts";
+import {
+  explainBedrockError,
+  filterBedrockModels,
+  resolveBedrockRegion,
+} from "./bedrock.ts";
 import { listAvailableModels } from "./available.ts";
 import { resolveModuleDir } from "../settings/file.ts";
 import { moduleAuthoringTools } from "../modules/agent-tools.ts";
@@ -379,14 +383,21 @@ export function promptAgent(id: string, text: string): void {
     .then(() => {
       queue.push(
         session.agent?.state?.errorMessage
-          ? { kind: "error", message: String(session.agent.state.errorMessage) }
+          ? {
+            kind: "error",
+            message: explainBedrockError(
+              String(session.agent.state.errorMessage),
+            ),
+          }
           : { kind: "done" },
       );
     })
     .catch((err: unknown) => {
       queue.push({
         kind: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: explainBedrockError(
+          err instanceof Error ? err.message : String(err),
+        ),
       });
     });
 }
