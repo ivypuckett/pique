@@ -9,12 +9,12 @@ import type {
   ReloadSummary,
   ThinkingLevel,
 } from "./agent.ts";
-import type { AwsProfile, ModelOption, ProviderInfo } from "./providers.ts";
+import type { LoginStep, ModelOption, ProviderInfo } from "./providers.ts";
 export type {
-  AwsProfile,
   ChatEvent,
   CommandInfo,
   Item,
+  LoginStep,
   ModelInfo,
   ModelOption,
   ProviderInfo,
@@ -60,20 +60,14 @@ export interface ProviderBindings {
   // (the Settings model checklist). A live Chat module uses chatListModels instead, which also
   // marks the one it is currently on.
   providerModels(): Promise<ModelOption[]>;
-  // `value` is what the provider's login prompt asks for: an API key for most, a
-  // bearer token or an AWS profile name for Bedrock. `method` answers a provider whose
-  // flow opens by selecting between several (see apiKeyInteraction in providers.ts).
-  providerConnect(
-    arg: { id: string; value: string; method?: string },
-  ): Promise<unknown>;
-  // AWS profiles found in ~/.aws, offered as Bedrock connections. Empty when there are
-  // none — including when Bedrock is already authenticated from the environment.
-  providerAwsProfiles(): Promise<AwsProfile[]>;
-  // Connect Bedrock as one of them, storing its region so calls do not fall back to
-  // the catalog's us-east-1 (see connectAwsProfile in providers.ts).
-  providerConnectAwsProfile(
-    arg: { name: string; region?: string },
-  ): Promise<unknown>;
+  // A provider's login, driven one pi prompt at a time: start it, answer each step's
+  // prompt, until a step comes back done. A rejected step is a failed login.
+  providerLoginStart(arg: { id: string }): Promise<LoginStep>;
+  providerLoginAnswer(arg: { value: string }): Promise<LoginStep>;
+  providerLoginCancel(): Promise<unknown>;
+  // The AWS region stored with Bedrock's credential; blank removes it (see
+  // setBedrockRegion in providers.ts).
+  providerSetBedrockRegion(arg: { region: string }): Promise<unknown>;
   providerDisconnect(arg: { id: string }): Promise<unknown>;
   providerAddCustom(
     arg: { id: string; baseUrl: string; apiKey?: string; models: string[] },

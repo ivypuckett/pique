@@ -139,11 +139,6 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  explainBedrockError,
-  filterBedrockModels,
-  resolveBedrockRegion,
-} from "./bedrock.ts";
 import { listAvailableModels } from "./available.ts";
 import { resolveModuleDir } from "../settings/file.ts";
 import { moduleAuthoringTools } from "../modules/agent-tools.ts";
@@ -383,21 +378,14 @@ export function promptAgent(id: string, text: string): void {
     .then(() => {
       queue.push(
         session.agent?.state?.errorMessage
-          ? {
-            kind: "error",
-            message: explainBedrockError(
-              String(session.agent.state.errorMessage),
-            ),
-          }
+          ? { kind: "error", message: String(session.agent.state.errorMessage) }
           : { kind: "done" },
       );
     })
     .catch((err: unknown) => {
       queue.push({
         kind: "error",
-        message: explainBedrockError(
-          err instanceof Error ? err.message : String(err),
-        ),
+        message: err instanceof Error ? err.message : String(err),
       });
     });
 }
@@ -434,13 +422,10 @@ export async function listModels(id: string): Promise<ModelInfo[]> {
   // One provider at a time, so a provider that cannot resolve its credentials — an
   // expired AWS SSO session, a stopped LM Studio — costs the picker its own models
   // and not everyone else's. See available.ts.
-  const models = (await listAvailableModels(runtime)).map((m) => ({
+  return (await listAvailableModels(runtime)).map((m) => ({
     ...m,
     current: m.provider === current?.provider && m.id === current?.id,
   }));
-  // Same narrowing the Settings checklist gets (providers.ts listModels): Bedrock's
-  // static catalog is mostly unusable in any one region. See bedrock.ts.
-  return filterBedrockModels(models, await resolveBedrockRegion());
 }
 
 export async function setModel(

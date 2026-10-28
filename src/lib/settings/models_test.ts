@@ -2,9 +2,11 @@ import { assertEquals } from "@std/assert";
 import {
   isEnabled,
   isEnabledByDefault,
+  modelGroups,
   type ModelSelection,
   orderModels,
   setEnabled,
+  setManyEnabled,
   visibleModels,
 } from "./models.ts";
 
@@ -53,6 +55,46 @@ Deno.test("toggling a Bedrock model materialises the default, not the whole cata
   assertEquals(setEnabled({}, "amazon-bedrock", all, "global.a", false), {
     "amazon-bedrock": ["global.b"],
   });
+});
+
+Deno.test("Bedrock's checklist groups by where a model can be called from", () => {
+  assertEquals(
+    modelGroups("amazon-bedrock", [
+      "us.anthropic.claude-opus-5",
+      "global.anthropic.claude-opus-5",
+      "amazon.nova-pro-v1:0",
+      "eu.anthropic.claude-opus-5",
+      "us.meta.llama4-scout",
+    ]),
+    [
+      { label: "Global", ids: ["global.anthropic.claude-opus-5"] },
+      {
+        label: "US",
+        ids: ["us.anthropic.claude-opus-5", "us.meta.llama4-scout"],
+      },
+      { label: "EU", ids: ["eu.anthropic.claude-opus-5"] },
+      { label: "On-demand", ids: ["amazon.nova-pro-v1:0"] },
+    ],
+  );
+  // Other providers' dotted ids are versions, not geographies.
+  assertEquals(modelGroups("openai", ["gpt-4.1", "gpt-4.1-mini"]), []);
+});
+
+Deno.test("switching a group on adds it to the Bedrock default, once", () => {
+  const all = ["global.a", "eu.b", "eu.c", "meta.d"];
+  assertEquals(
+    setManyEnabled({}, "amazon-bedrock", all, ["eu.b", "eu.c"], true),
+    { "amazon-bedrock": ["global.a", "eu.b", "eu.c"] },
+  );
+  const sel = { "amazon-bedrock": ["global.a", "eu.b"] };
+  assertEquals(
+    setManyEnabled(sel, "amazon-bedrock", all, ["eu.b", "eu.c"], true),
+    { "amazon-bedrock": ["global.a", "eu.b", "eu.c"] },
+  );
+  assertEquals(
+    setManyEnabled(sel, "amazon-bedrock", all, ["eu.b", "eu.c"], false),
+    { "amazon-bedrock": ["global.a"] },
+  );
 });
 
 Deno.test("an empty list disables every model of that provider", () => {

@@ -16,14 +16,10 @@ import { dirname } from "@std/path";
 import { ensureRuntime } from "./agent.ts";
 import { listAvailableModels } from "./available.ts";
 import { agentDir } from "../paths.ts";
-import {
-  BEDROCK,
-  filterBedrockModels,
-  resolveBedrockRegion,
-} from "./bedrock.ts";
 
-export { detectAwsProfiles } from "./bedrock.ts";
-export type { AwsProfile } from "./bedrock.ts";
+// The one provider with a setting pi's login never asks for: its AWS region (see
+// setBedrockRegion).
+const BEDROCK = "amazon-bedrock";
 
 // JSON-safe projection of a pi Provider for the Settings UI.
 export type ProviderInfo = {
@@ -39,6 +35,8 @@ export type ProviderInfo = {
   source?: string;
   // What the environment offered, when that is the source: the variable's name.
   sourceLabel?: string;
+  // Bedrock only: the AWS_REGION stored with its credential, if any.
+  region?: string;
 };
 
 // One model the runtime can serve, addressed the way a stored `provider/model-id` ref
@@ -185,37 +183,114 @@ export function validateCustomInput(input: CustomProviderInput): void {
   }
 }
 
-// The pi login flow drives an interaction to collect credentials. Most providers
-// prompt once (secret/text) for a key; feed the UI-provided value to those prompts.
-//
-// Some providers open with a `select` naming several auth methods — Amazon Bedrock
-// offers a bearer token, an AWS profile, or the ambient credential chain. `method`
-// answers that select, and the follow-up prompt takes `value` (the token, or the
-// profile name). It must be one of the ids the prompt actually offers, so a UI built
-// against a flow the provider has since changed fails loudly rather than picking the
-// wrong method. Without it a select still rejects: a multi-field flow must surface as
-// an error, not a silently-wrong credential.
-export function apiKeyInteraction(value: string, method?: string) {
+// One step of a provider's login, as the Settings card renders it: the prompt pi is
+// waiting on, plus whatever it said along the way. Every provider's login is built out
+// of these — most ask for one secret, Amazon Bedrock opens by selecting between a
+// bearer token, an AWS profile and the ambient credential chain — so the card shows
+// them as asked rather than knowing any provider's flow in advance.
+export type LoginPrompt = {
+  type: "text" | "secret" | "select";
+  message: string;
+  placeholder?: string;
+  options?: { id: string; label: string; description?: string }[];
+};
+export type LoginNote = {
+  message: string;
+  links: { url: string; label?: string }[];
+};
+export type LoginStep =
+  | { done: true }
+  | { done: false; prompt: LoginPrompt; notes: LoginNote[] };
+
+type AuthPrompt = {
+  type: string;
+  message: string;
+  placeholder?: string;
+  options?: readonly { id: string; label: string; description?: string }[];
+};
+type AuthEvent = {
+  type: string;
+  message?: string;
+  links?: readonly { url: string; label?: string }[];
+};
+export type LoginInteraction = {
+  prompt(p: AuthPrompt): Promise<string>;
+  notify(e: AuthEvent): void;
+};
+
+// A login in progress, paused at each prompt until the UI answers it. `next()` is the
+// step the flow is on; `answer()` resumes it and resolves with the step after. A login
+// that throws rejects the pending step, which is how a bad key reaches the card.
+export class LoginFlow {
+  #notes: LoginNote[] = [];
+  #pending?: { resolve(v: string): void; reject(e: Error): void };
+  #next!: Promise<LoginStep>;
+  #settle!: (step: LoginStep) => void;
+  #fail!: (e: unknown) => void;
+
+  constructor(run: (interaction: LoginInteraction) => Promise<unknown>) {
+    this.#arm();
+    run({
+      prompt: (p) =>
+        new Promise((resolve, reject) => {
+          this.#pending = { resolve, reject };
+          this.#settle({
+            done: false,
+            prompt: toLoginPrompt(p),
+            notes: this.#take(),
+          });
+        }),
+      notify: (e) => {
+        if (e.message) {
+          this.#notes.push({ message: e.message, links: [...(e.links ?? [])] });
+        }
+      },
+    }).then(() => this.#settle({ done: true }), (e) => this.#fail(e));
+  }
+
+  #arm(): void {
+    this.#next = new Promise((resolve, reject) => {
+      this.#settle = resolve;
+      this.#fail = reject;
+    });
+    // A cancelled flow rejects a step nobody is waiting on; that is not an error.
+    this.#next.catch(() => {});
+  }
+
+  #take(): LoginNote[] {
+    const notes = this.#notes;
+    this.#notes = [];
+    return notes;
+  }
+
+  next(): Promise<LoginStep> {
+    return this.#next;
+  }
+
+  answer(value: string): Promise<LoginStep> {
+    const pending = this.#pending;
+    if (!pending) throw new Error("the login is not waiting on an answer");
+    this.#pending = undefined;
+    this.#arm();
+    pending.resolve(value);
+    return this.#next;
+  }
+
+  cancel(): void {
+    this.#pending?.reject(new Error("login cancelled"));
+    this.#pending = undefined;
+  }
+}
+
+// pi's `manual_code` prompt is a text box by another name (it belongs to OAuth, which
+// this card does not run, but costs nothing to accept).
+export function toLoginPrompt(p: AuthPrompt): LoginPrompt {
+  const type = p.type === "secret" || p.type === "select" ? p.type : "text";
   return {
-    prompt: (
-      p: { type: string; options?: readonly { id: string }[] },
-    ): Promise<string> => {
-      if (p.type === "secret" || p.type === "text") {
-        return Promise.resolve(value);
-      }
-      if (p.type === "select" && method !== undefined) {
-        const ids = (p.options ?? []).map((o) => o.id);
-        return ids.includes(method) ? Promise.resolve(method) : Promise.reject(
-          new Error(
-            `auth method "${method}" is not offered (have: ${ids.join(", ")})`,
-          ),
-        );
-      }
-      return Promise.reject(
-        new Error(`unsupported auth prompt for API-key login: ${p.type}`),
-      );
-    },
-    notify: () => {},
+    type,
+    message: p.message,
+    placeholder: p.placeholder,
+    options: p.options?.map((o) => ({ ...o })),
   };
 }
 
@@ -257,10 +332,11 @@ export async function listProviders(): Promise<ProviderInfo[]> {
       stored.add(entry.providerId);
     }
   } catch { /* no stored credentials to add — the live check still speaks */ }
+  const region = (await readAuthJson())[BEDROCK]?.env?.AWS_REGION;
   return await Promise.all(
     runtime.getProviders().map(async (p: { id: string }) => {
       const status = runtime.getProviderAuthStatus(p.id);
-      return toProviderInfo(
+      const info = toProviderInfo(
         p,
         status.configured ? status : authStatusFallback(
           stored.has(p.id),
@@ -268,6 +344,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
         ),
         custom.has(p.id),
       );
+      return p.id === BEDROCK ? { ...info, region } : info;
     }),
   );
 }
@@ -289,73 +366,87 @@ async function checkAuth(
 // Every model the connected providers offer. Session-independent, which is what makes
 // it usable from a picker that is choosing a model for a run that does not exist yet.
 export async function listModels(): Promise<ModelOption[]> {
-  const models = await listAvailableModels(await ensureRuntime());
-  // Bedrock ships a static catalog that is mostly unusable in any one region; see
-  // bedrock.ts for why the picker is narrowed rather than showing all 114.
-  return filterBedrockModels(models, await resolveBedrockRegion());
+  return await listAvailableModels(await ensureRuntime());
 }
 
-// Persist a credential for a built-in provider via pi's login flow (→ auth.json).
-// `value` is whatever that provider's prompt asks for — an API key for most, a bearer
-// token or an AWS profile name for Bedrock (see apiKeyInteraction on `method`).
-export async function connectProvider(
-  id: string,
-  value: string,
-  method?: string,
-): Promise<void> {
-  if (value.trim() === "") throw new Error("a credential is required");
+// The one login the Settings card is running. Starting another abandons it.
+let login: LoginFlow | undefined;
+
+// Begin a provider's login through pi (→ auth.json), returning its first prompt.
+export async function loginStart(id: string): Promise<LoginStep> {
+  login?.cancel();
   const runtime = await ensureRuntime();
-  await runtime.login(id, "api_key", apiKeyInteraction(value.trim(), method));
+  const flow = new LoginFlow((i) => runtime.login(id, "api_key", i));
+  login = flow;
+  return await settle(flow, flow.next());
 }
 
-// Connect Bedrock as an AWS profile, storing the profile's own region alongside it.
-//
-// The region is the part pi cannot work out for itself: it reads AWS_REGION and
-// AWS_DEFAULT_REGION only, never the `region =` line in ~/.aws/config. With neither
-// set it pins the catalog's baseUrl — us-east-1 for all but ten entries — so a profile
-// in any other region silently talks to the wrong one and every model reads as an
-// invalid identifier. Storing AWS_REGION in the credential's env fixes that, because
-// pi consults the credential env ahead of the process environment.
-//
-// A profile with no `region =` line (common for SSO profiles, which carry only an
-// `sso_region`) gets us-east-1 stored instead, unless the environment names a region.
-// Left unset, pi hands region resolution to the AWS SDK whenever AWS_PROFILE is in the
-// process environment, and the SDK fails every call with a bare "Region is missing".
-// us-east-1 is what pi itself falls back to otherwise, and what the picker assumes.
-export async function connectAwsProfile(
-  name: string,
-  region?: string,
-): Promise<void> {
-  await connectProvider(BEDROCK, name, "aws-profile");
-  const fromEnv = Deno.env.get("AWS_REGION") ??
-    Deno.env.get("AWS_DEFAULT_REGION");
-  const stored = region ?? (fromEnv ? undefined : "us-east-1");
-  if (stored) await mergeCredentialEnv(BEDROCK, { AWS_REGION: stored });
+export async function loginAnswer(value: string): Promise<LoginStep> {
+  if (!login) throw new Error("no login is in progress");
+  return await settle(login, login.answer(value));
 }
 
-// Add env vars to a stored credential, leaving its type/key and every other provider's
-// entry alone. pi's login writes the credential and offers no way to amend it, and the
-// Bedrock flow stores only AWS_PROFILE — so the region goes in with a read-modify-write
-// of the same file, the way pique already edits models.json next door.
-async function mergeCredentialEnv(
-  id: string,
-  env: Record<string, string>,
-): Promise<void> {
-  const path = `${agentDir()}/auth.json`;
-  let auth: Record<string, { env?: Record<string, string> }>;
+export function loginCancel(): void {
+  login?.cancel();
+  login = undefined;
+}
+
+// A finished or failed login is no longer the one in progress.
+async function settle(
+  flow: LoginFlow,
+  step: Promise<LoginStep>,
+): Promise<LoginStep> {
   try {
-    auth = JSON.parse(await Deno.readTextFile(path));
-  } catch {
-    return; // login just wrote this; if it cannot be read back, leave it as it is
+    const result = await step;
+    if (result.done && login === flow) login = undefined;
+    return result;
+  } catch (e) {
+    if (login === flow) login = undefined;
+    throw e;
   }
-  const entry = auth[id];
-  if (!entry || typeof entry !== "object") return;
-  auth[id] = { ...entry, env: { ...entry.env, ...env } };
+}
+
+// Store the AWS region Bedrock calls go to, alongside its stored credential; blank
+// removes it.
+//
+// pi's login never asks for one, and does not read the `region =` line in ~/.aws/config
+// either: with no AWS_REGION it sends a stored profile or bearer token to the model's
+// catalog endpoint, us-east-1 for nearly everything, and a profile set up anywhere else
+// fails as an invalid model identifier. pi reads the credential's env ahead of the
+// process environment, so a region stored there reaches every call.
+export async function setBedrockRegion(region: string): Promise<void> {
+  const auth = await readAuthJson();
+  const entry = auth[BEDROCK];
+  if (!entry || typeof entry !== "object") {
+    throw new Error("connect Amazon Bedrock before setting its region");
+  }
+  const env = { ...entry.env };
+  if (region.trim() === "") delete env.AWS_REGION;
+  else env.AWS_REGION = region.trim();
+  auth[BEDROCK] = { ...entry, env };
   // auth.json holds every provider's secrets — keep it to the owner, as pi does.
+  const path = authJsonPath();
   await Deno.mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await Deno.writeTextFile(path, JSON.stringify(auth, null, 2) + "\n", {
     mode: 0o600,
   });
+}
+
+function authJsonPath(): string {
+  return `${agentDir()}/auth.json`;
+}
+
+// pi's credential store. pi's own API writes a credential whole and offers no way to
+// amend one, so the region goes in with a read-modify-write of the same file, the way
+// pique already edits models.json next door. Missing or corrupt reads as empty.
+async function readAuthJson(): Promise<
+  Record<string, { env?: Record<string, string> }>
+> {
+  try {
+    return JSON.parse(await Deno.readTextFile(authJsonPath()));
+  } catch {
+    return {};
+  }
 }
 
 export async function disconnectProvider(id: string): Promise<void> {

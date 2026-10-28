@@ -1,9 +1,10 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
-  apiKeyInteraction,
   authStatusFallback,
   buildCustomEntry,
   customProviderIds,
+  LoginFlow,
+  type LoginInteraction,
   removeProviderFromConfig,
   toProviderInfo,
   upsertCustomProvider,
@@ -159,42 +160,95 @@ Deno.test("validateCustomInput rejects bad id, blank url, and no models", () => 
   validateCustomInput({ id: "lm-studio_2", baseUrl: "u", models: ["m"] }); // does not throw
 });
 
-Deno.test("apiKeyInteraction returns the key for secret/text prompts", async () => {
-  const it = apiKeyInteraction("sk-123");
-  assertEquals(await it.prompt({ type: "secret" }), "sk-123");
-  assertEquals(await it.prompt({ type: "text" }), "sk-123");
-  await assertRejects(
-    () => it.prompt({ type: "select" }),
-    Error,
-    "unsupported auth prompt",
-  );
+// The shape of pi's Amazon Bedrock login: a select between methods, a note, then the
+// follow-up prompt the chosen method needs.
+async function bedrockLogin(i: LoginInteraction) {
+  const method = await i.prompt({
+    type: "select",
+    message: "Select Amazon Bedrock authentication method:",
+    options: [
+      { id: "bearer-token", label: "Bearer token" },
+      { id: "aws-profile", label: "AWS profile" },
+    ],
+  });
+  if (method === "bearer-token") {
+    return { key: await i.prompt({ type: "secret", message: "Enter token" }) };
+  }
+  i.notify({
+    type: "info",
+    message: "Bedrock supports AWS profiles.",
+    links: [{ url: "https://docs.aws.amazon.com/" }],
+  });
+  return {
+    profile: await i.prompt({
+      type: "text",
+      message: "Enter AWS profile name",
+    }),
+  };
+}
+
+Deno.test("LoginFlow walks a login one prompt at a time, carrying its notes", async () => {
+  let stored: unknown;
+  const flow = new LoginFlow(async (i) => {
+    stored = await bedrockLogin(i);
+  });
+  const first = await flow.next();
+  assertEquals(first.done, false);
+  if (first.done) return;
+  assertEquals(first.prompt.type, "select");
+  assertEquals(first.prompt.options?.map((o) => o.id), [
+    "bearer-token",
+    "aws-profile",
+  ]);
+  assertEquals(first.notes, []);
+
+  const second = await flow.answer("aws-profile");
+  assertEquals(second.done, false);
+  if (second.done) return;
+  assertEquals(second.prompt, {
+    type: "text",
+    message: "Enter AWS profile name",
+    placeholder: undefined,
+    options: undefined,
+  });
+  assertEquals(second.notes, [{
+    message: "Bedrock supports AWS profiles.",
+    links: [{ url: "https://docs.aws.amazon.com/" }],
+  }]);
+
+  assertEquals(await flow.answer("work-sso"), { done: true });
+  assertEquals(stored, { profile: "work-sso" });
 });
 
-Deno.test("apiKeyInteraction answers a select with the chosen method", async () => {
-  // Bedrock's real flow: select the method, then the follow-up prompt takes the value.
-  const it = apiKeyInteraction("work-sso", "aws-profile");
-  const options = [
-    { id: "bearer-token" },
-    { id: "aws-profile" },
-    { id: "credential-chain" },
-  ];
-  assertEquals(await it.prompt({ type: "select", options }), "aws-profile");
-  assertEquals(await it.prompt({ type: "text" }), "work-sso");
+Deno.test("LoginFlow finishes at once for a login with nothing to ask", async () => {
+  const flow = new LoginFlow(() => Promise.resolve());
+  assertEquals(await flow.next(), { done: true });
 });
 
-Deno.test("apiKeyInteraction rejects a method the prompt does not offer", async () => {
-  const it = apiKeyInteraction("v", "aws-profile");
-  await assertRejects(
-    () => it.prompt({ type: "select", options: [{ id: "bearer-token" }] }),
-    Error,
-    'auth method "aws-profile" is not offered',
-  );
-  // A select with no options at all is the same failure, not a silent pass.
-  await assertRejects(
-    () => it.prompt({ type: "select" }),
-    Error,
-    "is not offered",
-  );
+Deno.test("LoginFlow rejects the step a failed login was on", async () => {
+  const flow = new LoginFlow(async (i) => {
+    await i.prompt({ type: "secret", message: "API key" });
+    throw new Error("invalid key");
+  });
+  await flow.next();
+  await assertRejects(() => flow.answer("nope"), Error, "invalid key");
+});
+
+Deno.test("LoginFlow cancel ends the login without an unhandled rejection", async () => {
+  let reason = "";
+  const flow = new LoginFlow(async (i) => {
+    try {
+      await i.prompt({ type: "secret", message: "API key" });
+    } catch (e) {
+      reason = (e as Error).message;
+      throw e;
+    }
+  });
+  await flow.next();
+  flow.cancel();
+  await new Promise((r) => setTimeout(r, 0));
+  assertEquals(reason, "login cancelled");
+  assertThrows(() => flow.answer("late"), Error, "not waiting");
 });
 
 // A snapshot emptied by one throwing provider makes every provider read as

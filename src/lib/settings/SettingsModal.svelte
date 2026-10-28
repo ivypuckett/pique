@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settings, settingsOpen, ZOOM_LEVELS } from "./store.ts";
-  import { providerBindings, type AwsProfile, type ModelOption, type ProviderInfo } from "../chat/bindings.ts";
-  import { isEnabled, orderModels, setEnabled } from "./models.ts";
+  import { providerBindings, type LoginStep, type ModelOption, type ProviderInfo } from "../chat/bindings.ts";
+  import { isEnabled, modelGroups, orderModels, setEnabled, setManyEnabled } from "./models.ts";
   import { openExternal } from "./bindings.ts";
   import {
     deleteTheme,
@@ -155,15 +155,14 @@
   let providers = $state<ProviderInfo[]>([]);
   let provError = $state("");
   let provBusy = $state(false);
-  // Per-provider API-key drafts, keyed by provider id (only the unconnected rows).
-  let keyInputs = $state<Record<string, string>>({});
-  // Amazon Bedrock takes a bearer token OR an AWS profile, so its row offers the
-  // profiles found in ~/.aws alongside the token box. pi detects ambient AWS
-  // credentials on its own (the row just reads Connected); these are the ones only a
-  // credentials file knows about. Bedrock is the one provider with a branching login,
-  // so it is named here rather than generalised over a flow nothing else uses.
+  // The login for the provider being added: pi's current prompt, shown as it asks it —
+  // one API key for most providers, a choice of method and then its value for Amazon
+  // Bedrock (see LoginFlow in providers.ts). Null until the first prompt arrives.
+  let loginStep = $state<LoginStep | null>(null);
+  let loginValue = $state("");
+  // Bedrock's region is the one thing its login never asks for, so its connected row
+  // has a field for it (see setBedrockRegion in providers.ts).
   const BEDROCK = "amazon-bedrock";
-  let awsProfiles = $state<AwsProfile[]>([]);
   // Every model the connected providers serve, for the per-provider checklists below:
   // the pickers offer only what is checked here (see ./models.ts).
   let allModels = $state<ModelOption[]>([]);
@@ -187,6 +186,20 @@
     settings.update((s) => ({
       ...s,
       models: { enabled: setEnabled(s.models.enabled, m.provider, allIds, m.id, checked) },
+    }));
+  }
+
+  // A group switches on unless all of it already is, in which case it switches off.
+  function groupEnabled(provider: string, ids: string[]): boolean {
+    return ids.every((id) => isEnabled($settings.models.enabled, provider, id));
+  }
+
+  function toggleGroup(provider: string, ids: string[]): void {
+    const allIds = modelsOf(provider).map((x) => x.id);
+    const checked = !groupEnabled(provider, ids);
+    settings.update((s) => ({
+      ...s,
+      models: { enabled: setManyEnabled(s.models.enabled, provider, allIds, ids, checked) },
     }));
   }
 
@@ -237,9 +250,13 @@
     addOpen = false;
     addFilter = "";
     provError = "";
+    loginStep = null;
+    if (id !== CUSTOM) runLogin(() => prov!.providerLoginStart({ id }), id);
   }
 
   function cancelAdd(): void {
+    if (loginStep) prov?.providerLoginCancel();
+    loginStep = null;
     adding = null;
     provError = "";
   }
@@ -254,7 +271,6 @@
     if (!prov) return;
     try {
       providers = await prov.providerList();
-      awsProfiles = await prov.providerAwsProfiles();
       allModels = await prov.providerModels();
       // A provider connected/disconnected here goes straight to any open chat's model
       // dropdown too — it can't reliably refresh itself on open (a native <select>
@@ -265,54 +281,53 @@
     }
   }
 
-  // The typed credential: an API key for most providers, a bearer token for Bedrock —
-  // whose login asks which method first, so that row answers the select.
-  async function connectProvider(id: string): Promise<void> {
-    const value = (keyInputs[id] ?? "").trim();
-    if (value === "") return;
-    const ok = await connect(id, value, id === BEDROCK ? "bearer-token" : undefined);
-    if (ok) {
-      keyInputs[id] = "";
-      adding = null;
+  // Move the login on a step. A finished one closes the card; a failed one is over on
+  // the backend too, so it starts again from the top with the error showing above.
+  async function runLogin(call: () => Promise<LoginStep>, id: string, retry = true): Promise<void> {
+    if (!prov) return;
+    provBusy = true;
+    try {
+      const step = await call();
+      loginValue = "";
+      provError = "";
+      if (step.done) {
+        loginStep = null;
+        adding = null;
+        await refreshProviders();
+      } else {
+        loginStep = step;
+      }
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+      loginStep = null;
+      provBusy = false;
+      if (retry && adding === id) {
+        const error = provError;
+        await runLogin(() => prov!.providerLoginStart({ id }), id, false);
+        provError ||= error;
+      } else {
+        adding = null;
+      }
+      return;
     }
+    provBusy = false;
   }
 
-  // Connect Bedrock as an AWS profile: stored as AWS_PROFILE, so the AWS SDK's own
-  // credential chain resolves it at call time (SSO sessions included). The profile's
-  // region goes with it — without one, calls fall back to the catalog's us-east-1.
-  async function connectAwsProfile(profile: AwsProfile): Promise<void> {
+  function answerLogin(value: string): void {
+    if (adding) runLogin(() => prov!.providerLoginAnswer({ value }), adding);
+  }
+
+  async function setBedrockRegion(region: string): Promise<void> {
     if (!prov) return;
     provBusy = true;
     provError = "";
     try {
-      await prov.providerConnectAwsProfile({ name: profile.name, region: profile.region });
-      adding = null;
+      await prov.providerSetBedrockRegion({ region });
       await refreshProviders();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
     }
     provBusy = false;
-  }
-
-  // Returns whether the credential took, so a failed connect keeps what was typed.
-  async function connect(
-    id: string,
-    value: string,
-    method?: string,
-  ): Promise<boolean> {
-    if (!prov) return false;
-    provBusy = true;
-    provError = "";
-    let ok = false;
-    try {
-      await prov.providerConnect({ id, value, method });
-      ok = true;
-      await refreshProviders();
-    } catch (e) {
-      provError = e instanceof Error ? e.message : String(e);
-    }
-    provBusy = false;
-    return ok;
   }
 
   async function disconnectProvider(id: string): Promise<void> {
@@ -366,6 +381,10 @@
   $effect(() => {
     if ($settingsOpen && prov) {
       provError = "";
+      // Unconditionally: reading loginStep here would make this effect re-run on
+      // every login step, and cancelling with no login running is a no-op.
+      prov.providerLoginCancel();
+      loginStep = null;
       adding = null;
       addOpen = false;
       addFilter = "";
@@ -735,6 +754,21 @@
                     {/if}
                   </div>
                 </div>
+                {#if p.id === BEDROCK && p.configured && p.source === "stored"}
+                  <label
+                    class="mt-1 flex items-center gap-2 text-xs"
+                    title="Where Bedrock calls go. Unset, each model's catalog endpoint is used — us-east-1 for most."
+                  >
+                    <span class="opacity-60">Region</span>
+                    <input
+                      class="input input-bordered input-xs w-36 font-mono"
+                      placeholder="e.g. eu-west-1"
+                      value={p.region ?? ""}
+                      disabled={provBusy}
+                      onchange={(e) => setBedrockRegion((e.currentTarget as HTMLInputElement).value)}
+                    />
+                  </label>
+                {/if}
                 {#if modelsOf(p.id).length > 0}
                   <button
                     type="button"
@@ -747,6 +781,21 @@
                     <span class="opacity-60">{enabledCount(p.id)} of {modelsOf(p.id).length}</span>
                   </button>
                   {#if openModels === p.id}
+                    {@const groups = modelGroups(p.id, modelsOf(p.id).map((m) => m.id))}
+                    {#if groups.length > 0}
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        {#each groups as g (g.label)}
+                          <button
+                            type="button"
+                            class="btn btn-xs"
+                            class:btn-primary={groupEnabled(p.id, g.ids)}
+                            class:btn-outline={!groupEnabled(p.id, g.ids)}
+                            aria-pressed={groupEnabled(p.id, g.ids)}
+                            onclick={() => toggleGroup(p.id, g.ids)}
+                          >{g.label} <span class="opacity-60">{g.ids.length}</span></button>
+                        {/each}
+                      </div>
+                    {/if}
                     <ul class="mt-1 max-h-48 overflow-y-auto rounded border border-base-300 p-1">
                       {#each modelRows as m (m.id)}
                         <li>
@@ -825,44 +874,65 @@
         {:else if addingProvider}
           <div class="mt-3 rounded border border-base-300 p-3">
             <div class="text-sm font-medium">Connect {addingProvider.name}</div>
-            {#if addingProvider.id === BEDROCK && awsProfiles.length > 0}
-              <div class="mt-2 text-xs opacity-70">
-                AWS profiles found in <code>~/.aws</code>:
-              </div>
-              <div class="mt-1 flex flex-wrap gap-1.5">
-                {#each awsProfiles as profile (profile.name)}
+            {#if loginStep && !loginStep.done}
+              {@const prompt = loginStep.prompt}
+              {#each loginStep.notes as note, i (i)}
+                <div class="mt-2 text-xs opacity-70">
+                  {note.message}
+                  {#each note.links as link (link.url)}
+                    <a
+                      class="link ml-1"
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onclick={(e) => { if (openExternal(link.url)) e.preventDefault(); }}
+                    >{link.label ?? link.url}</a>
+                  {/each}
+                </div>
+              {/each}
+              <div class="mt-2 text-xs opacity-70">{prompt.message}</div>
+              {#if prompt.type === "select"}
+                <div class="mt-1 flex flex-wrap gap-1.5">
+                  {#each prompt.options ?? [] as option (option.id)}
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-xs"
+                      title={option.description}
+                      disabled={provBusy}
+                      onclick={() => answerLogin(option.id)}
+                    >{option.label}</button>
+                  {/each}
+                  <button type="button" class="btn btn-ghost btn-xs" disabled={provBusy} onclick={cancelAdd}
+                  >Cancel</button>
+                </div>
+              {:else}
+                <div class="mt-1 flex gap-2">
+                  <input
+                    class="input input-bordered input-sm flex-1 font-mono"
+                    type={prompt.type === "secret" ? "password" : "text"}
+                    placeholder={prompt.placeholder ?? ""}
+                    aria-label={prompt.message}
+                    use:focusOnMount
+                    bind:value={loginValue}
+                    disabled={provBusy}
+                    onkeydown={(e) => {
+                      if (e.key !== "Enter" || (prompt.type === "secret" && loginValue.trim() === "")) return;
+                      answerLogin(loginValue.trim());
+                    }}
+                  />
                   <button
                     type="button"
-                    class="btn btn-outline btn-xs font-mono"
-                    disabled={provBusy}
-                    onclick={() => connectAwsProfile(profile)}
-                  >
-                    {profile.name}
-                    {#if profile.region}<span class="opacity-60">· {profile.region}</span>{/if}
-                  </button>
-                {/each}
-              </div>
+                    class="btn btn-sm"
+                    disabled={provBusy || (prompt.type === "secret" && loginValue.trim() === "")}
+                    onclick={() => answerLogin(loginValue.trim())}
+                  >Continue</button>
+                  <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={cancelAdd}
+                  >Cancel</button>
+                </div>
+              {/if}
+            {:else}
+              <div class="mt-2 text-xs opacity-50">Starting…</div>
             {/if}
-            <div class="mt-2 flex gap-2">
-              <input
-                class="input input-bordered input-sm flex-1 font-mono"
-                type="password"
-                placeholder={addingProvider.id === BEDROCK ? "Bearer token" : "API key"}
-                aria-label={`${addingProvider.name} ${addingProvider.id === BEDROCK ? "bearer token" : "API key"}`}
-                use:focusOnMount
-                bind:value={keyInputs[addingProvider.id]}
-                disabled={provBusy}
-                onkeydown={(e) => e.key === "Enter" && adding && connectProvider(adding)}
-              />
-              <button
-                type="button"
-                class="btn btn-sm"
-                disabled={provBusy || (keyInputs[addingProvider.id] ?? "").trim() === ""}
-                onclick={() => adding && connectProvider(adding)}
-              >Connect</button>
-              <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={cancelAdd}
-              >Cancel</button>
-            </div>
           </div>
         {/if}
 

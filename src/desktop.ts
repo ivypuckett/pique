@@ -229,24 +229,26 @@ win.bind("providerList", async () => await providers.listProviders());
 // the Settings model checklist offers.
 win.bind("providerModels", async () => await providers.listModels());
 
-win.bind("providerConnect", async (arg) => {
-  const { id, value, method } = arg as {
-    id: string;
-    value: string;
-    method?: string;
-  };
-  await providers.connectProvider(id, value, method);
-  return true;
+// A provider's login, one prompt at a time: start returns pi's first prompt, each
+// answer the next one, until a step comes back done (see LoginFlow in providers.ts).
+win.bind("providerLoginStart", async (arg) => {
+  const { id } = arg as { id: string };
+  return await providers.loginStart(id);
 });
 
-win.bind(
-  "providerAwsProfiles",
-  async () => await providers.detectAwsProfiles(),
-);
+win.bind("providerLoginAnswer", async (arg) => {
+  const { value } = arg as { value: string };
+  return await providers.loginAnswer(value);
+});
 
-win.bind("providerConnectAwsProfile", async (arg) => {
-  const { name, region } = arg as { name: string; region?: string };
-  await providers.connectAwsProfile(name, region);
+win.bind("providerLoginCancel", () => {
+  providers.loginCancel();
+  return Promise.resolve(true);
+});
+
+win.bind("providerSetBedrockRegion", async (arg) => {
+  const { region } = arg as { region: string };
+  await providers.setBedrockRegion(region);
   return true;
 });
 
