@@ -9,7 +9,12 @@ import type {
   ReloadSummary,
   ThinkingLevel,
 } from "./agent.ts";
-import type { LoginStep, ModelOption, ProviderInfo } from "./providers.ts";
+import type {
+  CustomProviderDetails,
+  LoginStep,
+  ModelOption,
+  ProviderInfo,
+} from "./providers.ts";
 export type {
   ChatEvent,
   CommandInfo,
@@ -72,6 +77,9 @@ export interface ProviderBindings {
   providerAddCustom(
     arg: { id: string; baseUrl: string; apiKey?: string; models: string[] },
   ): Promise<unknown>;
+  // A saved custom provider for editing; providerAddCustom with the same id saves it,
+  // a blank apiKey keeping the one already there.
+  providerGetCustom(arg: { id: string }): Promise<CustomProviderDetails>;
   providerRemoveCustom(arg: { id: string }): Promise<unknown>;
 }
 

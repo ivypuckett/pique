@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   authStatusFallback,
   buildCustomEntry,
+  customProviderDetails,
   customProviderIds,
   LoginFlow,
   type LoginInteraction,
@@ -122,6 +123,72 @@ Deno.test("upsertCustomProvider seeds providers on an empty/absent config", () =
     models: ["m"],
   });
   assertEquals(Object.keys(out.providers ?? {}), ["x"]);
+});
+
+Deno.test("upsertCustomProvider over a saved entry keeps its key and tuning", () => {
+  const tuned = { id: "a", reasoning: true, contextWindow: 32000 };
+  const config = {
+    providers: {
+      lm: {
+        baseUrl: "old",
+        api: "openai-responses",
+        apiKey: "secret",
+        headers: { x: "1" },
+        models: [tuned, { id: "gone" }],
+      },
+    },
+  };
+  const out = upsertCustomProvider(config, {
+    id: "lm",
+    baseUrl: "new",
+    apiKey: " ",
+    models: ["a", "b"],
+  });
+  assertEquals(out.providers?.lm, {
+    baseUrl: "new",
+    api: "openai-responses",
+    apiKey: "secret",
+    headers: { x: "1" },
+    models: [
+      tuned,
+      { id: "b", reasoning: false, contextWindow: 128000, input: ["text"] },
+    ],
+  });
+  // A key typed in replaces the saved one.
+  assertEquals(
+    (upsertCustomProvider(config, {
+      id: "lm",
+      baseUrl: "new",
+      apiKey: "k2",
+      models: ["a"],
+    }).providers?.lm as { apiKey: string }).apiKey,
+    "k2",
+  );
+});
+
+Deno.test("customProviderDetails returns the form fields, never the key", () => {
+  const config = {
+    providers: {
+      lm: {
+        baseUrl: "u",
+        apiKey: "secret",
+        models: [{ id: "a" }, { id: "b" }],
+      },
+      local: { baseUrl: "v", apiKey: "not-required", models: [] },
+    },
+  };
+  assertEquals(customProviderDetails(config, "lm"), {
+    id: "lm",
+    baseUrl: "u",
+    models: ["a", "b"],
+    hasKey: true,
+  });
+  assertEquals(customProviderDetails(config, "local").hasKey, false);
+  assertThrows(
+    () => customProviderDetails(config, "nope"),
+    Error,
+    "not a custom provider",
+  );
 });
 
 Deno.test("removeProviderFromConfig drops one entry, keeps the rest", () => {

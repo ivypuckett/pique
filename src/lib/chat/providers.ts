@@ -115,21 +115,39 @@ const NO_API_KEY = "not-required";
 // The models.json provider entry for a custom endpoint. `openai-completions` is
 // the broadly-compatible API (the same one LM Studio uses here); the per-model
 // fields are conservative defaults the user can refine by editing the file.
+//
+// Given the entry already saved under this id (an edit), it builds on that instead:
+// a blank key keeps the saved one, a model id already there keeps its entry as is, and
+// any other fields in the file stay put — only what the form shows is replaced.
 export function buildCustomEntry(
   input: CustomProviderInput,
+  existing?: unknown,
 ): Record<string, unknown> {
+  const prev: Record<string, unknown> = isObject(existing) ? existing : {};
+  const prevModels = new Map(
+    (Array.isArray(prev.models) ? prev.models : [])
+      .filter((m): m is { id: string } => typeof m?.id === "string")
+      .map((m) => [m.id, m]),
+  );
   const apiKey = input.apiKey?.trim();
   return {
+    ...prev,
     baseUrl: input.baseUrl.trim(),
-    api: "openai-completions",
-    apiKey: apiKey ? apiKey : NO_API_KEY,
-    models: input.models.map((id) => ({
-      id,
-      reasoning: false,
-      contextWindow: 128000,
-      input: ["text"],
-    })),
+    api: prev.api ?? "openai-completions",
+    apiKey: apiKey ? apiKey : (prev.apiKey ?? NO_API_KEY),
+    models: input.models.map((id) =>
+      prevModels.get(id) ?? {
+        id,
+        reasoning: false,
+        contextWindow: 128000,
+        input: ["text"],
+      }
+    ),
   };
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
 
 // Immutably add/replace one provider entry, preserving other keys in the file.
@@ -145,7 +163,7 @@ export function upsertCustomProvider(
     ...base,
     providers: {
       ...(base.providers ?? {}),
-      [input.id]: buildCustomEntry(input),
+      [input.id]: buildCustomEntry(input, base.providers?.[input.id]),
     },
   };
 }
@@ -171,6 +189,32 @@ export function customProviderIds(config: unknown): Set<string> {
   return new Set(
     providers && typeof providers === "object" ? Object.keys(providers) : [],
   );
+}
+
+// A saved custom provider as the Settings form re-opens it for editing. The key itself
+// never leaves the desktop process — only whether a real one is saved, so the form can
+// say a blank field keeps it.
+export type CustomProviderDetails = {
+  id: string;
+  baseUrl: string;
+  models: string[];
+  hasKey: boolean;
+};
+
+export function customProviderDetails(
+  config: unknown,
+  id: string,
+): CustomProviderDetails {
+  const entry = (config as ModelsJson | null)?.providers?.[id];
+  if (!isObject(entry)) throw new Error(`not a custom provider: ${id}`);
+  return {
+    id,
+    baseUrl: typeof entry.baseUrl === "string" ? entry.baseUrl : "",
+    models: (Array.isArray(entry.models) ? entry.models : [])
+      .map((m) => m?.id)
+      .filter((m): m is string => typeof m === "string"),
+    hasKey: typeof entry.apiKey === "string" && entry.apiKey !== NO_API_KEY,
+  };
 }
 
 export function validateCustomInput(input: CustomProviderInput): void {
@@ -469,6 +513,12 @@ export async function addCustomProvider(
   validateCustomInput(input);
   await writeModelsJson(upsertCustomProvider(await readModelsJson(), input));
   await reloadProviders();
+}
+
+export async function getCustomProvider(
+  id: string,
+): Promise<CustomProviderDetails> {
+  return customProviderDetails(await readModelsJson(), id);
 }
 
 export async function removeCustomProvider(id: string): Promise<void> {

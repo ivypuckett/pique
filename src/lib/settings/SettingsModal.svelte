@@ -246,6 +246,8 @@
   const addingProvider = $derived(providers.find((p) => p.id === adding) ?? null);
 
   function startAdd(id: string): void {
+    if (editing) cId = cBaseUrl = cKey = cModels = "";
+    editing = null;
     adding = id;
     addOpen = false;
     addFilter = "";
@@ -255,6 +257,8 @@
   }
 
   function cancelAdd(): void {
+    if (editing) cId = cBaseUrl = cKey = cModels = "";
+    editing = null;
     if (loginStep) prov?.providerLoginCancel();
     loginStep = null;
     adding = null;
@@ -266,6 +270,33 @@
   let cBaseUrl = $state("");
   let cKey = $state("");
   let cModels = $state("");
+  // The custom provider the form is editing, or null when it is adding one. Its id is
+  // fixed while editing — renaming would orphan its model checklist — and a blank key
+  // keeps the saved one, which never comes back to the form (see customProviderDetails).
+  let editing = $state<string | null>(null);
+  let editingHasKey = $state(false);
+
+  async function startEdit(id: string): Promise<void> {
+    if (!prov) return;
+    if (loginStep) prov.providerLoginCancel();
+    loginStep = null;
+    addOpen = false;
+    provBusy = true;
+    provError = "";
+    try {
+      const d = await prov.providerGetCustom({ id });
+      cId = d.id;
+      cBaseUrl = d.baseUrl;
+      cKey = "";
+      cModels = d.models.join("\n");
+      editingHasKey = d.hasKey;
+      editing = id;
+      adding = CUSTOM;
+    } catch (e) {
+      provError = e instanceof Error ? e.message : String(e);
+    }
+    provBusy = false;
+  }
 
   async function refreshProviders(): Promise<void> {
     if (!prov) return;
@@ -356,7 +387,7 @@
         models,
       });
       cId = cBaseUrl = cKey = cModels = "";
-      adding = null;
+      adding = editing = null;
       await refreshProviders();
     } catch (e) {
       provError = e instanceof Error ? e.message : String(e);
@@ -385,7 +416,7 @@
       // every login step, and cancelling with no login running is a no-op.
       prov.providerLoginCancel();
       loginStep = null;
-      adding = null;
+      adding = editing = null;
       addOpen = false;
       addFilter = "";
       openModels = null;
@@ -742,6 +773,12 @@
                         type="button"
                         class="btn btn-ghost btn-xs"
                         disabled={provBusy}
+                        onclick={() => startEdit(p.id)}
+                      >Edit</button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        disabled={provBusy}
                         onclick={() => removeCustomProvider(p.id)}
                       >Remove</button>
                     {:else if p.configured && p.canApiKey && p.source === "stored"}
@@ -827,14 +864,14 @@
 
         {#if adding === CUSTOM}
           <div class="mt-3 rounded border border-base-300 p-3">
-            <div class="text-sm font-medium">Custom endpoint</div>
+            <div class="text-sm font-medium">{editing ? `Edit ${editing}` : "Custom endpoint"}</div>
             <div class="mt-2 grid gap-2">
               <input
                 class="input input-bordered input-sm font-mono"
                 placeholder="id  ·  e.g. lmstudio"
                 aria-label="Provider id"
                 bind:value={cId}
-                disabled={provBusy}
+                disabled={provBusy || editing !== null}
               />
               <input
                 class="input input-bordered input-sm font-mono"
@@ -846,7 +883,7 @@
               <input
                 class="input input-bordered input-sm font-mono"
                 type="password"
-                placeholder="API key (optional)"
+                placeholder={editing && editingHasKey ? "API key (blank keeps the saved one)" : "API key (optional)"}
                 aria-label="Custom endpoint API key"
                 bind:value={cKey}
                 disabled={provBusy}
@@ -866,7 +903,7 @@
                 class="btn btn-sm"
                 disabled={provBusy || cId.trim() === "" || cBaseUrl.trim() === "" || cModels.trim() === ""}
                 onclick={addCustomProvider}
-              >Add</button>
+              >{editing ? "Save" : "Add"}</button>
               <button type="button" class="btn btn-ghost btn-sm" disabled={provBusy} onclick={cancelAdd}
               >Cancel</button>
             </div>
