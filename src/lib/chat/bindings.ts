@@ -77,8 +77,7 @@ export interface ProviderBindings {
   providerAddCustom(
     arg: { id: string; baseUrl: string; apiKey?: string; models: string[] },
   ): Promise<unknown>;
-  // A saved custom provider for editing; providerAddCustom with the same id saves it,
-  // a blank apiKey keeping the one already there.
+  // A saved custom provider for editing; providerAddCustom with the same id saves it.
   providerGetCustom(arg: { id: string }): Promise<CustomProviderDetails>;
   providerRemoveCustom(arg: { id: string }): Promise<unknown>;
 }

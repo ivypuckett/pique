@@ -269,7 +269,7 @@ win.bind("providerAddCustom", async (arg) => {
   return true;
 });
 
-// A saved custom provider, for the Settings form to edit — everything but its key.
+// A saved custom provider, for the Settings form to edit.
 win.bind("providerGetCustom", async (arg) => {
   const { id } = arg as { id: string };
   return await providers.getCustomProvider(id);

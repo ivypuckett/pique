@@ -125,7 +125,7 @@ Deno.test("upsertCustomProvider seeds providers on an empty/absent config", () =
   assertEquals(Object.keys(out.providers ?? {}), ["x"]);
 });
 
-Deno.test("upsertCustomProvider over a saved entry keeps its key and tuning", () => {
+Deno.test("upsertCustomProvider over a saved entry keeps its tuning", () => {
   const tuned = { id: "a", reasoning: true, contextWindow: 32000 };
   const config = {
     providers: {
@@ -141,32 +141,32 @@ Deno.test("upsertCustomProvider over a saved entry keeps its key and tuning", ()
   const out = upsertCustomProvider(config, {
     id: "lm",
     baseUrl: "new",
-    apiKey: " ",
+    apiKey: "k2",
     models: ["a", "b"],
   });
   assertEquals(out.providers?.lm, {
     baseUrl: "new",
     api: "openai-responses",
-    apiKey: "secret",
+    apiKey: "k2",
     headers: { x: "1" },
     models: [
       tuned,
       { id: "b", reasoning: false, contextWindow: 128000, input: ["text"] },
     ],
   });
-  // A key typed in replaces the saved one.
+  // A key cleared in the form is cleared in the file.
   assertEquals(
     (upsertCustomProvider(config, {
       id: "lm",
       baseUrl: "new",
-      apiKey: "k2",
+      apiKey: " ",
       models: ["a"],
     }).providers?.lm as { apiKey: string }).apiKey,
-    "k2",
+    "not-required",
   );
 });
 
-Deno.test("customProviderDetails returns the form fields, never the key", () => {
+Deno.test("customProviderDetails fills the form, stand-in key blank", () => {
   const config = {
     providers: {
       lm: {
@@ -180,10 +180,10 @@ Deno.test("customProviderDetails returns the form fields, never the key", () => 
   assertEquals(customProviderDetails(config, "lm"), {
     id: "lm",
     baseUrl: "u",
+    apiKey: "secret",
     models: ["a", "b"],
-    hasKey: true,
   });
-  assertEquals(customProviderDetails(config, "local").hasKey, false);
+  assertEquals(customProviderDetails(config, "local").apiKey, "");
   assertThrows(
     () => customProviderDetails(config, "nope"),
     Error,

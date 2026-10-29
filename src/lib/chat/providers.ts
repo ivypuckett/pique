@@ -117,8 +117,8 @@ const NO_API_KEY = "not-required";
 // fields are conservative defaults the user can refine by editing the file.
 //
 // Given the entry already saved under this id (an edit), it builds on that instead:
-// a blank key keeps the saved one, a model id already there keeps its entry as is, and
-// any other fields in the file stay put — only what the form shows is replaced.
+// a model id already there keeps its entry as is, and any other fields in the file stay
+// put — only what the form shows is replaced.
 export function buildCustomEntry(
   input: CustomProviderInput,
   existing?: unknown,
@@ -134,7 +134,7 @@ export function buildCustomEntry(
     ...prev,
     baseUrl: input.baseUrl.trim(),
     api: prev.api ?? "openai-completions",
-    apiKey: apiKey ? apiKey : (prev.apiKey ?? NO_API_KEY),
+    apiKey: apiKey ? apiKey : NO_API_KEY,
     models: input.models.map((id) =>
       prevModels.get(id) ?? {
         id,
@@ -191,14 +191,14 @@ export function customProviderIds(config: unknown): Set<string> {
   );
 }
 
-// A saved custom provider as the Settings form re-opens it for editing. The key itself
-// never leaves the desktop process — only whether a real one is saved, so the form can
-// say a blank field keeps it.
+// A saved custom provider as the Settings form re-opens it for editing. The key goes
+// back as typed (the field masks it); the keyless stand-in goes back blank, as it was
+// entered.
 export type CustomProviderDetails = {
   id: string;
   baseUrl: string;
+  apiKey: string;
   models: string[];
-  hasKey: boolean;
 };
 
 export function customProviderDetails(
@@ -210,10 +210,12 @@ export function customProviderDetails(
   return {
     id,
     baseUrl: typeof entry.baseUrl === "string" ? entry.baseUrl : "",
+    apiKey: typeof entry.apiKey === "string" && entry.apiKey !== NO_API_KEY
+      ? entry.apiKey
+      : "",
     models: (Array.isArray(entry.models) ? entry.models : [])
       .map((m) => m?.id)
       .filter((m): m is string => typeof m === "string"),
-    hasKey: typeof entry.apiKey === "string" && entry.apiKey !== NO_API_KEY,
   };
 }
 

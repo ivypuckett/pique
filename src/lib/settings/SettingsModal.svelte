@@ -271,10 +271,8 @@
   let cKey = $state("");
   let cModels = $state("");
   // The custom provider the form is editing, or null when it is adding one. Its id is
-  // fixed while editing — renaming would orphan its model checklist — and a blank key
-  // keeps the saved one, which never comes back to the form (see customProviderDetails).
+  // fixed while editing — renaming would orphan its model checklist.
   let editing = $state<string | null>(null);
-  let editingHasKey = $state(false);
 
   async function startEdit(id: string): Promise<void> {
     if (!prov) return;
@@ -287,9 +285,8 @@
       const d = await prov.providerGetCustom({ id });
       cId = d.id;
       cBaseUrl = d.baseUrl;
-      cKey = "";
+      cKey = d.apiKey;
       cModels = d.models.join("\n");
-      editingHasKey = d.hasKey;
       editing = id;
       adding = CUSTOM;
     } catch (e) {
@@ -883,7 +880,7 @@
               <input
                 class="input input-bordered input-sm font-mono"
                 type="password"
-                placeholder={editing && editingHasKey ? "API key (blank keeps the saved one)" : "API key (optional)"}
+                placeholder="API key (optional)"
                 aria-label="Custom endpoint API key"
                 bind:value={cKey}
                 disabled={provBusy}
